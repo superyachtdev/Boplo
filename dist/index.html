@@ -15,6 +15,10 @@
     .eyebrow,.marker,.form-title span,.field label,.weather-pill,.shot b,.gallery-grid figcaption{font-family:var(--sans);font-weight:700;letter-spacing:.11em}
     .ticker-in{font-family:var(--sans);font-weight:700;letter-spacing:.13em}
     .hero-copy h1 em{font-style:normal;font-weight:500}
+    /* Give every editorial section the same generous desktop safe area. */
+    .shell{width:100%;padding-left:clamp(48px,4.5vw,104px);padding-right:clamp(48px,4.5vw,104px)}
+    .hero-copy{padding-left:0}
+    @media(max-width:850px){.shell{padding-left:19px;padding-right:19px}}
   </style>
 </head>
 <body>
