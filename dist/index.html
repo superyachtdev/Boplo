@@ -135,4 +135,15 @@ $$('[data-auth]').forEach(b=>b.onclick=showModal);$('[data-close]').onclick=clos
   document.addEventListener('submit',e=>{if(e.target.id!=='core-session')return;e.preventDefault();e.stopImmediatePropagation();const f=new FormData(e.target);data.sessions.unshift({date:'Just now',type:f.get('type'),average:num(f.get('average')),doubles:num(f.get('doubles')),checkout:num(f.get('checkout')),note:f.get('note')||''});save();const r=drill(),out=document.querySelector('#core-result');out.classList.add('show');out.innerHTML=`<b>Session saved. Your next move: ${r.name}.</b><p>${r.why} ${r.task}</p><button class="button" type="button" data-core="drill" style="margin-top:10px">Open today’s drill ↗</button>`;e.target.reset()},true);
   setTimeout(activate,0);
 })();
+</script>
+<script>
+/* Cloud-backed account bridge. The dashboard continues to work locally until D1/auth is configured. */
+(()=>{
+  const api=(path,options={})=>fetch('/darts/'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(options.headers||{})},...options});
+  const sync=async reload=>{try{const r=await api('dashboard');if(!r.ok)return;const d=await r.json();const sessions=d.sessions.map(s=>({date:new Date(s.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'}),type:s.type,average:s.average,doubles:s.doubles,checkout:s.checkout,note:s.note||''}));localStorage.setItem('boplo-practice-v2',JSON.stringify({sessions,drills:d.drills.map(x=>({name:x.drill_key,day:'Saved'})),user:d.user}));if(reload)location.reload()}catch{}};
+  window.addEventListener('click',async e=>{const google=e.target.closest('[data-google]'),email=e.target.closest('[data-email]');if(google){e.preventDefault();e.stopImmediatePropagation();location.assign('/darts/auth/google');return}if(email){e.preventDefault();e.stopImmediatePropagation();const value=document.querySelector('#email')?.value.trim();if(!value||!value.includes('@'))return;const r=await api('auth/email',{method:'POST',body:JSON.stringify({email:value})});const t=document.querySelector('#toast');if(t){t.textContent=r.ok?'Check your email for your secure Boplo sign-in link.':'Email sign-in is being connected. Try again shortly.';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200)}}},true);
+  window.addEventListener('submit',e=>{if(e.target.id!=='core-session')return;const f=new FormData(e.target);api('sessions',{method:'POST',body:JSON.stringify({type:f.get('type'),average:f.get('average'),doubles:f.get('doubles'),checkout:f.get('checkout'),note:f.get('note')})}).then(r=>r.ok&&sync(false)).catch(()=>{})},true);
+  window.addEventListener('click',e=>{if(!e.target.closest('[data-complete]'))return;api('dashboard').then(r=>r.ok?r.json():null).then(d=>d&&api('drills/complete',{method:'POST',body:JSON.stringify({key:d.recommendation.key})})).then(r=>r&&r.ok&&sync(false)).catch(()=>{})},true);
+  if(location.hash==='#dashboard'&&!sessionStorage.getItem('boplo-cloud-synced')){sessionStorage.setItem('boplo-cloud-synced','1');sync(true)}
+})();
 </script></body></html>
