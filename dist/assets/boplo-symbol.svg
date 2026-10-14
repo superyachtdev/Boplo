@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Boplo symbol</title>
+  <desc id="desc">A dart striking the centre of a modern target.</desc>
+  <rect width="1024" height="1024" rx="230" fill="#09221b"/>
+  <circle cx="512" cy="512" r="324" fill="none" stroke="#f4f0e8" stroke-width="58" stroke-dasharray="1530 510" stroke-linecap="round" transform="rotate(-42 512 512)"/>
+  <circle cx="512" cy="512" r="194" fill="none" stroke="#caff45" stroke-width="54" stroke-dasharray="820 400" stroke-linecap="round" transform="rotate(28 512 512)"/>
+  <circle cx="512" cy="512" r="95" fill="#f4f0e8"/>
+  <circle cx="512" cy="512" r="43" fill="#ef6548"/>
+  <path d="M173 796 468 548 506 586 259 881Z" fill="#f4f0e8"/>
+  <path d="m173 796 74-154 48 48-122 191Z" fill="#caff45"/>
+  <path d="m173 796 122 43-36 42-86-85Z" fill="#ef6548"/>
+  <path d="m405 603 63-55 38 38-55 63Z" fill="#bcc4bc"/>
+</svg>
