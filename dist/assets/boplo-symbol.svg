@@ -1,13 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">Boplo symbol</title>
-  <desc id="desc">A dart striking the centre of a modern target.</desc>
-  <rect width="1024" height="1024" rx="230" fill="#09221b"/>
-  <circle cx="512" cy="512" r="324" fill="none" stroke="#f4f0e8" stroke-width="58" stroke-dasharray="1530 510" stroke-linecap="round" transform="rotate(-42 512 512)"/>
-  <circle cx="512" cy="512" r="194" fill="none" stroke="#caff45" stroke-width="54" stroke-dasharray="820 400" stroke-linecap="round" transform="rotate(28 512 512)"/>
-  <circle cx="512" cy="512" r="95" fill="#f4f0e8"/>
-  <circle cx="512" cy="512" r="43" fill="#ef6548"/>
-  <path d="M173 796 468 548 506 586 259 881Z" fill="#f4f0e8"/>
-  <path d="m173 796 74-154 48 48-122 191Z" fill="#caff45"/>
-  <path d="m173 796 122 43-36 42-86-85Z" fill="#ef6548"/>
-  <path d="m405 603 63-55 38 38-55 63Z" fill="#bcc4bc"/>
+  <title id="title">Boplo dartboard symbol</title>
+  <desc id="desc">A refined classic dartboard with a bullseye.</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="70%"><stop stop-color="#173c31"/><stop offset="1" stop-color="#071b16"/></radialGradient>
+    <radialGradient id="wire" cx="35%" cy="25%" r="80%"><stop stop-color="#fbf7ec"/><stop offset="1" stop-color="#c6b894"/></radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000" flood-opacity=".42"/></filter>
+    <clipPath id="face"><circle cx="512" cy="512" r="282"/></clipPath>
+    <path id="wedge" d="M512 512 468 234A282 282 0 0 1 556 234Z"/>
+  </defs>
+  <rect width="1024" height="1024" rx="250" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="374" fill="#0a100e" stroke="#eae2ce" stroke-width="10" opacity=".96"/>
+  <circle cx="512" cy="512" r="352" fill="#b38d59"/>
+  <circle cx="512" cy="512" r="338" fill="#171b18" stroke="url(#wire)" stroke-width="7"/>
+  <g filter="url(#shadow)">
+    <circle cx="512" cy="512" r="289" fill="#1b201d"/>
+    <g clip-path="url(#face)" fill="#eee5cf">
+      <use href="#wedge"/><use href="#wedge" transform="rotate(36 512 512)"/><use href="#wedge" transform="rotate(72 512 512)"/><use href="#wedge" transform="rotate(108 512 512)"/><use href="#wedge" transform="rotate(144 512 512)"/><use href="#wedge" transform="rotate(180 512 512)"/><use href="#wedge" transform="rotate(216 512 512)"/><use href="#wedge" transform="rotate(252 512 512)"/><use href="#wedge" transform="rotate(288 512 512)"/><use href="#wedge" transform="rotate(324 512 512)"/>
+    </g>
+    <g clip-path="url(#face)" fill="none" stroke="#111814" stroke-width="5" opacity=".8">
+      <use href="#wedge"/><use href="#wedge" transform="rotate(18 512 512)"/><use href="#wedge" transform="rotate(36 512 512)"/><use href="#wedge" transform="rotate(54 512 512)"/><use href="#wedge" transform="rotate(72 512 512)"/><use href="#wedge" transform="rotate(90 512 512)"/><use href="#wedge" transform="rotate(108 512 512)"/><use href="#wedge" transform="rotate(126 512 512)"/><use href="#wedge" transform="rotate(144 512 512)"/><use href="#wedge" transform="rotate(162 512 512)"/><use href="#wedge" transform="rotate(180 512 512)"/><use href="#wedge" transform="rotate(198 512 512)"/><use href="#wedge" transform="rotate(216 512 512)"/><use href="#wedge" transform="rotate(234 512 512)"/><use href="#wedge" transform="rotate(252 512 512)"/><use href="#wedge" transform="rotate(270 512 512)"/><use href="#wedge" transform="rotate(288 512 512)"/><use href="#wedge" transform="rotate(306 512 512)"/><use href="#wedge" transform="rotate(324 512 512)"/><use href="#wedge" transform="rotate(342 512 512)"/>
+    </g>
+    <circle cx="512" cy="512" r="255" fill="none" stroke="#d74637" stroke-width="32" stroke-dasharray="40 40" transform="rotate(-9 512 512)"/>
+    <circle cx="512" cy="512" r="255" fill="none" stroke="#167563" stroke-width="32" stroke-dasharray="40 40" stroke-dashoffset="-40" transform="rotate(-9 512 512)"/>
+    <circle cx="512" cy="512" r="121" fill="none" stroke="#d74637" stroke-width="31" stroke-dasharray="19 19" transform="rotate(-9 512 512)"/>
+    <circle cx="512" cy="512" r="121" fill="none" stroke="#167563" stroke-width="31" stroke-dasharray="19 19" stroke-dashoffset="-19" transform="rotate(-9 512 512)"/>
+    <circle cx="512" cy="512" r="55" fill="#167563" stroke="#111814" stroke-width="7"/>
+    <circle cx="512" cy="512" r="30" fill="#d74637" stroke="#eee5cf" stroke-width="7"/>
+    <circle cx="512" cy="512" r="8" fill="#fff8e8"/>
+  </g>
 </svg>
