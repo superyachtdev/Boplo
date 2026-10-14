@@ -1,3 +1,6 @@
 .DS_Store
-.wrangler
-node_modules
+node_modules/
+.wrangler/
+.dev.vars
+.env*
+work/
