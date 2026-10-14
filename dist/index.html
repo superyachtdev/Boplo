@@ -48,6 +48,23 @@ body{background:var(--paper);color:var(--ink)}
 .panel.dark{background:#174c43}
 .tag{background:var(--lime)}
 @media (max-width:700px){.hero-scene{border-radius:0}.nav{background:var(--paper)}}
+/* Bespoke hero motion: a graphic dart throw, built in CSS rather than faking video. */
+.hero-scene{height:min(76svh,760px);min-height:590px;background:radial-gradient(circle at 73% 47%,#285e52 0 9%,transparent 35%),linear-gradient(110deg,#071a17 0%,#0b3029 54%,#164b41 100%)}
+.hero-scene>img{display:none}
+.hero-scene:before{content:'';position:absolute;z-index:0;right:-8.5%;top:50%;width:min(71vw,940px);aspect-ratio:1;border-radius:50%;transform:translateY(-50%) rotate(4deg);clip-path:circle(50%);background:radial-gradient(circle at center,#e6533d 0 1.6%,#e6e5d4 1.7% 3.1%,#14594b 3.2% 5.6%,#111b19 5.7% 7%,#e74c3c 7.1% 8.6%,transparent 8.7%),radial-gradient(circle at center,transparent 0 24.5%,#165d4d 24.7% 26.5%,#ea513b 26.7% 28.5%,transparent 28.7%),repeating-conic-gradient(from -9deg,#e8e3d1 0deg 9deg,#172d28 9.4deg 18deg);box-shadow:0 0 0 18px #8e5530,0 0 0 29px #251b16,0 0 72px 18px rgba(0,0,0,.55),inset 0 0 95px rgba(0,0,0,.28);animation:board-breathe 5.6s cubic-bezier(.2,.7,.2,1) infinite}
+.hero-scene:after{z-index:1;background:linear-gradient(90deg,rgba(5,21,18,.95),rgba(5,21,18,.56) 39%,rgba(5,21,18,.08) 74%),linear-gradient(0deg,rgba(5,21,18,.58),transparent 52%)}
+@keyframes board-breathe{0%,16%{transform:translateY(-50%) rotate(4deg) scale(1)}46%,62%{transform:translateY(-50%) rotate(4deg) scale(1.035)}100%{transform:translateY(-50%) rotate(4deg) scale(1)}}
+.hero-inner{z-index:3}
+.dart{z-index:4;left:-38%;top:34%;width:430px;height:82px;filter:drop-shadow(0 18px 14px rgba(0,0,0,.45));transform:rotate(-7deg);animation:dart-cam 5.6s cubic-bezier(.12,.76,.17,1) infinite}
+.dart:before{top:31px;left:81px;width:310px;height:13px;border-radius:99px;background:linear-gradient(90deg,#5b5e58 0,#f7f0de 21%,#d4d0c5 56%,#8a694e 78%,#e4e0d0 100%);box-shadow:0 2px 3px #0008}
+.dart:after{top:9px;left:0;width:106px;height:58px;clip-path:polygon(0 0,100% 50%,0 100%);background:linear-gradient(135deg,transparent 45%,#e95a40 46% 54%,transparent 55%),linear-gradient(45deg,transparent 45%,#d5f85a 46% 54%,transparent 55%),linear-gradient(90deg,#d5f85a,#f4f5e3);filter:drop-shadow(0 3px 2px #0007)}
+@keyframes dart-cam{0%,14%{left:-38%;top:34%;opacity:0;transform:rotate(-7deg) scale(1.2)}17%{opacity:1}44%,100%{left:56%;top:44.3%;opacity:1;transform:rotate(-7deg) scale(.11)}}
+.impact{z-index:5;right:18.8%;top:43.1%;width:98px;height:98px;border:2px solid #d5f85a;box-shadow:0 0 0 14px rgba(213,248,90,.12),0 0 34px #d5f85a;animation:bull-impact 5.6s ease-out infinite}
+@keyframes bull-impact{0%,42%{opacity:0;transform:scale(.15)}46%{opacity:1;transform:scale(.42)}62%,100%{opacity:0;transform:scale(2.7)}}
+.bull{z-index:5;right:9.2%;top:34%;font:800 clamp(14px,1.4vw,22px)/1 var(--mono);letter-spacing:.16em;color:#d5f85a;text-shadow:0 2px 16px #000;animation:bull-call 5.6s ease-out infinite}
+@keyframes bull-call{0%,45%{opacity:0;transform:translateY(8px)}52%,74%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-3px)}}
+.hero-card{z-index:6;background:#10231ff0;border-color:#b7cfbd70}
+@media (max-width:700px){.hero-scene:before{width:138vw;right:-61%;top:43%;opacity:.82}.hero-scene:after{background:linear-gradient(0deg,rgba(5,21,18,.84),rgba(5,21,18,.14) 72%)}.dart{display:none}.impact,.bull{right:17%;top:25%}.hero-copy{position:relative;z-index:6}}
 </style></head><body>
 <main id="marketing"><div class="shell"><header class="nav"><a href="#top" class="brand"><i></i>boplo</a><nav><a href="#how">How it works</a><a href="#community">Community</a><a href="#pricing">Pricing</a><button class="button" data-auth>Try Boplo ↗</button></nav></header></div>
 <section class="shell hero" id="top"><div class="hero-scene"><img src="/assets/darts-hero.jpg" alt="Warmly lit pub dartboard with a dart in the bullseye"><i class="dart"></i><i class="impact"></i><b class="bull">BULL</b><div class="hero-inner"><div class="hero-top"><span class="chip"><b>●</b>PRACTICE, WITH A PLAN</span><p>A better average starts with knowing what to practise next.</p></div><div class="hero-copy"><span class="eyebrow">THE DARTS PRACTICE SYSTEM</span><h1>Get <span>league-</span>ready.</h1><p>Boplo turns your scores into the one drill that helps you win your next leg.</p><div class="hero-actions"><button class="button lime" data-auth>Start practising ↗</button><a href="#how" class="hero-text-btn">See how it works ↓</a></div></div></div><div class="hero-card"><span>THE NEXT MOVE</span><b>Own D16.</b><small>30 focused doubles before Thursday.</small></div></div></section>
