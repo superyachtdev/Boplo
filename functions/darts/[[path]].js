@@ -8,14 +8,41 @@ const token = () => crypto.randomUUID() + crypto.randomUUID();
 function body(request) { return request.text().then(raw => { if (raw.length > 8000) fail(413, 'Request is too large.'); try { return JSON.parse(raw); } catch { fail(400, 'Invalid request.'); } }); }
 function cleanEmail(value) { const email = String(value || '').trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) fail(400, 'Enter a valid email address.'); return email; }
 function cleanNumber(value, label) { const n = Number(value); if (!Number.isFinite(n) || n < 0 || n > 180) fail(400, `Enter a valid ${label}.`); return n; }
+const mean = (rows, key) => rows.length ? rows.reduce((sum, row) => sum + Number(row[key] || 0), 0) / rows.length : 0;
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const day = timestamp => new Date(timestamp).toISOString().slice(0, 10);
+const percent = value => Math.round(value * 10) / 10;
 function recommendation(rows) {
-  const avg = key => rows.length ? rows.reduce((sum, row) => sum + Number(row[key]), 0) / rows.length : 0;
-  const doubles = avg('doubles_rate'), checkouts = avg('checkout_rate'), scoring = avg('three_dart_average');
-  if (rows.length < 2) return { key: 'baseline', tag: 'FOUNDATION', name: 'Build a baseline', why: 'Log two more honest sessions and Boplo can compare the parts of your game properly.', task: 'Play 3 sets of 10 visits at T20 and record the average.', goal: 'Create a useful starting point.' };
-  if (doubles < 35) return { key: 'd16', tag: 'DOUBLES FIRST', name: 'Own D16', why: `Your doubles are at ${doubles.toFixed(0)}%. That is the clearest place to win more legs.`, task: 'Throw 3 darts at D16 × 10. Restart after three misses.', goal: 'Land 12+ doubles before moving on.' };
-  if (checkouts < 30) return { key: 'checkout-ladder', tag: 'FINISH BETTER', name: 'Checkout ladder', why: `Your checkout rate is ${checkouts.toFixed(0)}%. You are reaching finishes more often than you are closing them.`, task: 'Start on 40: hit D20, then D10, then D5. Step back after a miss.', goal: 'Complete the ladder twice.' };
-  if (scoring < 48) return { key: 't20-grouping', tag: 'SCORING BASE', name: 'T20 grouping', why: `Your doubles are moving. Your ${scoring.toFixed(1)} average is the most useful next lever.`, task: 'Throw 10 visits at T20. Judge the group only after all three darts.', goal: 'Reach 150 across three visits.' };
-  return { key: 'pressure-41', tag: 'MATCH READY', name: 'Pressure finish', why: 'Your core numbers are balanced. The next gain is making your normal standard show up under pressure.', task: 'Play five 41 finishes. Three darts each. Restart after two misses.', goal: 'Close three of five legs.' };
+  const doubles = mean(rows, 'doubles_rate'), checkouts = mean(rows, 'checkout_rate'), scoring = mean(rows, 'three_dart_average');
+  if (rows.length < 3) return { key: 'baseline', tag: 'FOUNDATION', name: 'Build a baseline', why: `You have ${rows.length} honest ${rows.length === 1 ? 'log' : 'logs'}. Two more give Boplo enough signal to make a fair call.`, task: 'Play 3 sets of 10 visits at T20. Record the average after each set.', goal: 'Log three sessions before chasing a weakness.', target: 3, unit: 'sessions', confidence: 'early' };
+  if (doubles < 35) return { key: 'd16', tag: 'DOUBLES FIRST', name: 'Own D16', why: `Your double rate is ${percent(doubles)}%, which is the clearest place to win more legs right now.`, task: 'Throw 3 darts at D16 × 10. Reset your feet after every visit.', goal: 'Land 12 doubles before you move target.', target: 12, unit: 'doubles', confidence: 'high' };
+  if (checkouts < 30) return { key: 'checkout-ladder', tag: 'FINISH BETTER', name: 'Checkout ladder', why: `Your checkout rate is ${percent(checkouts)}%. You are reaching finishes more often than you are closing them.`, task: 'Start on 40: hit D20, then D10, then D5. Step back one rung after a miss.', goal: 'Complete the ladder twice.', target: 2, unit: 'ladders', confidence: 'high' };
+  if (scoring < 48) return { key: 't20-grouping', tag: 'SCORING BASE', name: 'T20 grouping', why: `Your doubles are holding. A ${percent(scoring)} three-dart average is now the best lever to pull.`, task: 'Throw 10 visits at T20. Judge the group only after all three darts.', goal: 'Hit 150+ across three visits.', target: 150, unit: 'points', confidence: 'high' };
+  return { key: 'pressure-41', tag: 'MATCH READY', name: 'Pressure finish', why: 'Your core numbers are balanced. The next gain is making your normal standard show up under pressure.', task: 'Play five 41 finishes. Three darts each. Reset after two missed visits.', goal: 'Close three of five legs.', target: 3, unit: 'finishes', confidence: 'medium' };
+}
+
+function intelligence(rows, runs) {
+  const chronological = [...rows].reverse();
+  const recent = chronological.slice(-3), previous = chronological.slice(Math.max(0, chronological.length - 6), Math.max(0, chronological.length - 3));
+  const trend = key => previous.length && recent.length ? percent(mean(recent, key) - mean(previous, key)) : null;
+  const dates = [...new Set(rows.map(row => day(row.created_at)))].sort().reverse();
+  let streak = 0, cursor = new Date();
+  while (dates.includes(day(cursor))) { streak += 1; cursor.setUTCDate(cursor.getUTCDate() - 1); }
+  const recommendationNow = recommendation(rows);
+  const completed = runs.filter(run => run.drill_key === recommendationNow.key && run.completed_at);
+  const latest = completed[0] || null;
+  const best = rows.length ? {
+    average: percent(Math.max(...rows.map(row => Number(row.three_dart_average)))),
+    doubles: percent(Math.max(...rows.map(row => Number(row.doubles_rate)))),
+    checkout: percent(Math.max(...rows.map(row => Number(row.checkout_rate))))
+  } : { average: null, doubles: null, checkout: null };
+  return {
+    confidence: rows.length < 3 ? 'early' : rows.length < 6 ? 'forming' : 'useful',
+    stats: { sessions: rows.length, average: percent(mean(rows, 'three_dart_average')), doubles: percent(mean(rows, 'doubles_rate')), checkout: percent(mean(rows, 'checkout_rate')), streak, personalBests: best },
+    trends: { average: trend('three_dart_average'), doubles: trend('doubles_rate'), checkout: trend('checkout_rate') },
+    recommendation: recommendationNow,
+    drill: { completedCount: completed.length, latestResult: latest ? { achieved: latest.achieved, target: latest.target, confidence: latest.confidence, completedAt: latest.completed_at } : null }
+  };
 }
 
 async function userFromRequest(request, env) {
@@ -37,10 +64,13 @@ async function upsertUser(env, { email, name = null, googleSubject = null }) {
   await env.DB.prepare('INSERT INTO darts_users(id,email,display_name,google_subject,created_at,updated_at) VALUES(?,?,?,?,?,?)').bind(id, email, name, googleSubject, now, now).run(); return id;
 }
 async function dashboard(env, user) {
-  const sessions = await env.DB.prepare('SELECT id,session_type AS type,three_dart_average AS average,doubles_rate AS doubles,checkout_rate AS checkout,note,created_at FROM darts_practice_sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user.id).all();
+  const sessions = await env.DB.prepare('SELECT id,session_type AS type,three_dart_average AS average,doubles_rate AS doubles,checkout_rate AS checkout,three_dart_average,doubles_rate,checkout_rate,note,created_at FROM darts_practice_sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user.id).all();
   const drills = await env.DB.prepare('SELECT drill_key,completed_at FROM darts_drill_completions WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all();
   const rows = sessions.results || [];
-  return { user, sessions: rows, drills: drills.results || [], recommendation: recommendation(rows) };
+  let runs = [];
+  try { runs = (await env.DB.prepare('SELECT id,drill_key,target,achieved,confidence,note,started_at,completed_at FROM darts_drill_runs WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all()).results || []; } catch { /* Migration 0003 has not been applied yet: retain core access rather than fail the whole dashboard. */ }
+  const insight = intelligence(rows, runs);
+  return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation };
 }
 
 export async function onRequest(context) {
@@ -95,7 +125,26 @@ export async function onRequest(context) {
       await env.DB.prepare('INSERT INTO darts_practice_sessions(id,user_id,session_type,three_dart_average,doubles_rate,checkout_rate,note,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), user.id, type, average, doubles, checkout, note || null, Date.now()).run();
       return json(await dashboard(env, user), 201);
     }
-    if (path === 'drills/complete' && request.method === 'POST') { const key = String((await body(request)).key || '').slice(0, 60); if (!key) fail(400, 'Invalid drill.'); await env.DB.prepare('INSERT INTO darts_drill_completions(id,user_id,drill_key,completed_at) VALUES(?,?,?,?)').bind(crypto.randomUUID(), user.id, key, Date.now()).run(); return json(await dashboard(env, user), 201); }
+    if (path === 'drills/start' && request.method === 'POST') {
+      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60);
+      if (key !== current.key) fail(400, 'Start the drill Boplo recommended for this session.');
+      try {
+        const id = crypto.randomUUID(), now = Date.now();
+        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,started_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, key, current.target, 0, now).run();
+        return json({ ok: true, runId: id, recommendation: current }, 201);
+      } catch { fail(503, 'Apply migration 0003 before recording drill results.'); }
+    }
+    if (path === 'drills/complete' && request.method === 'POST') {
+      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), achieved = Math.round(cleanNumber(input.achieved, 'drill result')), confidence = Math.round(cleanNumber(input.confidence, 'confidence'));
+      if (key !== current.key) fail(400, 'That is not your current Boplo drill.');
+      if (achieved > Math.max(999, current.target * 5) || confidence < 1 || confidence > 5) fail(400, 'Enter a valid drill result.');
+      const note = String(input.note || '').slice(0, 160), now = Date.now();
+      try {
+        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,confidence,note,started_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), user.id, key, current.target, achieved, confidence, note || null, now, now).run();
+      } catch { fail(503, 'Apply migration 0003 before recording drill results.'); }
+      await env.DB.prepare('INSERT INTO darts_drill_completions(id,user_id,drill_key,completed_at) VALUES(?,?,?,?)').bind(crypto.randomUUID(), user.id, key, now).run();
+      return json(await dashboard(env, user), 201);
+    }
     fail(404, 'Not found.');
   } catch (error) { return json({ error: error.status ? error.message : 'Boplo is temporarily unavailable. Please try again.' }, error.status || 500); }
 }

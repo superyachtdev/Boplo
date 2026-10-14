@@ -10,8 +10,11 @@ Apply these migrations in order against that database:
 
 1. `migrations/0001_scout.sql` only if you still need the old Scout product tables.
 2. `migrations/0002_darts_product.sql` for Boplo Darts accounts, practice sessions, and drill completions.
+3. `migrations/0003_darts_practice_loop.sql` for measurable drill runs and progress history.
 
-For the Darts product alone, only migration `0002_darts_product.sql` is needed.
+For the Darts product alone, run `0002_darts_product.sql` and then `0003_darts_practice_loop.sql`.
+
+When you deploy the practice loop update, also run `migrations/0003_darts_practice_loop.sql` in the same D1 Console. It adds drill-result history; until it is applied, account sign-in and session logging still work, but completed drill results are not recorded.
 
 ## 2. Add Pages secrets
 
