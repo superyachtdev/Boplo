@@ -1,0 +1,1 @@
+{"name":"boplo","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.js","dev":"wrangler pages dev dist --d1 DB","deploy:check":"wrangler pages functions build functions --outdir=work/functions-build"},"devDependencies":{"wrangler":"^4.0.0"}}
