@@ -12,13 +12,20 @@ const mean = (rows, key) => rows.length ? rows.reduce((sum, row) => sum + Number
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const day = timestamp => new Date(timestamp).toISOString().slice(0, 10);
 const percent = value => Math.round(value * 10) / 10;
+const DRILLS = {
+  'd16': { key: 'd16', tag: 'DOUBLES', name: 'Own D16', summary: 'Make a match-winning double feel familiar.', task: 'Throw 3 darts at D16 for 10 visits. Reset your feet after every visit.', goal: 'Land 12 doubles before changing target.', target: 12, unit: 'doubles', duration: '12 min', level: 'Foundation' },
+  'doubles-around': { key: 'doubles-around', tag: 'DOUBLES', name: 'Around the board', summary: 'Build confidence across every double.', task: 'Hit D1 through D20 in order. Three darts at each target, then move on.', goal: 'Finish all 20 doubles with fewer than 40 misses.', target: 20, unit: 'doubles', duration: '20 min', level: 'Foundation' },
+  't20-grouping': { key: 't20-grouping', tag: 'SCORING', name: 'T20 grouping', summary: 'Give your scoring visits a repeatable centre.', task: 'Throw 10 visits at T20. Only judge your group after all three darts land.', goal: 'Score 150 points across any three visits.', target: 150, unit: 'points', duration: '15 min', level: 'Foundation' },
+  'checkout-ladder': { key: 'checkout-ladder', tag: 'CHECKOUTS', name: 'Checkout ladder', summary: 'Close the finishes you already reach.', task: 'Start on 40: hit D20, then D10, then D5. Step back one rung after a miss.', goal: 'Complete the ladder twice.', target: 2, unit: 'ladders', duration: '15 min', level: 'Intermediate' },
+  'pressure-41': { key: 'pressure-41', tag: 'PRESSURE', name: 'Pressure 41', summary: 'Practise the reset before a deciding dart.', task: 'Play five 41 finishes. Three darts each. Reset after two missed visits.', goal: 'Close three of five legs.', target: 3, unit: 'finishes', duration: '10 min', level: 'Intermediate' }
+};
 function recommendation(rows) {
   const doubles = mean(rows, 'doubles_rate'), checkouts = mean(rows, 'checkout_rate'), scoring = mean(rows, 'three_dart_average');
-  if (rows.length < 3) return { key: 'baseline', tag: 'FOUNDATION', name: 'Build a baseline', why: `You have ${rows.length} honest ${rows.length === 1 ? 'log' : 'logs'}. Two more give Boplo enough signal to make a fair call.`, task: 'Play 3 sets of 10 visits at T20. Record the average after each set.', goal: 'Log three sessions before chasing a weakness.', target: 3, unit: 'sessions', confidence: 'early' };
-  if (doubles < 35) return { key: 'd16', tag: 'DOUBLES FIRST', name: 'Own D16', why: `Your double rate is ${percent(doubles)}%, which is the clearest place to win more legs right now.`, task: 'Throw 3 darts at D16 × 10. Reset your feet after every visit.', goal: 'Land 12 doubles before you move target.', target: 12, unit: 'doubles', confidence: 'high' };
-  if (checkouts < 30) return { key: 'checkout-ladder', tag: 'FINISH BETTER', name: 'Checkout ladder', why: `Your checkout rate is ${percent(checkouts)}%. You are reaching finishes more often than you are closing them.`, task: 'Start on 40: hit D20, then D10, then D5. Step back one rung after a miss.', goal: 'Complete the ladder twice.', target: 2, unit: 'ladders', confidence: 'high' };
-  if (scoring < 48) return { key: 't20-grouping', tag: 'SCORING BASE', name: 'T20 grouping', why: `Your doubles are holding. A ${percent(scoring)} three-dart average is now the best lever to pull.`, task: 'Throw 10 visits at T20. Judge the group only after all three darts.', goal: 'Hit 150+ across three visits.', target: 150, unit: 'points', confidence: 'high' };
-  return { key: 'pressure-41', tag: 'MATCH READY', name: 'Pressure finish', why: 'Your core numbers are balanced. The next gain is making your normal standard show up under pressure.', task: 'Play five 41 finishes. Three darts each. Reset after two missed visits.', goal: 'Close three of five legs.', target: 3, unit: 'finishes', confidence: 'medium' };
+  if (rows.length < 3) return { ...DRILLS['t20-grouping'], tag: 'FOUNDATION', why: `You have ${rows.length} honest ${rows.length === 1 ? 'log' : 'logs'}. Two more give Boplo enough signal to make a fair call.`, goal: 'Log three sessions before chasing a weakness.', target: 3, unit: 'sessions', confidence: 'early' };
+  if (doubles < 35) return { ...DRILLS['d16'], tag: 'DOUBLES FIRST', why: `Your double rate is ${percent(doubles)}%, which is the clearest place to win more legs right now.`, confidence: 'high' };
+  if (checkouts < 30) return { ...DRILLS['checkout-ladder'], tag: 'FINISH BETTER', why: `Your checkout rate is ${percent(checkouts)}%. You are reaching finishes more often than you are closing them.`, confidence: 'high' };
+  if (scoring < 48) return { ...DRILLS['t20-grouping'], tag: 'SCORING BASE', why: `Your doubles are holding. A ${percent(scoring)} three-dart average is now the best lever to pull.`, confidence: 'high' };
+  return { ...DRILLS['pressure-41'], tag: 'MATCH READY', why: 'Your core numbers are balanced. The next gain is making your normal standard show up under pressure.', confidence: 'medium' };
 }
 
 function intelligence(rows, runs) {
@@ -70,7 +77,7 @@ async function dashboard(env, user) {
   let runs = [];
   try { runs = (await env.DB.prepare('SELECT id,drill_key,target,achieved,confidence,note,started_at,completed_at FROM darts_drill_runs WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all()).results || []; } catch { /* Migration 0003 has not been applied yet: retain core access rather than fail the whole dashboard. */ }
   const insight = intelligence(rows, runs);
-  return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation };
+  return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation, drillLibrary: Object.values(DRILLS) };
 }
 
 export async function onRequest(context) {
@@ -118,6 +125,7 @@ export async function onRequest(context) {
     if (path === 'me' && request.method === 'GET') return json({ user });
     if (!user) fail(401, 'Sign in to save your practice across devices.');
     if (path === 'dashboard' && request.method === 'GET') return json(await dashboard(env, user));
+    if (path === 'drills' && request.method === 'GET') return json({ drills: Object.values(DRILLS) });
     if (path === 'sessions' && request.method === 'GET') return json((await dashboard(env, user)).sessions);
     if (path === 'sessions' && request.method === 'POST') {
       const input = await body(request), type = String(input.type || '').slice(0, 60), average = cleanNumber(input.average, 'three-dart average'), doubles = cleanNumber(input.doubles, 'double rate'), checkout = cleanNumber(input.checkout, 'checkout rate'), note = String(input.note || '').slice(0, 160);
@@ -126,21 +134,21 @@ export async function onRequest(context) {
       return json(await dashboard(env, user), 201);
     }
     if (path === 'drills/start' && request.method === 'POST') {
-      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60);
-      if (key !== current.key) fail(400, 'Start the drill Boplo recommended for this session.');
+      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key];
+      if (!selected) fail(400, 'Choose a drill from the Boplo library.');
       try {
         const id = crypto.randomUUID(), now = Date.now();
-        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,started_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, key, current.target, 0, now).run();
-        return json({ ok: true, runId: id, recommendation: current }, 201);
+        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,started_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, key, selected.target, 0, now).run();
+        return json({ ok: true, runId: id, drill: selected, recommendation: current }, 201);
       } catch { fail(503, 'Apply migration 0003 before recording drill results.'); }
     }
     if (path === 'drills/complete' && request.method === 'POST') {
-      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), achieved = Math.round(cleanNumber(input.achieved, 'drill result')), confidence = Math.round(cleanNumber(input.confidence, 'confidence'));
-      if (key !== current.key) fail(400, 'That is not your current Boplo drill.');
-      if (achieved > Math.max(999, current.target * 5) || confidence < 1 || confidence > 5) fail(400, 'Enter a valid drill result.');
+      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key], achieved = Math.round(cleanNumber(input.achieved, 'drill result')), confidence = Math.round(cleanNumber(input.confidence, 'confidence'));
+      if (!selected) fail(400, 'Choose a drill from the Boplo library.');
+      if (achieved > Math.max(999, selected.target * 5) || confidence < 1 || confidence > 5) fail(400, 'Enter a valid drill result.');
       const note = String(input.note || '').slice(0, 160), now = Date.now();
       try {
-        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,confidence,note,started_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), user.id, key, current.target, achieved, confidence, note || null, now, now).run();
+        await env.DB.prepare('INSERT INTO darts_drill_runs(id,user_id,drill_key,target,achieved,confidence,note,started_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), user.id, key, selected.target, achieved, confidence, note || null, now, now).run();
       } catch { fail(503, 'Apply migration 0003 before recording drill results.'); }
       await env.DB.prepare('INSERT INTO darts_drill_completions(id,user_id,drill_key,completed_at) VALUES(?,?,?,?)').bind(crypto.randomUUID(), user.id, key, now).run();
       return json(await dashboard(env, user), 201);
