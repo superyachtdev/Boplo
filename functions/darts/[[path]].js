@@ -5,7 +5,7 @@ const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-2
 const cookie = (name, value, maxAge = 0, secure = true) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; ${maxAge ? `Max-Age=${maxAge}; ` : 'Max-Age=0; '}${secure ? 'Secure;' : ''}`;
 const token = () => crypto.randomUUID() + crypto.randomUUID();
 
-function body(request) { return request.text().then(raw => { if (raw.length > 8000) fail(413, 'Request is too large.'); try { return JSON.parse(raw); } catch { fail(400, 'Invalid request.'); } }); }
+function body(request, limit = 8000) { return request.text().then(raw => { if (raw.length > limit) fail(413, 'Request is too large.'); try { return JSON.parse(raw); } catch { fail(400, 'Invalid request.'); } }); }
 function cleanEmail(value) { const email = String(value || '').trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) fail(400, 'Enter a valid email address.'); return email; }
 function cleanNumber(value, label) { const n = Number(value); if (!Number.isFinite(n) || n < 0 || n > 180) fail(400, `Enter a valid ${label}.`); return n; }
 const mean = (rows, key) => rows.length ? rows.reduce((sum, row) => sum + Number(row[key] || 0), 0) / rows.length : 0;
@@ -84,7 +84,25 @@ async function dashboard(env, user) {
   let runs = [];
   try { runs = (await env.DB.prepare('SELECT id,drill_key,target,achieved,confidence,note,started_at,completed_at FROM darts_drill_runs WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all()).results || []; } catch { /* Migration 0003 has not been applied yet: retain core access rather than fail the whole dashboard. */ }
   const insight = intelligence(rows, runs, targetStats);
-  return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation, drillLibrary: Object.values(DRILLS) };
+  let videos = [];
+  try { videos = (await env.DB.prepare('SELECT id,original_name,content_type,size_bytes,status,analysis_json,error_message,created_at,analysed_at FROM darts_video_reviews WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(user.id).all()).results || []; } catch { /* Migration 0005 has not been applied yet. */ }
+  return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation, drillLibrary: Object.values(DRILLS), videos: videos.map(video => {
+    let analysis = null;
+    try { analysis = video.analysis_json ? JSON.parse(video.analysis_json) : null; } catch { /* Keep one malformed historical result from breaking the dashboard. */ }
+    return { ...video, analysis };
+  }) };
+}
+
+function cleanVideoName(value) { return String(value || 'throw-review.mp4').replace(/[^a-zA-Z0-9._ -]/g, '').slice(0, 120) || 'throw-review.mp4'; }
+function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review the three still frames from a player's throw video. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Only describe clearly visible, repeatable observations. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
+function readOutput(response) { const text = response.output_text || response.output?.flatMap(item => item.content || []).map(item => item.text || '').join('') || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
+async function analyseFrames(env, frames) {
+  if (!env.OPENAI_API_KEY) fail(503, 'Video review is not connected yet. Add OPENAI_API_KEY in Cloudflare first.');
+  const images = frames.map(frame => ({ type: 'input_image', image_url: frame, detail: 'low' }));
+  const request = { model: env.OPENAI_VISION_MODEL || 'gpt-4.1-mini', input: [{ role: 'user', content: [{ type: 'input_text', text: reviewPrompt() }, ...images] }], max_output_tokens: 700 };
+  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+  if (!response.ok) fail(502, 'The video review service is unavailable. Try again shortly.');
+  return readOutput(await response.json());
 }
 
 export async function onRequest(context) {
@@ -131,6 +149,43 @@ export async function onRequest(context) {
     const user = await userFromRequest(request, env);
     if (path === 'me' && request.method === 'GET') return json({ user });
     if (!user) fail(401, 'Sign in to save your practice across devices.');
+    if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
+    if (path === 'videos/upload' && request.method === 'POST') {
+      if (!env.VIDEOS) fail(503, 'Video storage is not connected yet. Add an R2 bucket binding called VIDEOS in Cloudflare.');
+      const contentType = request.headers.get('Content-Type') || '';
+      const size = Number(request.headers.get('X-Boplo-Video-Size') || request.headers.get('Content-Length') || 0);
+      if (!contentType.startsWith('video/')) fail(400, 'Upload a video file.');
+      if (size && size > 25 * 1024 * 1024) fail(413, 'Keep review clips under 25 MB.');
+      const id = crypto.randomUUID(), name = cleanVideoName(request.headers.get('X-Boplo-Video-Name')), key = `private/${user.id}/${id}/${name}`, now = Date.now();
+      await env.VIDEOS.put(key, request.body, { httpMetadata: { contentType }, customMetadata: { userId: user.id, videoId: id } });
+      await env.DB.prepare('INSERT INTO darts_video_reviews(id,user_id,object_key,original_name,content_type,size_bytes,status,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(id, user.id, key, name, contentType, size || 0, 'uploaded', now).run();
+      return json({ id, status: 'uploaded' }, 201);
+    }
+    const videoFile = path.match(/^videos\/([a-f0-9-]{36})\/file$/);
+    if (videoFile && request.method === 'GET') {
+      if (!env.VIDEOS) fail(503, 'Video storage is not connected yet.');
+      const video = await env.DB.prepare('SELECT object_key,content_type FROM darts_video_reviews WHERE id=? AND user_id=?').bind(videoFile[1], user.id).first();
+      if (!video) fail(404, 'Video not found.');
+      const object = await env.VIDEOS.get(video.object_key);
+      if (!object) fail(404, 'Video file not found.');
+      return new Response(object.body, { headers: { 'Content-Type': video.content_type, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' } });
+    }
+    const videoAnalysis = path.match(/^videos\/([a-f0-9-]{36})\/analyse$/);
+    if (videoAnalysis && request.method === 'POST') {
+      const input = await body(request, 2_500_000), frames = Array.isArray(input.frames) ? input.frames.filter(frame => typeof frame === 'string' && frame.startsWith('data:image/')).slice(0, 3) : [];
+      if (frames.length < 2) fail(400, 'Capture at least two frames from the throw before analysis.');
+      const video = await env.DB.prepare('SELECT id FROM darts_video_reviews WHERE id=? AND user_id=?').bind(videoAnalysis[1], user.id).first();
+      if (!video) fail(404, 'Video not found.');
+      await env.DB.prepare("UPDATE darts_video_reviews SET status='analysing',error_message=NULL WHERE id=? AND user_id=?").bind(video.id, user.id).run();
+      try {
+        const analysis = await analyseFrames(env, frames), now = Date.now();
+        await env.DB.prepare("UPDATE darts_video_reviews SET status='ready',analysis_json=?,analysed_at=? WHERE id=? AND user_id=?").bind(JSON.stringify(analysis), now, video.id, user.id).run();
+        return json({ id: video.id, status: 'ready', analysis });
+      } catch (error) {
+        await env.DB.prepare("UPDATE darts_video_reviews SET status='failed',error_message=? WHERE id=? AND user_id=?").bind(error.message || 'Review failed.', video.id, user.id).run();
+        throw error;
+      }
+    }
     if (path === 'dashboard' && request.method === 'GET') return json(await dashboard(env, user));
     if (path === 'drills' && request.method === 'GET') return json({ drills: Object.values(DRILLS) });
     if (path === 'sessions' && request.method === 'GET') return json((await dashboard(env, user)).sessions);
@@ -146,7 +201,7 @@ export async function onRequest(context) {
       return json(await dashboard(env, user), 201);
     }
     if (path === 'drills/start' && request.method === 'POST') {
-      const currentDashboard = await dashboard(env, user), current = recommendation(currentDashboard.sessions, currentDashboard.intelligence.heatmap), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key];
+      const input = await body(request), currentDashboard = await dashboard(env, user), current = recommendation(currentDashboard.sessions, currentDashboard.intelligence.heatmap), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key];
       if (!selected) fail(400, 'Choose a drill from the Boplo library.');
       try {
         const id = crypto.randomUUID(), now = Date.now();
