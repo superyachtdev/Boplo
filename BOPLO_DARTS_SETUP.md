@@ -29,8 +29,8 @@ Add these production environment variables in Pages. Keep their values out of Gi
 | `EMAIL_FROM` | A verified Resend sender, e.g. `Boplo <hello@boplo.app>` |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth web client secret |
-| `OPENAI_API_KEY` | Runs the optional frame-based Video Review beta |
-| `OPENAI_VISION_MODEL` | Optional model override; defaults to `gpt-4.1-mini` |
+| `GEMINI_API_KEY` | Runs the optional native-video Video Review beta |
+| `GEMINI_VISION_MODEL` | Optional model override; defaults to `gemini-3.8-flash` |
 
 ## 3. Configure Google OAuth
 
@@ -48,7 +48,7 @@ Verify the sender domain used by `EMAIL_FROM`. Magic links are sent by `/darts/a
 
 Create an R2 bucket for player clips, then add it to the Pages project as an R2 binding named `VIDEOS`. Do not expose this bucket publicly: Boplo serves a clip only to its signed-in owner through `/darts/videos/:id/file`.
 
-Video Review accepts short clips up to 25 MB. The browser samples up to three frames and sends those frames to the configured vision model; the original clip remains in your private R2 bucket.
+Video Review accepts short clips up to 18 MB. The original clip remains private in R2 and is sent to Gemini only when its owner requests an analysis. Gemini reviews the full short clip rather than a few browser-captured still frames.
 
 ## 6. Deploy
 

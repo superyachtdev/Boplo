@@ -94,13 +94,17 @@ async function dashboard(env, user) {
 }
 
 function cleanVideoName(value) { return String(value || 'throw-review.mp4').replace(/[^a-zA-Z0-9._ -]/g, '').slice(0, 120) || 'throw-review.mp4'; }
-function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review the three still frames from a player's throw video. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Only describe clearly visible, repeatable observations. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
-function readOutput(response) { const text = response.output_text || response.output?.flatMap(item => item.content || []).map(item => item.text || '').join('') || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
-async function analyseFrames(env, frames) {
-  if (!env.OPENAI_API_KEY) fail(503, 'Video review is not connected yet. Add OPENAI_API_KEY in Cloudflare first.');
-  const images = frames.map(frame => ({ type: 'input_image', image_url: frame, detail: 'low' }));
-  const request = { model: env.OPENAI_VISION_MODEL || 'gpt-4.1-mini', input: [{ role: 'user', content: [{ type: 'input_text', text: reviewPrompt() }, ...images] }], max_output_tokens: 700 };
-  const response = await fetch('https://api.openai.com/v1/responses', { method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review this short side-on darts throw video as a complete motion, paying attention only to patterns that are clearly visible across the sequence. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Do not invent a view you cannot see. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
+function readOutput(response) { const text = response.output_text || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
+function base64(buffer) { const bytes = new Uint8Array(buffer), chunks = []; for (let start = 0; start < bytes.length; start += 0x8000) chunks.push(String.fromCharCode(...bytes.subarray(start, start + 0x8000))); return btoa(chunks.join('')); }
+async function analyseVideo(env, video) {
+  if (!env.GEMINI_API_KEY) fail(503, 'Video review is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
+  if (!env.VIDEOS) fail(503, 'Video storage is not connected yet. Add an R2 bucket binding called VIDEOS in Cloudflare.');
+  const object = await env.VIDEOS.get(video.object_key);
+  if (!object) fail(404, 'Video file not found.');
+  if (object.size > 18 * 1024 * 1024) fail(413, 'Keep review clips under 18 MB while Video Review is in beta.');
+  const request = { model: env.GEMINI_VISION_MODEL || 'gemini-3.8-flash', input: [{ type: 'text', text: reviewPrompt() }, { type: 'video', data: base64(await object.arrayBuffer()), mime_type: video.content_type, processing: { type: 'static', fps: 4 } }] };
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', { method: 'POST', headers: { 'x-goog-api-key': env.GEMINI_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
   if (!response.ok) fail(502, 'The video review service is unavailable. Try again shortly.');
   return readOutput(await response.json());
 }
@@ -155,7 +159,7 @@ export async function onRequest(context) {
       const contentType = request.headers.get('Content-Type') || '';
       const size = Number(request.headers.get('X-Boplo-Video-Size') || request.headers.get('Content-Length') || 0);
       if (!contentType.startsWith('video/')) fail(400, 'Upload a video file.');
-      if (size && size > 25 * 1024 * 1024) fail(413, 'Keep review clips under 25 MB.');
+      if (size && size > 18 * 1024 * 1024) fail(413, 'Keep Video Review clips under 18 MB.');
       const id = crypto.randomUUID(), name = cleanVideoName(request.headers.get('X-Boplo-Video-Name')), key = `private/${user.id}/${id}/${name}`, now = Date.now();
       await env.VIDEOS.put(key, request.body, { httpMetadata: { contentType }, customMetadata: { userId: user.id, videoId: id } });
       await env.DB.prepare('INSERT INTO darts_video_reviews(id,user_id,object_key,original_name,content_type,size_bytes,status,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(id, user.id, key, name, contentType, size || 0, 'uploaded', now).run();
@@ -172,13 +176,11 @@ export async function onRequest(context) {
     }
     const videoAnalysis = path.match(/^videos\/([a-f0-9-]{36})\/analyse$/);
     if (videoAnalysis && request.method === 'POST') {
-      const input = await body(request, 2_500_000), frames = Array.isArray(input.frames) ? input.frames.filter(frame => typeof frame === 'string' && frame.startsWith('data:image/')).slice(0, 3) : [];
-      if (frames.length < 2) fail(400, 'Capture at least two frames from the throw before analysis.');
-      const video = await env.DB.prepare('SELECT id FROM darts_video_reviews WHERE id=? AND user_id=?').bind(videoAnalysis[1], user.id).first();
+      const video = await env.DB.prepare('SELECT id,object_key,content_type FROM darts_video_reviews WHERE id=? AND user_id=?').bind(videoAnalysis[1], user.id).first();
       if (!video) fail(404, 'Video not found.');
       await env.DB.prepare("UPDATE darts_video_reviews SET status='analysing',error_message=NULL WHERE id=? AND user_id=?").bind(video.id, user.id).run();
       try {
-        const analysis = await analyseFrames(env, frames), now = Date.now();
+        const analysis = await analyseVideo(env, video), now = Date.now();
         await env.DB.prepare("UPDATE darts_video_reviews SET status='ready',analysis_json=?,analysed_at=? WHERE id=? AND user_id=?").bind(JSON.stringify(analysis), now, video.id, user.id).run();
         return json({ id: video.id, status: 'ready', analysis });
       } catch (error) {
