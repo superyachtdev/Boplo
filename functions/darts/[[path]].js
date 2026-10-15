@@ -19,23 +19,27 @@ const DRILLS = {
   'checkout-ladder': { key: 'checkout-ladder', tag: 'CHECKOUTS', name: 'Checkout ladder', summary: 'Close the finishes you already reach.', task: 'Start on 40: hit D20, then D10, then D5. Step back one rung after a miss.', goal: 'Complete the ladder twice.', target: 2, unit: 'ladders', duration: '15 min', level: 'Intermediate' },
   'pressure-41': { key: 'pressure-41', tag: 'PRESSURE', name: 'Pressure 41', summary: 'Practise the reset before a deciding dart.', task: 'Play five 41 finishes. Three darts each. Reset after two missed visits.', goal: 'Close three of five legs.', target: 3, unit: 'finishes', duration: '10 min', level: 'Intermediate' }
 };
-function recommendation(rows) {
+const TARGETS = new Set(['T20', 'D20', 'D16', 'D8', 'BULL', 'OTHER']);
+function recommendation(rows, targetStats = []) {
   const doubles = mean(rows, 'doubles_rate'), checkouts = mean(rows, 'checkout_rate'), scoring = mean(rows, 'three_dart_average');
+  const focused = targetStats.filter(row => Number(row.attempts) >= 6 && row.target !== 'OTHER').sort((a, b) => (Number(a.hits) / Number(a.attempts)) - (Number(b.hits) / Number(b.attempts)))[0];
   if (rows.length < 3) return { ...DRILLS['t20-grouping'], tag: 'FOUNDATION', why: `You have ${rows.length} honest ${rows.length === 1 ? 'log' : 'logs'}. Two more give Boplo enough signal to make a fair call.`, goal: 'Log three sessions before chasing a weakness.', target: 3, unit: 'sessions', confidence: 'early' };
+  if (focused?.target === 'D16') return { ...DRILLS['d16'], tag: 'TARGET SIGNAL', why: `D16 is landing at ${percent(Number(focused.hits) / Number(focused.attempts) * 100)}% across ${focused.attempts} tracked attempts. Make that double familiar before adding more targets.`, confidence: 'high' };
+  if (focused?.target === 'T20' && scoring < 55) return { ...DRILLS['t20-grouping'], tag: 'TARGET SIGNAL', why: `T20 is landing at ${percent(Number(focused.hits) / Number(focused.attempts) * 100)}% across your tracked attempts. Tightening that group is the clearest scoring gain.`, confidence: 'high' };
   if (doubles < 35) return { ...DRILLS['d16'], tag: 'DOUBLES FIRST', why: `Your double rate is ${percent(doubles)}%, which is the clearest place to win more legs right now.`, confidence: 'high' };
   if (checkouts < 30) return { ...DRILLS['checkout-ladder'], tag: 'FINISH BETTER', why: `Your checkout rate is ${percent(checkouts)}%. You are reaching finishes more often than you are closing them.`, confidence: 'high' };
   if (scoring < 48) return { ...DRILLS['t20-grouping'], tag: 'SCORING BASE', why: `Your doubles are holding. A ${percent(scoring)} three-dart average is now the best lever to pull.`, confidence: 'high' };
   return { ...DRILLS['pressure-41'], tag: 'MATCH READY', why: 'Your core numbers are balanced. The next gain is making your normal standard show up under pressure.', confidence: 'medium' };
 }
 
-function intelligence(rows, runs) {
+function intelligence(rows, runs, targetStats = []) {
   const chronological = [...rows].reverse();
   const recent = chronological.slice(-3), previous = chronological.slice(Math.max(0, chronological.length - 6), Math.max(0, chronological.length - 3));
   const trend = key => previous.length && recent.length ? percent(mean(recent, key) - mean(previous, key)) : null;
   const dates = [...new Set(rows.map(row => day(row.created_at)))].sort().reverse();
   let streak = 0, cursor = new Date();
   while (dates.includes(day(cursor))) { streak += 1; cursor.setUTCDate(cursor.getUTCDate() - 1); }
-  const recommendationNow = recommendation(rows);
+  const recommendationNow = recommendation(rows, targetStats);
   const completed = runs.filter(run => run.drill_key === recommendationNow.key && run.completed_at);
   const latest = completed[0] || null;
   const best = rows.length ? {
@@ -48,7 +52,8 @@ function intelligence(rows, runs) {
     stats: { sessions: rows.length, average: percent(mean(rows, 'three_dart_average')), doubles: percent(mean(rows, 'doubles_rate')), checkout: percent(mean(rows, 'checkout_rate')), streak, personalBests: best },
     trends: { average: trend('three_dart_average'), doubles: trend('doubles_rate'), checkout: trend('checkout_rate') },
     recommendation: recommendationNow,
-    drill: { completedCount: completed.length, latestResult: latest ? { achieved: latest.achieved, target: latest.target, confidence: latest.confidence, completedAt: latest.completed_at } : null }
+    drill: { completedCount: completed.length, latestResult: latest ? { achieved: latest.achieved, target: latest.target, confidence: latest.confidence, completedAt: latest.completed_at } : null },
+    heatmap: targetStats.map(row => ({ target: row.target, hits: Number(row.hits), attempts: Number(row.attempts), rate: Number(row.attempts) ? percent(Number(row.hits) / Number(row.attempts) * 100) : 0 }))
   };
 }
 
@@ -74,9 +79,11 @@ async function dashboard(env, user) {
   const sessions = await env.DB.prepare('SELECT id,session_type AS type,three_dart_average AS average,doubles_rate AS doubles,checkout_rate AS checkout,three_dart_average,doubles_rate,checkout_rate,note,created_at FROM darts_practice_sessions WHERE user_id=? ORDER BY created_at DESC LIMIT 100').bind(user.id).all();
   const drills = await env.DB.prepare('SELECT drill_key,completed_at FROM darts_drill_completions WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all();
   const rows = sessions.results || [];
+  let targetStats = [];
+  try { targetStats = (await env.DB.prepare('SELECT target,SUM(hits) AS hits,SUM(attempts) AS attempts FROM darts_target_results WHERE user_id=? GROUP BY target').bind(user.id).all()).results || []; } catch { /* Migration 0004 has not been applied yet. */ }
   let runs = [];
   try { runs = (await env.DB.prepare('SELECT id,drill_key,target,achieved,confidence,note,started_at,completed_at FROM darts_drill_runs WHERE user_id=? ORDER BY completed_at DESC LIMIT 100').bind(user.id).all()).results || []; } catch { /* Migration 0003 has not been applied yet: retain core access rather than fail the whole dashboard. */ }
-  const insight = intelligence(rows, runs);
+  const insight = intelligence(rows, runs, targetStats);
   return { user, sessions: rows, drills: drills.results || [], drillRuns: runs, intelligence: insight, recommendation: insight.recommendation, drillLibrary: Object.values(DRILLS) };
 }
 
@@ -130,11 +137,16 @@ export async function onRequest(context) {
     if (path === 'sessions' && request.method === 'POST') {
       const input = await body(request), type = String(input.type || '').slice(0, 60), average = cleanNumber(input.average, 'three-dart average'), doubles = cleanNumber(input.doubles, 'double rate'), checkout = cleanNumber(input.checkout, 'checkout rate'), note = String(input.note || '').slice(0, 160);
       if (!type) fail(400, 'Choose a session type.'); if (doubles > 100 || checkout > 100) fail(400, 'Rates must be between 0 and 100.');
-      await env.DB.prepare('INSERT INTO darts_practice_sessions(id,user_id,session_type,three_dart_average,doubles_rate,checkout_rate,note,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), user.id, type, average, doubles, checkout, note || null, Date.now()).run();
+      const targetRows = Array.isArray(input.targets) ? input.targets.slice(0, 6).map(row => ({ target: String(row?.target || '').toUpperCase(), hits: Math.round(Number(row?.hits)), attempts: Math.round(Number(row?.attempts)) })).filter(row => row.attempts > 0 || row.hits > 0) : [];
+      if (targetRows.some(row => !TARGETS.has(row.target) || !Number.isInteger(row.hits) || !Number.isInteger(row.attempts) || row.hits < 0 || row.attempts < 0 || row.hits > row.attempts || row.attempts > 180)) fail(400, 'Check each target hit and attempt count.');
+      if (targetRows.length) try { await env.DB.prepare('SELECT 1 FROM darts_target_results LIMIT 1').first(); } catch { fail(503, 'Apply migration 0004 before saving board targets.'); }
+      const sessionId = crypto.randomUUID(), now = Date.now();
+      await env.DB.prepare('INSERT INTO darts_practice_sessions(id,user_id,session_type,three_dart_average,doubles_rate,checkout_rate,note,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(sessionId, user.id, type, average, doubles, checkout, note || null, now).run();
+      if (targetRows.length) await env.DB.batch(targetRows.map(row => env.DB.prepare('INSERT INTO darts_target_results(id,session_id,user_id,target,hits,attempts,created_at) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(), sessionId, user.id, row.target, row.hits, row.attempts, now)));
       return json(await dashboard(env, user), 201);
     }
     if (path === 'drills/start' && request.method === 'POST') {
-      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key];
+      const currentDashboard = await dashboard(env, user), current = recommendation(currentDashboard.sessions, currentDashboard.intelligence.heatmap), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key];
       if (!selected) fail(400, 'Choose a drill from the Boplo library.');
       try {
         const id = crypto.randomUUID(), now = Date.now();
@@ -143,7 +155,7 @@ export async function onRequest(context) {
       } catch { fail(503, 'Apply migration 0003 before recording drill results.'); }
     }
     if (path === 'drills/complete' && request.method === 'POST') {
-      const input = await body(request), current = recommendation((await dashboard(env, user)).sessions), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key], achieved = Math.round(cleanNumber(input.achieved, 'drill result')), confidence = Math.round(cleanNumber(input.confidence, 'confidence'));
+      const currentDashboard = await dashboard(env, user), current = recommendation(currentDashboard.sessions, currentDashboard.intelligence.heatmap), input = await body(request), key = String(input.key || current.key).slice(0, 60), selected = DRILLS[key], achieved = Math.round(cleanNumber(input.achieved, 'drill result')), confidence = Math.round(cleanNumber(input.confidence, 'confidence'));
       if (!selected) fail(400, 'Choose a drill from the Boplo library.');
       if (achieved > Math.max(999, selected.target * 5) || confidence < 1 || confidence > 5) fail(400, 'Enter a valid drill result.');
       const note = String(input.note || '').slice(0, 160), now = Date.now();
