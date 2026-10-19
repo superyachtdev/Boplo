@@ -65,5 +65,25 @@
     site.querySelector('[data-boplo-coming]').addEventListener('click', () => chatIntake(user));
     site.querySelector('[data-boplo-profile]').addEventListener('submit', async event => { event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.textContent = 'Saving…'; const response = await fetch('/auth/profile', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: new FormData(event.currentTarget).get('displayName') }) }); if (!response.ok) { button.textContent = 'Try again'; return; } button.textContent = 'Saved ✓'; setTimeout(() => { button.textContent = 'Save'; }, 1500); });
   };
-  if (location.hash === '#workspace') fetch('/auth/me', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null).then(data => { if (data?.user) workspace(data.user); else { location.hash = '#top'; document.querySelector('#modal')?.classList.remove('hidden'); } }).catch(() => { location.hash = '#top'; document.querySelector('#modal')?.classList.remove('hidden'); });
+  let workspaceRequest = false;
+  const renderWorkspace = () => {
+    if (location.hash !== '#workspace' || workspaceRequest) return;
+    workspaceRequest = true;
+    fetch('/auth/me', { credentials: 'same-origin', cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (data?.user) workspace(data.user);
+        else {
+          location.hash = '#top';
+          document.querySelector('#modal')?.classList.remove('hidden');
+        }
+      })
+      .catch(() => {
+        location.hash = '#top';
+        document.querySelector('#modal')?.classList.remove('hidden');
+      })
+      .finally(() => { workspaceRequest = false; });
+  };
+  window.addEventListener('hashchange', renderWorkspace);
+  renderWorkspace();
 })();
