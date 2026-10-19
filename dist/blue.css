@@ -19,5 +19,5 @@
 #modal .auth input{height:56px!important;border:1px solid #c7ddeb!important;border-radius:15px!important;color:#102b45!important;box-shadow:none!important}#modal .auth input:focus{outline:0;border-color:#4d99f5!important;box-shadow:0 0 0 4px #85c9ff30!important}
 #modal .auth [data-email]{height:56px!important;background:#123a61!important;color:#fff!important;border:1px solid #123a61!important;border-radius:15px!important;box-shadow:none!important}#modal .auth [data-email]:hover{background:#1c5588!important}.note{color:#7c8e9f!important}
 
-/* The social wordmark carries into the product without changing the layout. */
-.w-logo{gap:0!important}.w-logo-wordmark{display:block;width:94px;height:auto;border-radius:5px;filter:drop-shadow(0 5px 13px #2488ff24)}
+/* A compact product lock-up: sharp at nav size, rather than a social-avatar thumbnail. */
+.w-logo{gap:9px!important;color:#f8fcff!important}.w-logo i{position:relative;width:18px!important;height:18px!important;border-radius:50%!important;background:radial-gradient(circle at 44% 43%,#fff 0 15%,#c9f5ff 17% 28%,#57a8ff 30% 58%,#1965dc 61% 100%)!important;transform:none!important;box-shadow:0 0 0 5px #5faeff18,0 5px 16px #2288ff55}.w-logo i:after{content:"";position:absolute;inset:5px;border-radius:50%;border:1px solid #fff8}.w-logo span{font-weight:800;letter-spacing:-.1em}
