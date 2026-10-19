@@ -94,6 +94,26 @@ async function dashboard(env, user) {
 }
 
 function cleanVideoName(value) { return String(value || 'throw-review.mp4').replace(/[^a-zA-Z0-9._ -]/g, '').slice(0, 120) || 'throw-review.mp4'; }
+function cleanChatImage(value) {
+  const match = String(value || '').match(/^data:(image\/(?:png|jpeg|webp));base64,([a-zA-Z0-9+/=]+)$/);
+  if (!match) fail(400, 'Upload a PNG, JPG, or WebP chat screenshot.');
+  const estimatedBytes = Math.floor(match[2].length * 0.75);
+  if (estimatedBytes > 4 * 1024 * 1024) fail(413, 'Keep chat screenshots under 4 MB.');
+  return { mimeType: match[1], data: match[2] };
+}
+function transcriptFromMessages(messages) { return messages.map(message => `${message.speaker === 'me' ? 'Me' : message.speaker === 'them' ? 'Them' : 'Unknown'}: ${message.text}`).join('\n'); }
+async function extractChat(env, image) {
+  if (!env.GEMINI_API_KEY) fail(503, 'Chat extraction is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
+  const prompt = 'Extract only the visible dating-app or messaging conversation from this screenshot. Return JSON only with this exact schema: {"messages":[{"speaker":"me|them|unknown","text":"exact visible message text"}]}. Keep messages in chronological reading order. Do not add a greeting, analysis, guess, name, date, emoji description, or any content that is not visible. If the image is not a readable chat, return {"messages":[]}.';
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) });
+  if (!response.ok) fail(502, 'Chat extraction is unavailable right now. You can paste the chat instead.');
+  const data = await response.json(), text = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim() || '';
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { fail(502, 'We could not read that screenshot. You can paste the chat instead.'); }
+  const messages = Array.isArray(parsed.messages) ? parsed.messages.slice(0, 80).map(message => ({ speaker: ['me', 'them', 'unknown'].includes(message?.speaker) ? message.speaker : 'unknown', text: String(message?.text || '').trim().slice(0, 1000) })).filter(message => message.text) : [];
+  if (!messages.length) fail(422, 'No readable chat was found. Try a clearer screenshot or paste the messages.');
+  return { messages, transcript: transcriptFromMessages(messages) };
+}
 function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review this short side-on darts throw video as a complete motion, paying attention only to patterns that are clearly visible across the sequence. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Do not invent a view you cannot see. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
 function readOutput(response) { const text = response.output_text || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
 function base64(buffer) { const bytes = new Uint8Array(buffer), chunks = []; for (let start = 0; start < bytes.length; start += 0x8000) chunks.push(String.fromCharCode(...bytes.subarray(start, start + 0x8000))); return btoa(chunks.join('')); }
@@ -149,7 +169,11 @@ export async function onRequest(context) {
       const userId = await upsertUser(env, { email: cleanEmail(profile.email), name: profile.name || null, googleSubject: profile.sub });
       return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#workspace`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
-    if ((path === 'auth/logout' || path === 'logout') && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_session', '', 0, secure) });
+    if ((path === 'auth/logout' || path === 'logout') && request.method === 'POST') {
+      const response = json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_session', '', 0, secure) });
+      response.headers.append('Set-Cookie', cookie('boplo_darts', '', 0, secure));
+      return response;
+    }
     const user = await userFromRequest(request, env);
     if (path === 'me' && request.method === 'GET') return json({ user });
     if (!user) fail(401, 'Sign in to save your Boplo workspace.');
@@ -158,6 +182,10 @@ export async function onRequest(context) {
       if (!displayName) fail(400, 'Enter a name for your Boplo profile.');
       await env.DB.prepare('UPDATE darts_users SET display_name=?,updated_at=? WHERE id=?').bind(displayName, Date.now(), user.id).run();
       return json({ user: { ...user, display_name: displayName } });
+    }
+    if (path === 'chat/extract' && request.method === 'POST') {
+      const input = await body(request, 6 * 1024 * 1024);
+      return json(await extractChat(env, cleanChatImage(input.image)));
     }
     if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
     if (path === 'videos/upload' && request.method === 'POST') {

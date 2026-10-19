@@ -20,12 +20,49 @@
   document.addEventListener('click', event => { if (event.target.closest('[data-exit]')) site.classList.remove('hidden'); });
 
   const escape = value => String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const accountNav = user => `<header class="w-nav w-workspace-nav"><a class="w-logo" href="#top" aria-label="Boplo home"><i aria-hidden="true"></i><span>boplo</span></a><div class="w-account"><span>${escape(user.email)}</span><button class="w-text-button" data-boplo-signout>Sign out</button></div></header>`;
+  const bindAccountNav = () => site.querySelector('[data-boplo-signout]')?.addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }); location.hash = '#top'; location.reload(); });
+  const chatIntake = user => {
+    site.classList.add('w-workspace');
+    site.innerHTML = `<div class="w-wrap">${accountNav(user)}<main class="w-workspace-main w-chat-main"><button class="w-back" data-boplo-home>← Workspace</button><div class="w-chat-head"><span class="w-eyebrow">NEW CHAT READ · 01 / 02</span><h1>Show us the chat.</h1><p>Paste the conversation or upload one clear screenshot. You will review everything before Boplo uses it.</p></div><form class="w-chat-form" data-boplo-intake><label class="w-dropzone" for="boplo-chat-image"><input id="boplo-chat-image" type="file" accept="image/png,image/jpeg,image/webp"><b>Upload a chat screenshot</b><span>PNG, JPG or WebP · under 4 MB</span><em>Choose image</em></label><div class="w-chat-or"><span>or paste it in</span></div><label class="w-chat-label" for="boplo-chat-text">Conversation</label><textarea id="boplo-chat-text" maxlength="12000" placeholder="Me: I take food seriously.&#10;Them: That is a bold claim.&#10;Me: ..."></textarea><p class="w-private-note">Your screenshot is only used to extract the chat. It is not saved as a file.</p><button class="w-button gradient" type="submit">Review the chat ↗</button><p class="w-chat-error" aria-live="polite"></p></form></main></div>`;
+    bindAccountNav();
+    site.querySelector('[data-boplo-home]').addEventListener('click', () => workspace(user));
+    let selectedImage = null;
+    const fileInput = site.querySelector('#boplo-chat-image'), dropzone = site.querySelector('.w-dropzone');
+    fileInput.addEventListener('change', () => { selectedImage = fileInput.files?.[0] || null; dropzone.classList.toggle('selected', Boolean(selectedImage)); dropzone.querySelector('b').textContent = selectedImage ? selectedImage.name : 'Upload a chat screenshot'; dropzone.querySelector('span').textContent = selectedImage ? `${Math.ceil(selectedImage.size / 1024)} KB · ready to read` : 'PNG, JPG or WebP · under 4 MB'; });
+    site.querySelector('[data-boplo-intake]').addEventListener('submit', async event => {
+      event.preventDefault();
+      const error = site.querySelector('.w-chat-error'), button = event.currentTarget.querySelector('button[type="submit"]'), pasted = site.querySelector('#boplo-chat-text').value.trim();
+      error.textContent = '';
+      if (!selectedImage && !pasted) { error.textContent = 'Add a screenshot or paste the chat first.'; return; }
+      button.disabled = true; button.textContent = selectedImage ? 'Reading screenshot…' : 'Preparing chat…';
+      try {
+        let transcript = pasted, source = 'Pasted chat';
+        if (selectedImage) {
+          if (selectedImage.size > 4 * 1024 * 1024) throw new Error('Keep screenshots under 4 MB.');
+          const image = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('We could not read that file.')); reader.readAsDataURL(selectedImage); });
+          const response = await fetch('/auth/chat/extract', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
+          const data = await response.json(); if (!response.ok) throw new Error(data.error || 'We could not read that screenshot.');
+          transcript = data.transcript; source = 'Screenshot extraction';
+        }
+        sessionStorage.setItem('boplo-chat-draft', transcript);
+        chatReview(user, transcript, source);
+      } catch (reason) { error.textContent = reason.message || 'Something went wrong. Please try again.'; button.disabled = false; button.textContent = 'Review the chat ↗'; }
+    });
+  };
+  const chatReview = (user, transcript, source) => {
+    site.classList.add('w-workspace');
+    site.innerHTML = `<div class="w-wrap">${accountNav(user)}<main class="w-workspace-main w-chat-main"><button class="w-back" data-boplo-edit>← Edit input</button><div class="w-chat-head"><span class="w-eyebrow">NEW CHAT READ · 02 / 02</span><h1>Check the context.</h1><p>We extracted this from your ${escape(source).toLowerCase()}. Correct anything before continuing.</p></div><form class="w-chat-form w-review-form" data-boplo-review><label class="w-chat-label" for="boplo-review-text">What Boplo will read</label><textarea id="boplo-review-text" maxlength="12000"></textarea><p class="w-private-note">Only the confirmed chat will be used for your reply suggestions. You control what gets saved later.</p><button class="w-button gradient" type="submit">Chat confirmed ↗</button><p class="w-chat-success" aria-live="polite"></p></form></main></div>`;
+    site.querySelector('#boplo-review-text').value = transcript;
+    bindAccountNav(); site.querySelector('[data-boplo-edit]').addEventListener('click', () => chatIntake(user));
+    site.querySelector('[data-boplo-review]').addEventListener('submit', event => { event.preventDefault(); const finalText = site.querySelector('#boplo-review-text').value.trim(); const notice = site.querySelector('.w-chat-success'); if (!finalText) { notice.textContent = 'Keep at least one message in the chat.'; return; } sessionStorage.setItem('boplo-chat-draft', finalText); notice.textContent = 'Chat confirmed. Next, Boplo will create your read and reply options.'; event.currentTarget.querySelector('button').textContent = 'Ready for reply options ✓'; });
+  };
   const workspace = user => {
     const firstName = String(user.display_name || user.email || 'there').trim().split(/\s|@/)[0];
     site.classList.add('w-workspace');
     site.innerHTML = `<div class="w-wrap"><header class="w-nav w-workspace-nav"><a class="w-logo" href="#top" aria-label="Boplo home"><i aria-hidden="true"></i><span>boplo</span></a><div class="w-account"><span>${escape(user.email)}</span><button class="w-text-button" data-boplo-signout>Sign out</button></div></header><main class="w-workspace-main"><div class="w-workspace-top"><div><span class="w-eyebrow">YOUR BOPLO SPACE</span><h1>Hey, ${escape(firstName)}.</h1><p>You are in. Your chat reads and saved replies will live here.</p></div><span class="w-credit"><b>3</b> free reads left</span></div><section class="w-new-read"><div><span class="w-eyebrow">NEW CHAT READ</span><h2>What are we replying to?</h2><p>Upload a screenshot or paste the conversation when the reply tool opens.</p></div><button class="w-button gradient" data-boplo-coming>Start a chat read ↗</button></section><section class="w-workspace-grid"><article class="w-workspace-card"><span class="w-eyebrow">YOUR ACCOUNT</span><h3>Make it yours.</h3><form data-boplo-profile><label for="boplo-name">Display name</label><div><input id="boplo-name" name="displayName" value="${escape(user.display_name || '')}" maxlength="60" placeholder="Your name"><button class="w-button" type="submit">Save</button></div><small>Your name is only used in your Boplo workspace.</small></form></article><article class="w-workspace-card dark"><span class="w-eyebrow">COMING NEXT</span><h3>Your first good reply.</h3><p>The reply engine is next: context, vibe, three options, then copy and send.</p><div class="w-mini-steps"><b>01</b><b>02</b><b>03</b></div></article><article class="w-workspace-card"><span class="w-eyebrow">PRIVATE BY DEFAULT</span><h3>Your chats stay yours.</h3><p>We will only keep the reads you choose to save. Delete controls will be built into the chat history from day one.</p></article></section></main></div>`;
-    site.querySelector('[data-boplo-signout]').addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }); location.hash = '#top'; location.reload(); });
-    site.querySelector('[data-boplo-coming]').addEventListener('click', () => alert('The chat reader is the next build. Your Boplo account is ready for it.'));
+    bindAccountNav();
+    site.querySelector('[data-boplo-coming]').addEventListener('click', () => chatIntake(user));
     site.querySelector('[data-boplo-profile]').addEventListener('submit', async event => { event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.textContent = 'Saving…'; const response = await fetch('/auth/profile', { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ displayName: new FormData(event.currentTarget).get('displayName') }) }); if (!response.ok) { button.textContent = 'Try again'; return; } button.textContent = 'Saved ✓'; setTimeout(() => { button.textContent = 'Save'; }, 1500); });
   };
   if (location.hash === '#workspace') fetch('/auth/me', { credentials: 'same-origin' }).then(response => response.ok ? response.json() : null).then(data => { if (data?.user) workspace(data.user); else { location.hash = '#top'; document.querySelector('#modal')?.classList.remove('hidden'); } }).catch(() => { location.hash = '#top'; document.querySelector('#modal')?.classList.remove('hidden'); });
