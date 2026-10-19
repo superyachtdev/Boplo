@@ -18,3 +18,6 @@
 #modal .auth-divider{display:flex;align-items:center;gap:10px;color:#91a2b4;font:500 11px/1 'DM Mono',monospace;text-transform:uppercase;letter-spacing:.09em}#modal .auth-divider:before,#modal .auth-divider:after{content:"";height:1px;flex:1;background:#dbeaf5}
 #modal .auth input{height:56px!important;border:1px solid #c7ddeb!important;border-radius:15px!important;color:#102b45!important;box-shadow:none!important}#modal .auth input:focus{outline:0;border-color:#4d99f5!important;box-shadow:0 0 0 4px #85c9ff30!important}
 #modal .auth [data-email]{height:56px!important;background:#123a61!important;color:#fff!important;border:1px solid #123a61!important;border-radius:15px!important;box-shadow:none!important}#modal .auth [data-email]:hover{background:#1c5588!important}.note{color:#7c8e9f!important}
+
+/* The social wordmark carries into the product without changing the layout. */
+.w-logo{gap:0!important}.w-logo-wordmark{display:block;width:94px;height:auto;border-radius:5px;filter:drop-shadow(0 5px 13px #2488ff24)}
