@@ -42,7 +42,9 @@
           if (selectedImage.size > 4 * 1024 * 1024) throw new Error('Keep screenshots under 4 MB.');
           const image = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('We could not read that file.')); reader.readAsDataURL(selectedImage); });
           const response = await fetch('/auth/chat/extract', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
-          const data = await response.json(); if (!response.ok) throw new Error(data.error || 'We could not read that screenshot.');
+          const raw = await response.text(); let data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch { throw new Error('The screenshot reader is still connecting. Please try again in a moment.'); }
+          if (!response.ok) throw new Error(data?.error || 'We could not read that screenshot.');
           transcript = data.transcript; source = 'Screenshot extraction';
         }
         sessionStorage.setItem('boplo-chat-draft', transcript);
