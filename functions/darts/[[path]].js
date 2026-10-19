@@ -105,8 +105,13 @@ function transcriptFromMessages(messages) { return messages.map(message => `${me
 async function extractChat(env, image) {
   if (!env.GEMINI_API_KEY) fail(503, 'Chat extraction is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
   const prompt = 'Extract only the visible dating-app or messaging conversation from this screenshot. Return JSON only with this exact schema: {"messages":[{"speaker":"me|them|unknown","text":"exact visible message text"}]}. Keep messages in chronological reading order. Do not add a greeting, analysis, guess, name, date, emoji description, or any content that is not visible. If the image is not a readable chat, return {"messages":[]}.';
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) });
-  if (!response.ok) fail(502, 'Chat extraction is unavailable right now. You can paste the chat instead.');
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) fail(503, 'The chat reader needs a valid Gemini API key. Check the GEMINI_API_KEY value in Cloudflare.');
+    if (response.status === 404) fail(503, 'The configured Gemini model is unavailable. Use gemini-3.8-flash for GEMINI_CHAT_MODEL.');
+    if (response.status === 429) fail(503, 'The chat reader has reached its temporary Gemini limit. Try again shortly.');
+    fail(502, 'Chat extraction is unavailable right now. You can paste the chat instead.');
+  }
   const data = await response.json(), text = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim() || '';
   let parsed;
   try { parsed = JSON.parse(text); } catch { fail(502, 'We could not read that screenshot. You can paste the chat instead.'); }
