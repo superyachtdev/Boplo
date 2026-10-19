@@ -7,3 +7,14 @@
 .w-trust b{color:#b9d6ec}.w-marquee i{color:#93d5ff}.w-flow-card i{background:#d9f3ff}.w-flow-card b{color:#7bc6ff}.w-checks li:before{color:#5596f5}
 .w-card-ui{box-shadow:0 18px 55px #21476a15}.w-card-ui:after{background:radial-gradient(circle,#b7e6ff 0,transparent 68%)}.w-ui-bar span{background:#3c82e8}.w-message{background:#ecf4f9}.w-message.user{background:#9dd4ff}.dark .w-message.user{background:#75bfff}.w-verdict{background:#e9f5ff}.dark .w-verdict{background:#172330}.w-verdict small{color:#317ce6}.dark .w-verdict p{color:#d5eaff}
 .w-cta{background:radial-gradient(circle at 50% 0,#2d5b91 0,#17243a 31%,#0b0a0d 68%)}
+
+/* Account entry uses the same crisp blue system as the wingman experience. */
+#modal{background:rgba(3,12,24,.78)!important;backdrop-filter:blur(15px)}
+#modal .modal-card{background:linear-gradient(145deg,#fff 0%,#f5fbff 100%);border:1px solid #c9e9ff;border-radius:24px;box-shadow:0 30px 100px #06142599;padding:38px 40px}
+#modal .eyebrow{color:#347fe7!important;letter-spacing:.13em}#modal .x{color:#173047;border-radius:50%;width:34px;height:34px;line-height:30px;transition:.2s}#modal .x:hover{background:#e4f4ff}
+#modal h2{color:#0c2338}#modal>p,#modal .modal-card>p{color:#637487}
+#modal .auth{gap:12px;margin-top:27px}#modal .auth-google{height:56px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:11px!important;border:1px solid #9bd5ff!important;background:#fff!important;color:#102b45!important;border-radius:15px!important;font-weight:800!important;box-shadow:0 8px 20px #3e93ca1c!important;transition:transform .2s,box-shadow .2s,border-color .2s!important}
+#modal .auth-google:hover{transform:translateY(-2px)!important;border-color:#4d99f5!important;box-shadow:0 13px 27px #3e93ca2b!important}.auth-google-mark{width:24px;height:24px;display:grid;place-items:center;border-radius:8px;background:linear-gradient(135deg,#4285f4,#34a853 45%,#fbbc05 66%,#ea4335);color:white;font:800 15px/1 Arial,sans-serif;box-shadow:inset 0 0 0 2px #fff}
+#modal .auth-divider{display:flex;align-items:center;gap:10px;color:#91a2b4;font:500 11px/1 'DM Mono',monospace;text-transform:uppercase;letter-spacing:.09em}#modal .auth-divider:before,#modal .auth-divider:after{content:"";height:1px;flex:1;background:#dbeaf5}
+#modal .auth input{height:56px!important;border:1px solid #c7ddeb!important;border-radius:15px!important;color:#102b45!important;box-shadow:none!important}#modal .auth input:focus{outline:0;border-color:#4d99f5!important;box-shadow:0 0 0 4px #85c9ff30!important}
+#modal .auth [data-email]{height:56px!important;background:#123a61!important;color:#fff!important;border:1px solid #123a61!important;border-radius:15px!important;box-shadow:none!important}#modal .auth [data-email]:hover{background:#1c5588!important}.note{color:#7c8e9f!important}
