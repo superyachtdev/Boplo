@@ -58,7 +58,7 @@ function intelligence(rows, runs, targetStats = []) {
 }
 
 async function userFromRequest(request, env) {
-  const raw = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)boplo_darts=([^;]+)/)?.[1];
+  const raw = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1] || (request.headers.get('Cookie') || '').match(/(?:^|;\s*)boplo_darts=([^;]+)/)?.[1];
   if (!raw) return null;
   const row = await env.DB.prepare(`SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?`).bind(await hash(raw), Date.now()).first();
   return row || null;
@@ -66,7 +66,7 @@ async function userFromRequest(request, env) {
 async function createSession(env, userId, secure) {
   const raw = token(), expires = Date.now() + 30 * 86400000;
   await env.DB.prepare('INSERT INTO darts_sessions(id,user_id,token_hash,expires_at,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(), userId, await hash(raw), expires, Date.now()).run();
-  return cookie('boplo_darts', raw, 30 * 86400000, secure);
+  return cookie('boplo_session', raw, 30 * 86400000, secure);
 }
 async function upsertUser(env, { email, name = null, googleSubject = null }) {
   const existing = await env.DB.prepare('SELECT id FROM darts_users WHERE email=? OR google_subject=?').bind(email, googleSubject).first();
@@ -110,49 +110,55 @@ async function analyseVideo(env, video) {
 }
 
 export async function onRequest(context) {
-  const { request, env } = context, url = new URL(request.url), path = url.pathname.replace(/^\/darts\/?/, '');
+  const { request, env } = context, url = new URL(request.url), canonicalAuth = url.pathname.startsWith('/auth/'), routePrefix = canonicalAuth ? '' : '/darts', path = canonicalAuth ? url.pathname.replace(/^\/auth\/?/, '') : url.pathname.replace(/^\/darts\/?/, '');
   try {
     if (!env.DB) fail(503, 'Boplo is still connecting its player database.');
     const secure = url.protocol === 'https:';
-    if (path === 'auth/email' && request.method === 'POST') {
+    if ((path === 'auth/email' || path === 'email') && request.method === 'POST') {
       if (!env.RESEND_API_KEY || !env.EMAIL_FROM) fail(503, 'Email sign-in is not configured yet.');
       const email = cleanEmail((await body(request)).email), raw = token(), expires = Date.now() + 15 * 60000;
       await env.DB.prepare('DELETE FROM darts_magic_links WHERE email=? OR expires_at<?').bind(email, Date.now()).run();
       await env.DB.prepare('INSERT INTO darts_magic_links(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(await hash(raw), email, expires, Date.now()).run();
-      const link = `${env.APP_ORIGIN || url.origin}/darts/auth/verify?token=${encodeURIComponent(raw)}`;
-      const send = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject: 'Sign in to Boplo', html: `<p>Your Boplo sign-in link is ready.</p><p><a href="${link}">Open Boplo</a></p><p>This link expires in 15 minutes.</p>` }) });
+      const link = `${env.APP_ORIGIN || url.origin}${routePrefix}/auth/verify?token=${encodeURIComponent(raw)}`;
+      const send = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject: 'Your Boplo sign-in link', html: `<main style="font-family:Arial,sans-serif;color:#102b45"><p style="font-size:20px;font-weight:700">Your Boplo sign-in link is ready.</p><p>Use the secure link below to open your workspace. It expires in 15 minutes.</p><p><a href="${link}" style="display:inline-block;padding:12px 18px;background:#123a61;color:#fff;border-radius:10px;text-decoration:none;font-weight:700">Open Boplo</a></p><p>If you did not request this, you can safely ignore this email.</p></main>` }) });
       if (!send.ok) fail(502, 'We could not send that email. Try again shortly.');
       return json({ ok: true });
     }
-    if (path === 'auth/verify' && request.method === 'GET') {
+    if ((path === 'auth/verify' || path === 'verify') && request.method === 'GET') {
       const raw = url.searchParams.get('token') || '', row = await env.DB.prepare('SELECT email,expires_at,used_at FROM darts_magic_links WHERE token_hash=?').bind(await hash(raw)).first();
       if (!row || row.used_at || row.expires_at < Date.now()) return new Response('This sign-in link has expired. Return to Boplo and request another.', { status: 400 });
       await env.DB.prepare('UPDATE darts_magic_links SET used_at=? WHERE token_hash=?').bind(Date.now(), await hash(raw)).run();
       const userId = await upsertUser(env, { email: row.email, name: row.email.split('@')[0] });
-      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#dashboard`, 'Set-Cookie': await createSession(env, userId, secure) } });
+      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#workspace`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
-    if (path === 'auth/google' && request.method === 'GET') {
+    if ((path === 'auth/google' || path === 'google') && request.method === 'GET') {
       if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) fail(503, 'Google sign-in is not configured yet.');
       const state = token(); await env.DB.prepare('INSERT INTO darts_oauth_states(state_hash,expires_at,created_at) VALUES(?,?,?)').bind(await hash(state), Date.now() + 10 * 60000, Date.now()).run();
-      const redirect = `${env.APP_ORIGIN || url.origin}/darts/auth/google/callback`, q = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile', state, prompt: 'select_account' });
+      const redirect = `${env.APP_ORIGIN || url.origin}${routePrefix}/auth/google/callback`, q = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile', state, prompt: 'select_account' });
       return Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${q}`, 302);
     }
-    if (path === 'auth/google/callback' && request.method === 'GET') {
+    if ((path === 'auth/google/callback' || path === 'google/callback') && request.method === 'GET') {
       const state = url.searchParams.get('state') || '', code = url.searchParams.get('code') || '', stateRow = await env.DB.prepare('SELECT expires_at FROM darts_oauth_states WHERE state_hash=?').bind(await hash(state)).first();
       if (!stateRow || stateRow.expires_at < Date.now() || !code) fail(400, 'Google sign-in expired. Please try again.');
       await env.DB.prepare('DELETE FROM darts_oauth_states WHERE state_hash=?').bind(await hash(state)).run();
-      const redirect = `${env.APP_ORIGIN || url.origin}/darts/auth/google/callback`;
+      const redirect = `${env.APP_ORIGIN || url.origin}${routePrefix}/auth/google/callback`;
       const exchange = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, redirect_uri: redirect, grant_type: 'authorization_code' }) });
       if (!exchange.ok) fail(502, 'Google sign-in could not be completed.');
       const access = (await exchange.json()).access_token, profile = await (await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${access}` } })).json();
       if (!profile.email_verified || !profile.sub) fail(400, 'Google did not return a verified email address.');
       const userId = await upsertUser(env, { email: cleanEmail(profile.email), name: profile.name || null, googleSubject: profile.sub });
-      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#dashboard`, 'Set-Cookie': await createSession(env, userId, secure) } });
+      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#workspace`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
-    if (path === 'auth/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_darts', '', 0, secure) });
+    if ((path === 'auth/logout' || path === 'logout') && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_session', '', 0, secure) });
     const user = await userFromRequest(request, env);
     if (path === 'me' && request.method === 'GET') return json({ user });
-    if (!user) fail(401, 'Sign in to save your practice across devices.');
+    if (!user) fail(401, 'Sign in to save your Boplo workspace.');
+    if (path === 'profile' && request.method === 'PATCH') {
+      const input = await body(request), displayName = String(input.displayName || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+      if (!displayName) fail(400, 'Enter a name for your Boplo profile.');
+      await env.DB.prepare('UPDATE darts_users SET display_name=?,updated_at=? WHERE id=?').bind(displayName, Date.now(), user.id).run();
+      return json({ user: { ...user, display_name: displayName } });
+    }
     if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
     if (path === 'videos/upload' && request.method === 'POST') {
       if (!env.VIDEOS) fail(503, 'Video storage is not connected yet. Add an R2 bucket binding called VIDEOS in Cloudflare.');
