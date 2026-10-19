@@ -1,0 +1,9 @@
+/* Boplo's ice-blue signature — intentionally distinct from the pink/violet reference. */
+.w-logo i{background:linear-gradient(135deg,#d7f7ff 0%,#91d7ff 50%,#4d8fff 100%)}
+.w-button:hover{box-shadow:0 12px 32px #4b94bf2b}.w-button.gradient{background:linear-gradient(115deg,#d7f7ff 0%,#91d7ff 52%,#5b94ff 100%)}
+.w-glow{background:radial-gradient(circle,#77c8ff2e 0,rgba(132,205,255,.11) 31%,transparent 66%)}
+.w-kicker{color:#dcecff}.w-kicker b{color:#9cd8ff}.w-title span{background:linear-gradient(105deg,#d6f7ff 0%,#9ed9ff 47%,#5f90ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.w-screen{background:linear-gradient(155deg,#e5f8ff 0%,#d8edff 57%,#c4d3ff 100%)}.w-app-head span{color:#317ce6}.w-profile{background:#f8fdff}.w-prompt{color:#53677a}.w-bubble{box-shadow:0 11px 27px #4d84a630}.w-bubble small{color:#718497}
+.w-trust b{color:#b9d6ec}.w-marquee i{color:#93d5ff}.w-flow-card i{background:#d9f3ff}.w-flow-card b{color:#7bc6ff}.w-checks li:before{color:#5596f5}
+.w-card-ui{box-shadow:0 18px 55px #21476a15}.w-card-ui:after{background:radial-gradient(circle,#b7e6ff 0,transparent 68%)}.w-ui-bar span{background:#3c82e8}.w-message{background:#ecf4f9}.w-message.user{background:#9dd4ff}.dark .w-message.user{background:#75bfff}.w-verdict{background:#e9f5ff}.dark .w-verdict{background:#172330}.w-verdict small{color:#317ce6}.dark .w-verdict p{color:#d5eaff}
+.w-cta{background:radial-gradient(circle at 50% 0,#2d5b91 0,#17243a 31%,#0b0a0d 68%)}
