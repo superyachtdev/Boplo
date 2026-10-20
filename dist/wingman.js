@@ -20,6 +20,7 @@
   document.addEventListener('click', event => { if (event.target.closest('[data-exit]')) site.classList.remove('hidden'); });
 
   const escape = value => String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const requestWithTimeout = async (url, options, timeout = 35000) => { const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout); try { return await fetch(url, { ...options, signal: controller.signal }); } catch (error) { if (error?.name === 'AbortError') throw new Error('That took too long. Try again, or paste the chat instead.'); throw error; } finally { clearTimeout(timer); } };
   const accountNav = user => `<header class="w-nav w-workspace-nav"><a class="w-logo" href="#top" aria-label="Boplo home"><i aria-hidden="true"></i><span>boplo</span></a><div class="w-account"><span>${escape(user.email)}</span><button class="w-text-button" data-boplo-signout>Sign out</button></div></header>`;
   const bindAccountNav = () => site.querySelector('[data-boplo-signout]')?.addEventListener('click', async () => { await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' }); location.hash = '#top'; location.reload(); });
   const chatIntake = user => {
@@ -41,7 +42,7 @@
         if (selectedImage) {
           if (selectedImage.size > 4 * 1024 * 1024) throw new Error('Keep screenshots under 4 MB.');
           const image = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('We could not read that file.')); reader.readAsDataURL(selectedImage); });
-          const response = await fetch('/auth/chat/extract', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
+          const response = await requestWithTimeout('/auth/chat/extract', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
           const raw = await response.text(); let data = null;
           try { data = raw ? JSON.parse(raw) : null; } catch { throw new Error('The screenshot reader is still connecting. Please try again in a moment.'); }
           if (!response.ok) throw new Error(data?.error || 'We could not read that screenshot.');
