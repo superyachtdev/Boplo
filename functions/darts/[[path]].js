@@ -129,9 +129,15 @@ function cleanVibe(value) {
   if (!['playful', 'smooth', 'bold', 'genuine'].includes(vibe)) fail(400, 'Choose a reply vibe.');
   return vibe;
 }
-async function generateChatReply(env, transcript, vibe) {
+function cleanReplyMode(value) {
+  const mode = String(value || 'base').toLowerCase();
+  if (!['base', 'shorter', 'bolder', 'softer'].includes(mode)) fail(400, 'Choose a valid reply adjustment.');
+  return mode;
+}
+async function generateChatReply(env, transcript, vibe, mode = 'base') {
   if (!env.GEMINI_API_KEY) fail(503, 'The reply engine is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
-  const prompt = `You are Boplo, a respectful AI dating-chat wingman. Read the confirmed conversation below and help the user write their next message. Return JSON only with this exact schema: {"read":{"tone":"2-6 word read","momentum":"one concise sentence","next_move":"one concise sentence","avoid":"one concise sentence"},"replies":[{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"}]}. The requested vibe is ${vibe}. Keep it warm, specific to the chat, non-manipulative, and easy to reply to. Do not use pickup-artist tactics, pressure, deception, hate, sexual content, or claims about the other person's feelings. Do not mention that you are AI. Never invent facts beyond the transcript.\n\nCONFIRMED CHAT:\n${transcript}`;
+  const adjustment = { base: 'Give three distinct but natural options.', shorter: 'Make every reply notably shorter: one sentence, no filler.', bolder: 'Make the replies more direct and confident while staying respectful and easy to decline.', softer: 'Make the replies warmer, lighter, and lower-pressure.' }[mode];
+  const prompt = `You are Boplo, a respectful AI dating-chat wingman. Read the confirmed conversation below and help the user write their next message. Return JSON only with this exact schema: {"read":{"tone":"2-6 word read","momentum":"one concise sentence","next_move":"one concise sentence","avoid":"one concise sentence"},"replies":[{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"}]}. The requested vibe is ${vibe}. ${adjustment} Keep it warm, specific to the chat, non-manipulative, and easy to reply to. Do not use pickup-artist tactics, pressure, deception, hate, sexual content, or claims about the other person's feelings. Do not mention that you are AI. Never invent facts beyond the transcript.\n\nCONFIRMED CHAT:\n${transcript}`;
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: .7 } }) });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) fail(503, 'The reply engine needs a valid Gemini API key. Check GEMINI_API_KEY in Cloudflare.');
@@ -220,9 +226,9 @@ export async function onRequest(context) {
       return json(await extractChat(env, cleanChatImage(input.image)));
     }
     if (path === 'chat/reply' && request.method === 'POST') {
-      const input = await body(request, 20000), transcript = cleanTranscript(input.transcript), vibe = cleanVibe(input.vibe), analysis = await generateChatReply(env, transcript, vibe), id = crypto.randomUUID(), now = Date.now();
+      const input = await body(request, 20000), transcript = cleanTranscript(input.transcript), vibe = cleanVibe(input.vibe), mode = cleanReplyMode(input.mode), analysis = await generateChatReply(env, transcript, vibe, mode), id = crypto.randomUUID(), now = Date.now();
       try { await env.DB.prepare('INSERT INTO boplo_chat_reads(id,user_id,transcript,vibe,analysis_json,created_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, transcript, vibe, JSON.stringify(analysis), now).run(); } catch { /* The reply remains useful while migration 0006 is being applied. */ }
-      return json({ id, vibe, ...analysis }, 201);
+      return json({ id, vibe, mode, ...analysis }, 201);
     }
     if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
     if (path === 'videos/upload' && request.method === 'POST') {
