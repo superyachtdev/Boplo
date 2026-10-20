@@ -272,7 +272,7 @@ export async function onRequest(context) {
       if (!row || row.used_at || row.expires_at < Date.now()) return new Response('This sign-in link has expired. Return to Boplo and request another.', { status: 400 });
       await env.DB.prepare('UPDATE darts_magic_links SET used_at=? WHERE token_hash=?').bind(Date.now(), await hash(raw)).run();
       const userId = await upsertUser(env, { email: row.email, name: row.email.split('@')[0] });
-      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#workspace`, 'Set-Cookie': await createSession(env, userId, secure) } });
+      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#move`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
     if ((path === 'auth/google' || path === 'google') && request.method === 'GET') {
       if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) fail(503, 'Google sign-in is not configured yet.');
@@ -290,7 +290,7 @@ export async function onRequest(context) {
       const access = (await exchange.json()).access_token, profile = await (await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${access}` } })).json();
       if (!profile.email_verified || !profile.sub) fail(400, 'Google did not return a verified email address.');
       const userId = await upsertUser(env, { email: cleanEmail(profile.email), name: profile.name || null, googleSubject: profile.sub });
-      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#workspace`, 'Set-Cookie': await createSession(env, userId, secure) } });
+      return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#move`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
     if ((path === 'auth/logout' || path === 'logout') && request.method === 'POST') {
       const response = json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_session', '', 0, secure) });
