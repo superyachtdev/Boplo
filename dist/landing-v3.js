@@ -9,9 +9,14 @@
     const userLabel = site.querySelector('#bm-user'), accessTitle = site.querySelector('#bm-access-title'), accessCopy = site.querySelector('#bm-access-copy'), unlock = site.querySelector('#bm-unlock'), profileForm = site.querySelector('#bm-profile-form'), calculator = site.querySelector('#bm-calculator'), calculatorForm = site.querySelector('#bm-calculator-form'), calculatorOutput = calculatorForm.querySelector('output'), profileOutput = profileForm.querySelector('output'), adviserArea = site.querySelector('#bm-advisors');
     let access;
     try {
-      const status = await safeJson(await fetch('/move/status'));
-      access = status.entitlement;
-      userLabel.textContent = status.user.displayName || status.user.email;
+      const [account, status] = await Promise.all([
+        safeJson(await fetch('/auth/me')),
+        safeJson(await fetch('/move/status'))
+      ]);
+      const signedInUser = status.user || account.user;
+      if (!signedInUser) throw new Error('Your sign-in session is missing. Please sign in again.');
+      access = status.entitlement || { plan: 'free', activeUntil: null };
+      userLabel.textContent = signedInUser.displayName || signedInUser.display_name || signedInUser.email || 'Your Boplo account';
       if (access.plan === 'move_plan') { accessTitle.textContent = 'Your Move Plan is active.'; accessCopy.textContent = `Calculator, saved numbers and local-help requests are unlocked until ${new Date(access.activeUntil).toLocaleDateString()}.`; unlock.remove(); calculator.classList.remove('hidden'); }
       else { accessTitle.textContent = 'Unlock the full move plan.'; accessCopy.textContent = 'Use the paid Move Calculator, save your first-month numbers, and request help from approved locals.'; }
       const profileData = await safeJson(await fetch('/move/profile'));
@@ -23,7 +28,7 @@
       profileForm.elements.priorities.value = Array.isArray(profile.priorities) ? profile.priorities.join(', ') : '';
       if (profile.destination) loadAdvisers(profile.destination);
     } catch (error) {
-      site.innerHTML = `<main class="bm-app"><header class="bm-nav"><a class="bv-logo" href="#top" aria-label="Boplo home"><img src="/assets/boplo-wordmark-blue.png" alt="Boplo"></a></header><section class="bm-shell bm-setup-error"><p>Your move</p><h1>You’re signed in.<br><em>We just need one thing.</em></h1><span>${error.message || 'Your Move Plan is still connecting.'}</span><p>Apply the Boplo Move Plan database migration in Cloudflare D1, then retry. Your account is safe and your sign-in worked.</p><button class="bm-primary" type="button" data-bm-retry>Try again</button></section></main>`;
+      site.innerHTML = `<main class="bm-app"><header class="bm-nav"><a class="bv-logo" href="#top" aria-label="Boplo home"><img src="/assets/boplo-wordmark-blue.png" alt="Boplo"></a></header><section class="bm-shell bm-setup-error"><p>Your move</p><h1>You’re signed in.<br><em>We just need one thing.</em></h1><span>${error.message || 'Your Move Plan is still connecting.'}</span><p>Your account is safe. If this mentions a missing table, apply the Boplo Move Plan migration in Cloudflare D1; otherwise retry in a moment.</p><button class="bm-primary" type="button" data-bm-retry>Try again</button></section></main>`;
       site.querySelector('[data-bm-retry]').addEventListener('click', () => window.location.reload());
       return;
     }
