@@ -10,6 +10,11 @@ async function fetchWithTimeout(url, options, timeout = 25000) {
   catch (error) { if (error?.name === 'AbortError') fail(504, 'The AI reader took too long. Try again, or paste the chat instead.'); throw error; }
   finally { clearTimeout(timer); }
 }
+function chatModel(env, image = false) {
+  const requested = String(env.GEMINI_CHAT_MODEL || '').trim();
+  if (requested === 'gemini-2.5-flash' || requested === 'gemini-2.5-flash-lite') return requested;
+  return image ? 'gemini-2.5-flash-lite' : 'gemini-2.5-flash';
+}
 
 function body(request, limit = 8000) { return request.text().then(raw => { if (raw.length > limit) fail(413, 'Request is too large.'); try { return JSON.parse(raw); } catch { fail(400, 'Invalid request.'); } }); }
 function cleanEmail(value) { const email = String(value || '').trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) fail(400, 'Enter a valid email address.'); return email; }
@@ -111,10 +116,10 @@ function transcriptFromMessages(messages) { return messages.map(message => `${me
 async function extractChat(env, image) {
   if (!env.GEMINI_API_KEY) fail(503, 'Chat extraction is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
   const prompt = 'Extract only the visible dating-app or messaging conversation from this screenshot. Return JSON only with this exact schema: {"messages":[{"speaker":"me|them|unknown","text":"exact visible message text"}]}. Keep messages in chronological reading order. Do not add a greeting, analysis, guess, name, date, emoji description, or any content that is not visible. If the image is not a readable chat, return {"messages":[]}.';
-  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) });
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(chatModel(env, true))}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: image.mimeType, data: image.data } }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0 } }) }, 18000);
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) fail(503, 'The chat reader needs a valid Gemini API key. Check the GEMINI_API_KEY value in Cloudflare.');
-    if (response.status === 404) fail(503, 'The configured Gemini model is unavailable. Use gemini-3.8-flash for GEMINI_CHAT_MODEL.');
+    if (response.status === 404) fail(503, 'The screenshot reader model is unavailable. Set GEMINI_CHAT_MODEL to gemini-2.5-flash-lite in Cloudflare.');
     if (response.status === 429) fail(503, 'The chat reader has reached its temporary Gemini limit. Try again shortly.');
     fail(502, 'Chat extraction is unavailable right now. You can paste the chat instead.');
   }
@@ -144,10 +149,10 @@ async function generateChatReply(env, transcript, vibe, mode = 'base') {
   if (!env.GEMINI_API_KEY) fail(503, 'The reply engine is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
   const adjustment = { base: 'Give three distinct but natural options.', shorter: 'Make every reply notably shorter: one sentence, no filler.', bolder: 'Make the replies more direct and confident while staying respectful and easy to decline.', softer: 'Make the replies warmer, lighter, and lower-pressure.' }[mode];
   const prompt = `You are Boplo, a respectful AI dating-chat wingman. Read the confirmed conversation below and help the user write their next message. Return JSON only with this exact schema: {"read":{"tone":"2-6 word read","momentum":"one concise sentence","next_move":"one concise sentence","avoid":"one concise sentence"},"replies":[{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"}]}. The requested vibe is ${vibe}. ${adjustment} Keep it warm, specific to the chat, non-manipulative, and easy to reply to. Do not use pickup-artist tactics, pressure, deception, hate, sexual content, or claims about the other person's feelings. Do not mention that you are AI. Never invent facts beyond the transcript.\n\nCONFIRMED CHAT:\n${transcript}`;
-  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: .7 } }) });
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(chatModel(env))}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: .7 } }) });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) fail(503, 'The reply engine needs a valid Gemini API key. Check GEMINI_API_KEY in Cloudflare.');
-    if (response.status === 404) fail(503, 'The configured Gemini model is unavailable. Use gemini-3.8-flash for GEMINI_CHAT_MODEL.');
+    if (response.status === 404) fail(503, 'The reply model is unavailable. Set GEMINI_CHAT_MODEL to gemini-2.5-flash in Cloudflare.');
     if (response.status === 429) fail(503, 'The reply engine has reached its temporary Gemini limit. Try again shortly.');
     fail(502, 'The reply engine is unavailable right now. Try again shortly.');
   }
