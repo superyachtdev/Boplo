@@ -321,7 +321,10 @@ export async function onRequest(context) {
       return json({ id, vibe, mode, ...analysis, conversation }, 201);
     }
     if (path === 'chat/conversation' && request.method === 'GET') {
-      try { return json(await listConversations(env, user)); }
+      try {
+        const id = url.searchParams.get('id');
+        return json(id ? { conversation: await loadConversation(env, user.id, id) } : await listConversations(env, user));
+      }
       catch (error) { if (/no such table/i.test(error.message || '')) fail(503, 'Apply migration 0007 before opening conversation threads.'); throw error; }
     }
     if (path === 'chat/conversation' && request.method === 'POST') {
