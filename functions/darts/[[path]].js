@@ -119,6 +119,33 @@ async function extractChat(env, image) {
   if (!messages.length) fail(422, 'No readable chat was found. Try a clearer screenshot or paste the messages.');
   return { messages, transcript: transcriptFromMessages(messages) };
 }
+function cleanTranscript(value) {
+  const transcript = String(value || '').trim().replace(/\r\n/g, '\n').slice(0, 12000);
+  if (transcript.length < 8) fail(400, 'Add a little more of the conversation first.');
+  return transcript;
+}
+function cleanVibe(value) {
+  const vibe = String(value || 'playful').toLowerCase();
+  if (!['playful', 'smooth', 'bold', 'genuine'].includes(vibe)) fail(400, 'Choose a reply vibe.');
+  return vibe;
+}
+async function generateChatReply(env, transcript, vibe) {
+  if (!env.GEMINI_API_KEY) fail(503, 'The reply engine is not connected yet. Add GEMINI_API_KEY in Cloudflare first.');
+  const prompt = `You are Boplo, a respectful AI dating-chat wingman. Read the confirmed conversation below and help the user write their next message. Return JSON only with this exact schema: {"read":{"tone":"2-6 word read","momentum":"one concise sentence","next_move":"one concise sentence","avoid":"one concise sentence"},"replies":[{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"},{"label":"short 1-3 word label","text":"one natural, sendable reply","why":"one concise sentence"}]}. The requested vibe is ${vibe}. Keep it warm, specific to the chat, non-manipulative, and easy to reply to. Do not use pickup-artist tactics, pressure, deception, hate, sexual content, or claims about the other person's feelings. Do not mention that you are AI. Never invent facts beyond the transcript.\n\nCONFIRMED CHAT:\n${transcript}`;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(env.GEMINI_CHAT_MODEL || 'gemini-3.8-flash')}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: .7 } }) });
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) fail(503, 'The reply engine needs a valid Gemini API key. Check GEMINI_API_KEY in Cloudflare.');
+    if (response.status === 404) fail(503, 'The configured Gemini model is unavailable. Use gemini-3.8-flash for GEMINI_CHAT_MODEL.');
+    if (response.status === 429) fail(503, 'The reply engine has reached its temporary Gemini limit. Try again shortly.');
+    fail(502, 'The reply engine is unavailable right now. Try again shortly.');
+  }
+  const data = await response.json(), text = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim() || '';
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { fail(502, 'Boplo could not format those reply options. Try again.'); }
+  const read = parsed?.read || {}, replies = Array.isArray(parsed?.replies) ? parsed.replies.slice(0, 3) : [];
+  if (replies.length !== 3 || replies.some(reply => !String(reply?.text || '').trim())) fail(502, 'Boplo could not make three useful reply options. Try again.');
+  return { read: { tone: String(read.tone || 'Warm and open').slice(0, 80), momentum: String(read.momentum || '').slice(0, 280), next_move: String(read.next_move || '').slice(0, 280), avoid: String(read.avoid || '').slice(0, 280) }, replies: replies.map(reply => ({ label: String(reply.label || 'Option').slice(0, 40), text: String(reply.text || '').trim().slice(0, 700), why: String(reply.why || '').slice(0, 240) })) };
+}
 function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review this short side-on darts throw video as a complete motion, paying attention only to patterns that are clearly visible across the sequence. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Do not invent a view you cannot see. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
 function readOutput(response) { const text = response.output_text || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
 function base64(buffer) { const bytes = new Uint8Array(buffer), chunks = []; for (let start = 0; start < bytes.length; start += 0x8000) chunks.push(String.fromCharCode(...bytes.subarray(start, start + 0x8000))); return btoa(chunks.join('')); }
@@ -191,6 +218,11 @@ export async function onRequest(context) {
     if (path === 'chat/extract' && request.method === 'POST') {
       const input = await body(request, 6 * 1024 * 1024);
       return json(await extractChat(env, cleanChatImage(input.image)));
+    }
+    if (path === 'chat/reply' && request.method === 'POST') {
+      const input = await body(request, 20000), transcript = cleanTranscript(input.transcript), vibe = cleanVibe(input.vibe), analysis = await generateChatReply(env, transcript, vibe), id = crypto.randomUUID(), now = Date.now();
+      try { await env.DB.prepare('INSERT INTO boplo_chat_reads(id,user_id,transcript,vibe,analysis_json,created_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, transcript, vibe, JSON.stringify(analysis), now).run(); } catch { /* The reply remains useful while migration 0006 is being applied. */ }
+      return json({ id, vibe, ...analysis }, 201);
     }
     if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
     if (path === 'videos/upload' && request.method === 'POST') {
