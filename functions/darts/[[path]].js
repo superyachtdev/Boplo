@@ -152,6 +152,80 @@ async function generateChatReply(env, transcript, vibe, mode = 'base') {
   if (replies.length !== 3 || replies.some(reply => !String(reply?.text || '').trim())) fail(502, 'Boplo could not make three useful reply options. Try again.');
   return { read: { tone: String(read.tone || 'Warm and open').slice(0, 80), momentum: String(read.momentum || '').slice(0, 280), next_move: String(read.next_move || '').slice(0, 280), avoid: String(read.avoid || '').slice(0, 280) }, replies: replies.map(reply => ({ label: String(reply.label || 'Option').slice(0, 40), text: String(reply.text || '').trim().slice(0, 700), why: String(reply.why || '').slice(0, 240) })) };
 }
+
+function conversationMessagesFromTranscript(transcript) {
+  const messages = String(transcript || '').split('\n').map(line => {
+    const match = line.trim().match(/^(me|them)\s*:\s*(.+)$/i);
+    return match ? { role: match[1].toLowerCase(), body: match[2].trim().slice(0, 1200) } : null;
+  }).filter(Boolean);
+  if (!messages.length) fail(400, 'Use “Me:” and “Them:” lines so Boplo can start the thread.');
+  return messages.slice(-80);
+}
+function conversationTranscript(messages) {
+  return messages.filter(message => message.role === 'me' || message.role === 'them').map(message => `${message.role === 'me' ? 'Me' : 'Them'}: ${message.body}`).join('\n');
+}
+function conversationTitle(messages) {
+  const last = [...messages].reverse().find(message => message.role === 'them') || messages[messages.length - 1];
+  return String(last?.body || 'New chat').replace(/\s+/g, ' ').slice(0, 44) || 'New chat';
+}
+function cleanIncomingMessage(value) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ').slice(0, 1200);
+  if (text.length < 1) fail(400, 'Add what they said first.');
+  return text;
+}
+async function threadPlan(env, userId) {
+  const row = await env.DB.prepare("SELECT plan FROM boplo_entitlements WHERE user_id=?").bind(userId).first();
+  return row?.plan === 'pro' ? 'pro' : 'free';
+}
+async function loadConversation(env, userId, id) {
+  const conversation = await env.DB.prepare('SELECT id,title,vibe,status,created_at,updated_at FROM boplo_conversations WHERE id=? AND user_id=?').bind(id, userId).first();
+  if (!conversation) fail(404, 'That conversation was not found.');
+  const rows = await env.DB.prepare('SELECT id,role,body,option_group,label,why,created_at FROM boplo_conversation_messages WHERE conversation_id=? ORDER BY created_at ASC').bind(id).all();
+  return { ...conversation, messages: rows.results || [], plan: await threadPlan(env, userId) };
+}
+async function saveReplyOptions(env, conversationId, replies) {
+  const group = crypto.randomUUID(), now = Date.now();
+  await env.DB.batch(replies.map(reply => env.DB.prepare('INSERT INTO boplo_conversation_messages(id,conversation_id,role,body,option_group,label,why,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), conversationId, 'suggestion', reply.text, group, reply.label, reply.why, now)));
+}
+async function createConversation(env, user, transcript, vibe, analysis) {
+  const plan = await threadPlan(env, user.id);
+  const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM boplo_conversations WHERE user_id=? AND status='active'").bind(user.id).first();
+  if (plan !== 'pro' && Number(active?.count || 0) >= 2) fail(402, 'Free includes two active conversations. Archive one or upgrade to Boplo Pro for unlimited threads.');
+  const messages = conversationMessagesFromTranscript(transcript), id = crypto.randomUUID(), now = Date.now();
+  await env.DB.prepare('INSERT INTO boplo_conversations(id,user_id,title,vibe,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(id, user.id, conversationTitle(messages), vibe, 'active', now, now).run();
+  await env.DB.batch(messages.map((message, index) => env.DB.prepare('INSERT INTO boplo_conversation_messages(id,conversation_id,role,body,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(), id, message.role, message.body, now + index)));
+  await saveReplyOptions(env, id, analysis.replies);
+  return loadConversation(env, user.id, id);
+}
+async function selectThreadReply(env, user, conversationId, messageId) {
+  const row = await env.DB.prepare(`SELECT m.id,m.option_group FROM boplo_conversation_messages m JOIN boplo_conversations c ON c.id=m.conversation_id WHERE m.id=? AND m.conversation_id=? AND c.user_id=? AND c.status='active' AND m.role='suggestion'`).bind(messageId, conversationId, user.id).first();
+  if (!row) fail(404, 'That reply option is no longer available.');
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE boplo_conversation_messages SET role='me',option_group=NULL,label=NULL,why=NULL WHERE id=?").bind(messageId),
+    env.DB.prepare("DELETE FROM boplo_conversation_messages WHERE conversation_id=? AND role='suggestion' AND option_group=? AND id<>?").bind(conversationId, row.option_group, messageId),
+    env.DB.prepare('UPDATE boplo_conversations SET updated_at=? WHERE id=?').bind(now, conversationId)
+  ]);
+  return loadConversation(env, user.id, conversationId);
+}
+async function addIncomingThreadMessage(env, user, conversationId, text) {
+  const conversation = await loadConversation(env, user.id, conversationId);
+  if (conversation.status !== 'active') fail(400, 'Archive is read-only. Start a new chat to continue.');
+  const waiting = conversation.messages.filter(message => message.role === 'suggestion');
+  if (waiting.length) fail(400, 'Choose one reply before adding their next message.');
+  const now = Date.now(), incoming = cleanIncomingMessage(text);
+  await env.DB.prepare('INSERT INTO boplo_conversation_messages(id,conversation_id,role,body,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(), conversationId, 'them', incoming, now).run();
+  const current = await loadConversation(env, user.id, conversationId);
+  const analysis = await generateChatReply(env, conversationTranscript(current.messages), conversation.vibe);
+  await saveReplyOptions(env, conversationId, analysis.replies);
+  await env.DB.prepare('UPDATE boplo_conversations SET title=?,updated_at=? WHERE id=?').bind(conversationTitle([...current.messages, { role: 'them', body: incoming }]), Date.now(), conversationId).run();
+  return { conversation: await loadConversation(env, user.id, conversationId), analysis };
+}
+async function listConversations(env, user) {
+  const plan = await threadPlan(env, user.id);
+  const rows = await env.DB.prepare("SELECT id,title,vibe,status,created_at,updated_at FROM boplo_conversations WHERE user_id=? AND status='active' ORDER BY updated_at DESC LIMIT 20").bind(user.id).all();
+  return { plan, limit: plan === 'pro' ? null : 2, conversations: rows.results || [] };
+}
 function reviewPrompt() { return `You are Boplo, an encouraging darts practice assistant. Review this short side-on darts throw video as a complete motion, paying attention only to patterns that are clearly visible across the sequence. Do not claim to diagnose injury, identify a precise technical fault, or guarantee improvement. Do not invent a view you cannot see. Return only JSON with this exact shape: {"headline":"short encouraging headline","summary":"2 sentence plain-English review","observations":[{"label":"Setup|Balance|Release|Follow-through","note":"specific visible observation","confidence":"low|medium|high"}],"next_drill":"one Boplo drill name","safety_note":"short reminder that this is practice guidance, not coaching or medical advice"}. Keep it constructive, cautious and concise.`; }
 function readOutput(response) { const text = response.output_text || ''; try { return JSON.parse(text.replace(/^```json\s*|\s*```$/g, '')); } catch { fail(502, 'The video review could not be read. Please try again.'); } }
 function base64(buffer) { const bytes = new Uint8Array(buffer), chunks = []; for (let start = 0; start < bytes.length; start += 0x8000) chunks.push(String.fromCharCode(...bytes.subarray(start, start + 0x8000))); return btoa(chunks.join('')); }
@@ -228,7 +302,30 @@ export async function onRequest(context) {
     if (path === 'chat/reply' && request.method === 'POST') {
       const input = await body(request, 20000), transcript = cleanTranscript(input.transcript), vibe = cleanVibe(input.vibe), mode = cleanReplyMode(input.mode), analysis = await generateChatReply(env, transcript, vibe, mode), id = crypto.randomUUID(), now = Date.now();
       try { await env.DB.prepare('INSERT INTO boplo_chat_reads(id,user_id,transcript,vibe,analysis_json,created_at) VALUES(?,?,?,?,?,?)').bind(id, user.id, transcript, vibe, JSON.stringify(analysis), now).run(); } catch { /* The reply remains useful while migration 0006 is being applied. */ }
-      return json({ id, vibe, mode, ...analysis }, 201);
+      let conversation = null;
+      if (input.createConversation) {
+        try { conversation = await createConversation(env, user, transcript, vibe, analysis); }
+        catch (error) { if (/no such table/i.test(error.message || '')) fail(503, 'Apply migration 0007 before starting conversation threads.'); throw error; }
+      }
+      return json({ id, vibe, mode, ...analysis, conversation }, 201);
+    }
+    if (path === 'chat/conversation' && request.method === 'GET') {
+      try { return json(await listConversations(env, user)); }
+      catch (error) { if (/no such table/i.test(error.message || '')) fail(503, 'Apply migration 0007 before opening conversation threads.'); throw error; }
+    }
+    if (path === 'chat/conversation' && request.method === 'POST') {
+      const input = await body(request, 20000), action = String(input.action || ''), conversationId = String(input.conversationId || '');
+      if (!/^[a-f0-9-]{36}$/i.test(conversationId)) fail(400, 'Choose a valid conversation.');
+      try {
+        if (action === 'select') return json({ conversation: await selectThreadReply(env, user, conversationId, String(input.messageId || '')) });
+        if (action === 'incoming') return json(await addIncomingThreadMessage(env, user, conversationId, input.text));
+        if (action === 'archive') {
+          const existing = await loadConversation(env, user.id, conversationId);
+          await env.DB.prepare("UPDATE boplo_conversations SET status='archived',updated_at=? WHERE id=? AND user_id=?").bind(Date.now(), existing.id, user.id).run();
+          return json({ ok: true });
+        }
+        fail(400, 'Choose a valid conversation action.');
+      } catch (error) { if (/no such table/i.test(error.message || '')) fail(503, 'Apply migration 0007 before using conversation threads.'); throw error; }
     }
     if (path === 'videos' && request.method === 'GET') return json((await dashboard(env, user)).videos);
     if (path === 'videos/upload' && request.method === 'POST') {
