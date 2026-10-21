@@ -1384,7 +1384,7 @@
   const gateOr = (what, fn) => (...a) => { if (isAdv()) return fn(...a); upgradeSheet(`${what} is part of Advanced.`); };
 
   function planPage() {
-    const b = B(), adv = b.plan === 'advanced' && !preview;
+    const b = B(), adv = b.plan === 'advanced' && !preview && b.enforced !== false;
     const iv = ui.billInterval, pr = b.prices[iv], other = b.prices[iv === 'yearly' ? 'monthly' : 'yearly'];
     const save = Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100);
     const statusLine = !adv ? '' : b.status === 'trialing' ? `Free trial until ${longDate(b.trialEnd)}. ${b.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money2(b.prices[b.interval || 'yearly'].amount)} ${b.interval === 'monthly' ? 'a month' : 'a year'}.`}`

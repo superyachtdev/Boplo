@@ -93,7 +93,7 @@ test('weather looks up a station by code and falls back to nearby',async()=>{
 test('free plan limits, paid features and billing state',async()=>{
  const db=new DatabaseSync(':memory:');
  for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
- const env={DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}},STRIPE_PUBLISHABLE_KEY:'pk_test_x'};
+ const env={DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}},STRIPE_PUBLISHABLE_KEY:'pk_test_x',STRIPE_SECRET_KEY:'sk_test_x'};
  db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run('fr','fr@example.com');
  const h=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fr')))].map(n=>n.toString(16).padStart(2,'0')).join('');
  db.prepare('INSERT INTO darts_sessions VALUES(?,?,?,?,?)').run('fr','fr',h,Date.now()+60000,Date.now());
@@ -102,7 +102,7 @@ test('free plan limits, paid features and billing state',async()=>{
  assert.equal((await call('flights','POST',valid)).status,402);
  assert.equal((await call('flights/import','POST',{flights:[valid]})).status,402);
  assert.equal((await call('share','POST',{})).status,402);
- const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,true);assert.equal(ws.billing.ready,false);
+ const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,true);assert.equal(ws.billing.ready,true);assert.equal(publicBilling({},null).plan,'advanced');
  // an abandoned trial checkout stays free; a paid subscription unlocks everything
  db.prepare("INSERT INTO flight_billing(user_id,customer_id,status,updated_at) VALUES('fr','cus_1','incomplete',0)").run();
  assert.equal(planOf(db.prepare("SELECT * FROM flight_billing WHERE user_id='fr'").get()),'free');

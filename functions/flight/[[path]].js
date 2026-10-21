@@ -1,4 +1,4 @@
-import { planOf, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
+import { planOf, effectivePlan, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
 const text = (value,max=200) => String(value ?? '').trim().slice(0,max);
@@ -42,7 +42,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
- const brow=await billingRow(env,user.id).catch(()=>null),plan=planOf(brow);
+ const brow=await billingRow(env,user.id).catch(()=>null),plan=effectivePlan(env,brow);
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='workspace'&&request.method==='GET'){
