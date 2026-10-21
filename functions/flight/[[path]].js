@@ -5,7 +5,7 @@ function number(value,min,max,label) {const n=Number(value);if(!Number.isFinite(
 function date(value,required=false) {const s=text(value,10);if(!s&&!required)return '';if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!Number.isFinite(Date.parse(s))||new Date(s).toISOString().slice(0,10)!==s)fail(400,'Enter a valid date.');return s;}
 export function validateProfile(input) {
  const p={};
- for(const key of ['name','country','authority','licence','airport','school','aircraft','registration','frequency','topics','nextLesson','questions','notes','checklist'])p[key]=text(input[key],['notes','questions','checklist'].includes(key)?3000:200);
+ for(const key of ['name','country','authority','licence','airport','school','aircraft','registration','frequency','topics','nextLesson','questions','notes','checklist','countryCode','regime'])p[key]=text(input[key],['notes','questions','checklist'].includes(key)?3000:200);
  p.target=date(input.target);p.lessonDate=date(input.lessonDate);p.openingMinutes=number(input.openingMinutes??0,0,600000,'opening flight time');p.goalHours=Math.round(number(input.goalHours||0,0,2000,'hours goal'));p.step=Math.round(number(input.step??0,0,5,'onboarding step'));p.complete=input.complete===true;
  if(p.complete&&(!p.name||!p.authority||!p.licence||!p.country))fail(400,'Complete your name, country, authority and training goal.');
  return p;

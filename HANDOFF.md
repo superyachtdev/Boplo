@@ -26,6 +26,13 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - Same API as before (`/flight/workspace`, `/flight/profile`, `/flight/flights[/:id]`). Profile gained `goalHours` (0–2000) and `checklist` (text lines `[x] item` / `[ ] item`); tests updated.
 - `?preview=1` loads a richer example desk (12 flights from first lesson to navigation, with tracks around EGHP).
 
+## Countries, authorities and licence minimums (2026-10-21, Claude)
+
+- `dist/flight-rules.js` holds the data: every ISO country (names from the browser), country → licensing system (UK CAA, EASA with national authority names, FAA, Transport Canada, CASA, CAA NZ, else ICAO/other), licence options per system, and each licence's published minimum hours with source link and `checked` date.
+- UK reflects the CAA changes of 1 Oct 2025: PPL(A) 40 h, NPPL(A) 32 h, LAPL(A) no longer issued (kept for existing holders).
+- Profile stores `countryCode`, `regime`, `authority` (display text), `licence`. Older profiles (free-text country, old authority values) are mapped automatically.
+- Minimums are shown as guidance with the source, never as eligibility. Re-verify figures and bump `checked` when rules change. CASA RPL (25 h) currently links to a secondary summary; swap in a CASA primary source.
+
 ## Open items
 
 - Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).

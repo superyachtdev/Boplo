@@ -170,6 +170,46 @@
   const LICENCES = ['PPL(A)', 'LAPL(A)', 'Next rating', 'Exploring flight training'];
   const FREQ = ['Still deciding', 'Weekly', 'Twice a week', 'Monthly', 'Intensive course'];
 
+  /* ---------------- countries, authorities, licences ---------------- */
+  const R = window.BOPLO_RULES;
+  const REGIME_ORDER = ['uk', 'easa', 'faa', 'tc', 'casa', 'nz', 'icao'];
+  const countryCodeOf = p => p.countryCode || R.codeForName(p.country);
+  const regimeOf = p => (p.regime && R.regimes[p.regime] ? p.regime : '') || R.legacyRegime(p.authority) || (countryCodeOf(p) ? R.regimeFor(countryCodeOf(p)) : 'uk');
+  const licenceOf = p => { const r = regimeOf(p); return R.licence(r, p.licence) ? p.licence : R.licencesFor(r)[0].id; };
+  const countrySelect = code => {
+    const opt = c => `<option value="${c.code}" ${c.code === code ? 'selected' : ''}>${esc(c.name)}</option>`;
+    const pop = R.popular.map(c => R.countries.find(x => x.code === c)).filter(Boolean);
+    return `<label class="field"><span>Country of training</span><select name="countryCode" required data-country><option value="" ${code ? '' : 'selected'} disabled>Choose a country</option><optgroup label="Most common">${pop.map(opt).join('')}</optgroup><optgroup label="All countries">${R.countries.map(opt).join('')}</optgroup></select></label>`;
+  };
+  const regimeSelect = r => `<label class="field"><span>Licensing system</span><select name="regime" data-regime>${REGIME_ORDER.map(k => `<option value="${k}" ${k === r ? 'selected' : ''}>${esc(k === 'icao' ? 'Other national authority (ICAO)' : R.regimes[k].label)}</option>`).join('')}</select></label>`;
+  const licenceSelect = (r, id) => `<label class="field"><span>Training goal</span><select name="licence" data-licence>${R.licencesFor(r).map(l => `<option value="${esc(l.id)}" ${l.id === id ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select></label>`;
+  const minNote = (r, id, cls = 'callout') => {
+    const l = R.licence(r, id); if (!l) return '';
+    const head = l.minHours ? `<b>Published minimum: ${l.minHours} hours.</b> ` : '';
+    const src = l.url ? ` <a class="link" href="${esc(l.url)}" target="_blank" rel="noopener">Source: ${esc(l.source)}</a>` : '';
+    return `<p class="${cls}" data-minnote>${head}${esc(l.summary)}${src}${l.url ? `<br><small>Checked ${esc(fmtDate(R.checked, { day: 'numeric', month: 'long', year: 'numeric' }))}. Most students fly more than the minimum. Your school and authority decide what counts.</small>` : ''}</p>`;
+  };
+  // keep country → system → licence → minimum in step as the user changes them
+  function bindTraining(form, p) {
+    const c = form.querySelector('[data-country]'), r = form.querySelector('[data-regime]'), a = form.querySelector('[name=authority]'), g = form.querySelector('[name=goalHours]');
+    let regime = r ? r.value : regimeOf(p);
+    const lic = () => form.querySelector('[data-licence]');
+    const minNow = () => (lic() ? R.licence(regime, lic().value)?.minHours : null) || null;
+    let curMin = minNow();
+    const sync = () => {
+      const n = form.querySelector('[data-minnote]'); if (n && lic()) n.outerHTML = minNote(regime, lic().value);
+      const next = minNow();
+      if (g) { if (next && (!g.value || Number(g.value) === curMin)) g.value = next; g.placeholder = next ? `e.g. ${next}` : 'e.g. 45'; }
+      curMin = next;
+    };
+    const bindLic = () => { const l = lic(); if (l) l.onchange = sync; };
+    const relicence = () => { const l = lic(); if (!l) { sync(); return; } const keep = R.licence(regime, l.value) ? l.value : R.licencesFor(regime)[0].id; l.outerHTML = licenceSelect(regime, keep); bindLic(); sync(); };
+    if (c) c.onchange = () => { regime = R.regimeFor(c.value); if (r) r.value = regime; if (a) a.value = R.authorityFor(c.value) || ''; relicence(); };
+    if (r) r.onchange = () => { regime = r.value; if (a) a.value = regime === 'icao' ? '' : regime === 'easa' ? (R.authorityFor(c?.value) || 'EASA') : R.regimes[regime].label; relicence(); };
+    bindLic();
+  }
+
+
   /* ---------------- onboarding ---------------- */
   const STEPS = ['About you', 'Your goal', 'Aircraft', 'Hours so far', 'Review'];
   function onboard() {
@@ -178,14 +218,16 @@
     const screens = [
       ['Let’s set up your flight desk.', 'A few details keep everything in the right context. You can change any of this later.',
         input('Your name', 'name', p.name || state.user?.display_name || '', 'text', 'required maxlength="100" autocomplete="name"') +
-        input('Country of training', 'country', p.country, 'text', 'required maxlength="100" autocomplete="country-name"') +
-        select('Licensing authority', 'authority', AUTHORITIES, p.authority || 'UK CAA') +
+        countrySelect(countryCodeOf(p)) +
+        regimeSelect(regimeOf(p)) +
+        input('Licensing authority', 'authority', p.authority && !R.legacyRegime(p.authority) ? p.authority : (R.authorityFor(countryCodeOf(p)) || ''), 'text', 'required maxlength="100" placeholder="e.g. your national aviation authority"', false, 'Filled in from your country. Change it if yours is different.') +
         input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="e.g. EGHP · Popham"', true) +
         input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)],
       ['What are you working toward?', 'Your target is your own planning date. Your school decides the training sequence and when you’re ready.',
-        select('Training goal', 'licence', LICENCES, p.licence || 'PPL(A)') +
+        licenceSelect(regimeOf(p), licenceOf(p)) +
         input('Target date', 'target', p.target, 'date', '', true) +
-        input('Hours goal', 'goalHours', p.goalHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'A number you choose to track against. Boplo doesn’t set requirements.') +
+        `<div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>` +
+        input('Hours goal', 'goalHours', p.goalHours || R.licence(regimeOf(p), licenceOf(p))?.minHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'Starts at the published minimum. Set it to whatever you want to track against.') +
         input('Next lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"', true) +
         input('Next lesson date', 'lessonDate', p.lessonDate, 'date', '', true)],
       ['What do you usually fly?', 'These fill in new flight records for you.',
@@ -197,7 +239,7 @@
         duration('Existing flight time', 'openingMinutes', p.openingMinutes || 0, false) +
         input('Anything to remember', 'notes', p.notes, 'textarea', '', true)],
       ['Your desk is ready.', 'Check the details below. Everything can be changed later in your profile.',
-        `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', p.licence], ['Target date', p.target ? fmtDate(p.target, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
+        `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', R.licence(regimeOf(p), p.licence)?.label || p.licence], ['Hours goal', p.goalHours ? p.goalHours + ' h' : 'Not set'], ['Target date', p.target ? fmtDate(p.target, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
          <p class="callout" style="grid-column:1/-1">Everything you enter is self-reported. Boplo organises your records and preparation; it doesn’t assess your eligibility or readiness.</p>`]
     ];
     const [title, lead, fields] = screens[s];
@@ -221,12 +263,14 @@
     $('[data-logout]').onclick = logout;
     const back = $('[data-back]'); if (back) back.onclick = () => { ui.step--; onboard(); $('h1').focus(); };
     const form = $('form');
+    bindTraining(form, p);
     form.onsubmit = async e => {
       e.preventDefault();
       const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
-      const bad = [...form.querySelectorAll('input[required]')].find(i => !i.value.trim());
+      const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim());
       if (bad) { err.textContent = 'Fill in the required fields to continue.'; bad.focus(); return; }
       const v = Object.fromEntries(new FormData(form));
+      if (v.countryCode) v.country = R.nameFor(v.countryCode);
       if (form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
       if ('goalHours' in v) v.goalHours = Number(v.goalHours || 0);
       btn.disabled = true;
@@ -349,6 +393,7 @@
               <div><dt>Target date</dt><dd>${p.target ? esc(fmtDate(p.target, { month: 'long', year: 'numeric' })) : '<a class="link" href="#profile">Set a date</a>'}</dd></div>
             </dl>
           </div>
+          ${(() => { const l = R.licence(regimeOf(p), p.licence); return l?.minHours ? `<p class="footnote">Published minimum for ${esc(l.id)}: ${l.minHours} h. <a class="link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)}</a></p>` : ''; })()}
           ${goal ? '' : '<p class="footnote">Set an hours goal in your profile to see progress here.</p>'}
         </section>
 
@@ -533,9 +578,11 @@
         <section class="tile span-7"><div class="tile-head"><h2>You and your training</h2></div>
           <div class="fields">
             ${input('Your name', 'name', p.name, 'text', 'required maxlength="100" autocomplete="name"')}
-            ${input('Country of training', 'country', p.country, 'text', 'required maxlength="100"')}
-            ${select('Licensing authority', 'authority', AUTHORITIES, p.authority)}
-            ${select('Training goal', 'licence', LICENCES, p.licence)}
+            ${countrySelect(countryCodeOf(p))}
+            ${regimeSelect(regimeOf(p))}
+            ${input('Licensing authority', 'authority', p.authority && !R.legacyRegime(p.authority) ? p.authority : (R.authorityFor(countryCodeOf(p)) || R.regimes[regimeOf(p)].label), 'text', 'required maxlength="100"')}
+            ${licenceSelect(regimeOf(p), licenceOf(p))}
+            <div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>
             ${input('Target date', 'target', p.target, 'date', '', true)}
             ${input('Hours goal', 'goalHours', p.goalHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric"', true)}
             ${input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100"', true)}
@@ -555,10 +602,11 @@
       </form>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
     const form = $('[data-profile]');
+    bindTraining(form, p);
     form.onsubmit = async e => {
       e.preventDefault(); const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
-      const bad = [...form.querySelectorAll('input[required]')].find(i => !i.value.trim()); if (bad) { err.textContent = 'Name and country are required.'; bad.focus(); return; }
-      const v = Object.fromEntries(new FormData(form)); v.openingMinutes = readDuration(form, 'openingMinutes'); v.goalHours = Number(v.goalHours || 0);
+      const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim()); if (bad) { err.textContent = 'Name, country and authority are required.'; bad.focus(); return; }
+      const v = Object.fromEntries(new FormData(form)); if (v.countryCode) v.country = R.nameFor(v.countryCode); v.openingMinutes = readDuration(form, 'openingMinutes'); v.goalHours = Number(v.goalHours || 0);
       btn.disabled = true;
       try { await saveProfile({ ...v, complete: true, step: 4 }); toast('Profile saved.'); profilePage(); } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
@@ -675,9 +723,9 @@
     state = {
       user: { display_name: 'Alex Morgan', email: '' }, mapsKey: '',
       profile: {
-        name: 'Alex Morgan', country: 'United Kingdom', authority: 'UK CAA', licence: 'PPL(A)', airport: 'EGHP · Popham', school: 'Example flying club',
+        name: 'Alex Morgan', country: 'United Kingdom', countryCode: 'GB', regime: 'uk', authority: 'UK CAA', licence: 'PPL(A)', airport: 'EGHP · Popham', school: 'Example flying club',
         aircraft: 'PA-28 Warrior', registration: 'G-BOPL', frequency: 'Weekly', topics: 'Air law, navigation',
-        target: ahead(240), goalHours: 45, openingMinutes: 0, nextLesson: 'Lesson 12 · Navigation', lessonDate: ahead(4),
+        target: ahead(240), goalHours: 40, openingMinutes: 0, nextLesson: 'Lesson 12 · Navigation', lessonDate: ahead(4),
         questions: 'When would you divert if the reservoir turn is late?\nWhich frequency do I change to first after departure?',
         notes: 'Plan the route the evening before and print the log.', checklist: '[x] Plot the route and mark the turn points\n[x] Work out diversion timings\n[ ] Read through the radio calls\n[ ] Check the aircraft tech log',
         complete: true, step: 4
