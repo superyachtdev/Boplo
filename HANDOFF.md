@@ -58,15 +58,18 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Instructor share:** Progress → "Share with your instructor". `POST /flight/share` returns a 48-hex token (only its SHA-256 is stored as `shareHash`); `DELETE` revokes. Public read-only `dist/share.html?t=` calls `GET /flight/shared` (first name, next lesson, prep, questions, syllabus, totals, last 12 flights with debriefs). `share.html?t=example` shows a sample.
 - **Radio practice (#radio):** UK/ICAO or FAA scenarios using the student's own registration spelled phonetically. Speech recognition or typing; checks each required element, shows a model call; best scores in profile `radio`. Labelled as practice.
 
-## Mini flight simulator (2026-10-21, Claude)
+## Mini flight simulator (2026-10-21, Claude; engine rebuilt the same evening)
 
 - `dist/flight-sim.js` + `dist/flight-sim.css`, lazy-loaded by the app (`openSim` in flight-app.js) from the **Simulator** page (#sim), "Fly it again" in a flight's sheet and on the overview track tile, and "Fly this route" in the nav log.
-- **Replay:** an autopilot flies the logged track (or plotted route / nav plan) at 1–32×: take-off roll, Vy-style climb, cruise, coordinated turns, flapped 3° approach, flare and landing, with a scrubber.
-- **Fly it:** the student flies with keyboard (arrows/WASD pitch and roll, R/F or +/− and 1–0 power, V flaps, P autopilot, G gates, C camera, Space pause, M sound), a gamepad, or on phones a touch stick, power slider and optional tilt steering. Scored on time inside the route gates and 250 ft of the planned height; landing rated by touchdown rate. Best score per route in localStorage.
-- **Scenery:** MapLibre GL 4.7.1 with 3D terrain from AWS Terrain Tiles (Terrarium), Sentinel-2 cloudless **2017** satellite imagery by EOX (CC BY 4.0: later years are non-commercial, keep it pinned), OpenFreeMap labels/roads/runways/buildings, sky and haze. Attribution is in the map's info button.
-- **Aircraft:** low-poly painted trainer drawn in a WebGL2 overlay sharing the map camera geometry, with sun lighting, a projected ground shadow, prop disc and nav lights.
-- **Gotchas:** in MapLibre 4 `queryTerrainElevation` is relative to the camera centre, so the sim reads `map.terrain.getElevationForLngLatZoom` for absolute height; unloaded DEM tiles read 0 m and are ignored. Route projection prefers continuity so closed circuits don't jump from end to start.
-- Labelled as a practice toy, not an approved training device. Heights are estimated (logs have no altitude). EOX tiles are free but rate-limited; heavy traffic may need EOX's commercial service or another imagery provider.
+- **Engine: CesiumJS 1.144.0** from jsDelivr (CESIUM_BASE_URL set to the CDN build). Own render loop (`useDefaultRenderLoop: false`).
+- **Scenery:** Google Photorealistic 3D Tiles when `GOOGLE_MAPS_BROWSER_KEY` (Cloudflare env) is set and the Map Tiles API is enabled on it: real 3D terrain, airports and buildings. The key reaches the app via `/flight/workspace` (signed in) or the public `GET /flight/simkey` (example desk). Restrict the key by HTTP referrer to boplo.app. Billing: 1,000 free root-tileset sessions/month, then $6 per 1,000; a session lasts up to 3 h. Google attribution/logo shows in the credits. Don't mix Google tiles with other basemaps.
+- **Fallback (no key or tiles fail):** Cesium globe with Sentinel-2 cloudless **2017** imagery by EOX (CC BY 4.0; later years are non-commercial, keep it pinned) and AWS Terrain Tiles (Terrarium PNGs fed through `CustomHeightmapTerrainProvider`). Soft at runway level; fine from ~1,000 ft.
+- **Aircraft:** low-wing trainer generated in code as a GLB (`aircraftGLB()`): lofted smooth fuselage, NACA-style aerofoil wings with dihedral, glass canopy, wheel fairings, spinning prop node + blur disc, nav lights and strobe. Casts real shadows near the ground.
+- **Ground height:** Google mode uses `scene.sampleHeight` (excluding our own primitives) with a small cache; heights are ellipsoidal, so the geoid offset is derived from the departure airfield's published elevation for the altitude readout. Globe mode reads the z14 Terrarium tile directly (`provider.sampleAt`), because `globe.getHeight` returns coarse-tile garbage until detail loads.
+- **Replay:** autopilot flies the logged track at 1–32×: take-off roll, climb at ≥70 kt, cruise, coordinated turns, flapped 3° approach aimed 600 m before the route end, flare, landing. Scrubber.
+- **Fly it:** keyboard (arrows/WASD, R/F or +/− and 1–0 power, V flaps, P autopilot, G gates, C camera, Space pause, M sound), gamepad, or touch stick, power slider and tilt on phones. Scored on time inside the gates and within 250 ft of the planned height; landing rated by touchdown rate.
+- Debug handle: set localStorage `boplo-sim-debug` to `true` to get `window.__boploSim`.
+- Labelled as a practice toy, not an approved training device. Heights are estimated (logs have no altitude).
 
 ## Open items
 

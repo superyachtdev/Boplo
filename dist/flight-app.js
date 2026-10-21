@@ -1269,7 +1269,7 @@
 
   /* ================= simulator ================= */
   ui.sim = ui.sim || { wind: 'calm', start: 'ground' };
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=2'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=3'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
     const p = state.profile, isPlan = !!src.inp;
@@ -1288,7 +1288,10 @@
       }
       const title = isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
       const subtitle = isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
+      let googleKey = state.mapsKey || '';
+      if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
       Sim.open({
+        googleKey,
         id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind,
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,

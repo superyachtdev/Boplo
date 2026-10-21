@@ -34,6 +34,7 @@ export async function onRequest({request,env}) {
  if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
+ if(path==='simkey'&&request.method==='GET')return json({key:env.GOOGLE_MAPS_BROWSER_KEY||''});
  const token=(request.headers.get('Cookie')||'').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1];
  if(!token)fail(401,'Sign in to open your flight desk.');
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
