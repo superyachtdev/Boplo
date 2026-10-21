@@ -126,6 +126,48 @@ window.BOPLO_RULES = (() => {
   const countries = codes.map(c => ({ code: c, name: names[c] || c })).sort((a, b) => a.name.localeCompare(b.name, 'en'));
   const popular = ['GB', 'US', 'CA', 'AU', 'NZ', 'IE', 'DE', 'FR', 'ES', 'IT', 'NL', 'CH'];
 
+
+  // ---------- training syllabi (structure only; your school's syllabus is the authority) ----------
+  const ex = (id, name, stage) => ({ id, name, stage });
+  const easaPPL = {
+    id: 'easa-ppl-a', title: 'PPL(A) flight exercises', source: 'Based on the UK/EASA PPL(A) flight instruction syllabus (AMC to FCL.210.A)',
+    stages: ['Before solo', 'Circuits and first solo', 'Advanced handling', 'Navigation', 'Test preparation'],
+    items: [
+      ex('1', 'Familiarisation with the aeroplane', 0), ex('1E', 'Emergency drills', 0), ex('2', 'Preparation for and action after flight', 0), ex('3', 'Air experience', 0),
+      ex('4', 'Effects of controls', 0), ex('5', 'Taxiing', 0), ex('6', 'Straight and level', 0), ex('7', 'Climbing', 0), ex('8', 'Descending', 0), ex('9', 'Turning', 0),
+      ex('10A', 'Slow flight', 0), ex('10B', 'Stalling', 0), ex('11', 'Spin avoidance', 0),
+      ex('12', 'Take-off and climb to downwind', 1), ex('13', 'Circuit, approach and landing', 1), ex('12E/13E', 'Circuit emergencies', 1), ex('14', 'First solo', 1),
+      ex('15', 'Advanced turning', 2), ex('16', 'Forced landing without power', 2), ex('17', 'Precautionary landing', 2),
+      ex('18A', 'Navigation: pilot navigation', 3), ex('18B', 'Navigation at lower levels and in reduced visibility', 3), ex('18C', 'Radio navigation', 3), ex('QXC', 'Solo qualifying cross-country', 3),
+      ex('19', 'Basic instrument flight', 4), ex('RT', 'Radiotelephony licence or rating', 4), ex('EX', 'Theory exams passed', 4), ex('ST', 'Skill test', 4)
+    ]
+  };
+  const faaPPL = {
+    id: 'faa-ppl-asel', title: 'Private Pilot ACS: areas of operation', source: 'Based on the FAA Private Pilot – Airplane Airman Certification Standards (single-engine land). Check the current ACS edition.',
+    stages: ['Preflight', 'Airport and traffic pattern', 'Takeoffs and landings', 'Maneuvers', 'Navigation and instruments', 'Emergencies, night and checkride'],
+    items: [
+      ex('I.A', 'Pilot qualifications', 0), ex('I.B', 'Airworthiness requirements', 0), ex('I.C', 'Weather information', 0), ex('I.D', 'Cross-country flight planning', 0), ex('I.E', 'National Airspace System', 0), ex('I.F', 'Performance and limitations', 0), ex('I.G', 'Operation of systems', 0), ex('I.H', 'Human factors', 0),
+      ex('II.A', 'Preflight assessment', 0), ex('II.B', 'Flight deck management', 0), ex('II.C', 'Engine starting', 0), ex('II.D', 'Taxiing', 0), ex('II.G', 'Before takeoff check', 0),
+      ex('III.A', 'Communications, light signals and runway lighting', 1), ex('III.B', 'Traffic patterns', 1),
+      ex('IV.A', 'Normal takeoff and climb', 2), ex('IV.B', 'Normal approach and landing', 2), ex('IV.C', 'Soft-field takeoff and climb', 2), ex('IV.D', 'Soft-field approach and landing', 2), ex('IV.E', 'Short-field takeoff and maximum performance climb', 2), ex('IV.F', 'Short-field approach and landing', 2), ex('IV.L', 'Forward slip to a landing', 2), ex('IV.M', 'Go-around / rejected landing', 2),
+      ex('V.A', 'Steep turns', 3), ex('V.B', 'Ground reference maneuvers', 3), ex('VII.A', 'Maneuvering during slow flight', 3), ex('VII.B', 'Power-off stalls', 3), ex('VII.C', 'Power-on stalls', 3), ex('VII.D', 'Spin awareness', 3),
+      ex('VI.A', 'Pilotage and dead reckoning', 4), ex('VI.B', 'Navigation systems and radar services', 4), ex('VI.C', 'Diversion', 4), ex('VI.D', 'Lost procedures', 4), ex('VIII', 'Basic instrument maneuvers', 4),
+      ex('IX.A', 'Emergency descent', 5), ex('IX.B', 'Emergency approach and landing (simulated)', 5), ex('IX.C', 'Systems and equipment malfunctions', 5), ex('IX.D', 'Emergency equipment and survival gear', 5), ex('NIGHT', 'Night training requirements', 5), ex('SOLO', 'Solo and solo cross-country', 5), ex('KT', 'Knowledge test passed', 5), ex('CR', 'Practical test (checkride)', 5)
+    ]
+  };
+  const generalPPL = {
+    id: 'general-ppl', title: 'General PPL training stages', source: 'A general outline of ICAO-style private pilot training. Your school’s syllabus is the one that counts.',
+    stages: ['Basic handling', 'Circuits and first solo', 'Advanced handling', 'Navigation', 'Test preparation'],
+    items: [
+      ex('G1', 'Effects of controls and straight and level', 0), ex('G2', 'Climbing, descending and turning', 0), ex('G3', 'Slow flight and stalling', 0),
+      ex('G4', 'Circuits, approaches and landings', 1), ex('G5', 'Circuit emergencies', 1), ex('G6', 'First solo', 1),
+      ex('G7', 'Steep turns', 2), ex('G8', 'Forced and precautionary landings', 2),
+      ex('G9', 'Dual navigation', 3), ex('G10', 'Solo navigation', 3), ex('G11', 'Diversions and lost procedures', 3),
+      ex('G12', 'Basic instrument flying', 4), ex('G13', 'Theory exams passed', 4), ex('G14', 'Flight test', 4)
+    ]
+  };
+  const syllabusFor = (r) => r === 'uk' || r === 'easa' ? easaPPL : r === 'faa' ? faaPPL : generalPPL;
+
   // Map values saved by earlier versions of the app
   const legacyRegime = a => ({ 'UK CAA': 'uk', 'EASA member-state authority': 'easa', 'FAA': 'faa', 'Other / deciding': 'icao' })[a];
   const codeForName = n => { if (!n) return ''; const t = String(n).trim().toLowerCase(); const hit = countries.find(c => c.name.toLowerCase() === t || c.code.toLowerCase() === t); if (hit) return hit.code; if (/^(uk|united kingdom|england|scotland|wales|great britain)$/.test(t)) return 'GB'; if (/^(usa|united states|united states of america|us)$/.test(t)) return 'US'; return ''; };
@@ -133,5 +175,5 @@ window.BOPLO_RULES = (() => {
   const licencesFor = r => [...(regimes[r] || regimes.icao).licences, ...common];
   const licence = (r, id) => licencesFor(r).find(l => l.id === id) || null;
 
-  return { checked, regimes, countries, popular, regimeFor, authorityFor, legacyRegime, codeForName, licencesFor, licence, nameFor: c => names[c] || c };
+  return { checked, syllabusFor, regimes, countries, popular, regimeFor, authorityFor, legacyRegime, codeForName, licencesFor, licence, nameFor: c => names[c] || c };
 })();

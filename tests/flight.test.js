@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-import {onRequest,validateFlight,validateProfile} from '../functions/flight/[[path]].js';
+import {onRequest,validateFlight,validateProfile,weather,debrief} from '../functions/flight/[[path]].js';
 const valid={date:'2026-01-12',departure:'EGHP',arrival:'EGHP',minutes:65,role:'dual',landings:4,points:[]};
 test('flight records reject invalid times, dates, roles and coordinates',()=>{
  for(const changes of [{minutes:-5},{minutes:1.5},{date:'2026-02-30'},{date:'2099-01-01'},{role:'approved'},{points:[{lat:95,lng:0}]},{landings:1.5}])assert.throws(()=>validateFlight({...valid,...changes}));
@@ -31,4 +31,28 @@ test('workspace persists profile and flights and prevents cross-account access',
  assert.equal((await (await call('alice','workspace')).json()).flights[0].minutes,80);
  assert.equal((await call('alice','flights/'+flight.id,'DELETE')).status,200);
  db.close();
+});
+
+test('profile JSON fields and flight cost are validated',()=>{
+ const p=validateProfile({syllabus:'{"uk":{"ex4":"done"}}',study:{airlaw:{seen:3}},currency:'GBP',rateAircraft:'210'});
+ assert.equal(p.currency,'GBP');assert.equal(p.rateAircraft,210);assert.equal(JSON.parse(p.study).airlaw.seen,3);
+ assert.throws(()=>validateProfile({syllabus:'[1,2]'}));assert.throws(()=>validateProfile({syllabus:'x'.repeat(13000)}));
+ assert.equal(validateProfile({currency:'pounds'}).currency,'');
+ assert.equal(validateFlight({...valid,cost:'245.5'}).cost,245.5);assert.equal(validateFlight(valid).cost,null);
+ assert.throws(()=>validateFlight({...valid,cost:-3}));
+});
+test('weather returns nearest stations with TAFs and survives empty areas',async()=>{
+ const calls=[];const fetcher=async u=>{calls.push(u);if(u.includes('/metar'))return new Response(JSON.stringify([{icaoId:'EGHI',name:'Southampton',lat:50.95,lon:-1.36,rawOb:'EGHI 211650Z 24012KT 9999 FEW030 14/08 Q1012',temp:14,dewp:8,wdir:240,wspd:12,visib:'6+',altim:1012,clouds:[{cover:'FEW',base:3000}],fltCat:'VFR'},{icaoId:'EGHI',lat:50.95,lon:-1.36}]),{status:200});return new Response(JSON.stringify([{icaoId:'EGHI',rawTAF:'TAF EGHI 211700Z 2118/2218 24010KT 9999 SCT035'}]),{status:200});};
+ const out=await weather(new URL('https://boplo.app/flight/weather?lat=51.19&lng=-1.23'),{},fetcher);
+ assert.equal(out.stations.length,1);assert.equal(out.stations[0].id,'EGHI');assert.match(out.stations[0].taf,/^TAF EGHI/);assert.ok(out.stations[0].dist>10&&out.stations[0].dist<20);
+ const empty=await weather(new URL('https://boplo.app/flight/weather?lat=0&lng=-150'),{},async()=>new Response(null,{status:204}));
+ assert.equal(empty.stations.length,0);
+ await assert.rejects(()=>weather(new URL('https://boplo.app/flight/weather?lat=99&lng=0'),{},fetcher));
+});
+test('debrief only returns structured lists and needs a key',async()=>{
+ await assert.rejects(()=>debrief({},{transcript:'x'.repeat(40)}),/not connected/);
+ await assert.rejects(()=>debrief({GEMINI_API_KEY:'k'},{transcript:'short'}),/more/);
+ const fetcher=async()=>new Response(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify({summary:'Circuits went well.',wentWell:['Radio calls'],workOn:['Flare height'],nextPrep:['Review glide approach'],questions:['When is solo?'],extra:'ignored'})}]}}]}),{status:200});
+ const out=await debrief({GEMINI_API_KEY:'k'},{transcript:'Today we did circuits and my radio calls were good but flare was high.'},fetcher);
+ assert.deepEqual(Object.keys(out).sort(),['nextPrep','questions','summary','wentWell','workOn']);assert.equal(out.workOn[0],'Flare height');
 });

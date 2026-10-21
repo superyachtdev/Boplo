@@ -40,8 +40,18 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - Flight form: From/To autocomplete real codes; if both are known airfields and no route is plotted, a start-to-end line is saved automatically. New routeKind `route` = plotted.
 - Falls back to the SVG track view if the map library or tiles can't load.
 
+## Training utility features (2026-10-21, Claude)
+
+- **Cost and pace:** profile `currency`, `rateAircraft`, `rateInstructor`; flight `cost` (optional, otherwise estimated from rates). Overview "Your pace" forecasts finish date and total spend from the last 8 weeks.
+- **Progress:** syllabus checklists in `flight-rules.js` (`syllabusFor`): UK/EASA PPL(A) exercises 1–19 plus QXC, RT, exams and skill test; FAA Private Pilot ACS areas/tasks; a general ICAO outline elsewhere. State in profile `syllabus` (JSON). Milestones (first flight, first solo, first cross-country, hour and landing marks, test passed) with 1080×1920 share cards drawn on canvas.
+- **Study:** `dist/flight-questions.js`, 67 original questions across 9 subjects. STATUS: DRAFT, pending review by a qualified instructor (set `reviewed`). Practice by subject (weakest first), 16-question mock exam with pass mark (FAA 70%, others 75%). State in profile `study` (JSON).
+- **Weather:** `GET /flight/weather?lat&lng` proxies aviationweather.gov (NOAA) METAR/TAF for the nearest stations. App decodes every group in plain English and works out head/crosswind on your home runways. Labelled as a learning tool, not a briefing.
+- **Voice debrief:** browser speech recognition fills the debrief notes; `POST /flight/debrief` uses Gemini (`GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`) to tidy only what the student said into went well / work on / prepare / questions, and can add prep items and questions to the next lesson.
+- **Public cost planner:** `dist/plan.html` (no sign-in). Saves the plan to localStorage; signing up pre-fills setup from it. Linked from the landing nav, pricing and footer.
+
 ## Open items
 
+- Question bank needs instructor review before marketing it as exam prep.
 - Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).
 - No privacy or terms pages exist yet; the footer Legal column was removed until they do.
 - Unused legacy CSS/JS in `dist/` could be cleaned up.

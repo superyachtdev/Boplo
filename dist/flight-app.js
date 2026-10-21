@@ -55,12 +55,16 @@
   const PAGES = [
     ['overview', 'Overview', 'overview'],
     ['logbook', 'Logbook', 'logbook'],
+    ['progress', 'Progress', 'progress'],
+    ['study', 'Study', 'study'],
+    ['prepare', 'Prepare', 'prepare'],
+    ['weather', 'Weather', 'weather'],
     ['map', 'Map', 'map'],
-    ['analytics', 'Analytics', 'analytics'],
-    ['prepare', 'Prepare', 'prepare']
+    ['analytics', 'Analytics', 'analytics']
   ];
+  const TABS = ['overview', 'logbook', 'study', 'progress', 'more'];
   const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare' };
-  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile'].includes(k) ? k : 'overview'; };
+  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more'].includes(k) ? k : 'overview'; };
 
   /* checklist stored as text lines: "[x] item" / "[ ] item" */
   const parseChecks = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^\[( |x)\]\s?(.*)$/i); return m ? { done: m[1].toLowerCase() === 'x', text: m[2] } : { done: false, text: l }; }).filter(c => c.text);
@@ -237,7 +241,9 @@
         input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200" placeholder="e.g. PA-28 Warrior"', true) +
         input('Registration', 'registration', p.registration, 'text', 'maxlength="200" placeholder="e.g. G-ABCD"', true) +
         select('How often do you fly?', 'frequency', FREQ, p.frequency || 'Still deciding') +
-        input('Theory to revisit', 'topics', p.topics, 'text', 'maxlength="200" placeholder="e.g. Air law, meteorology"', true)],
+        input('Theory to revisit', 'topics', p.topics, 'text', 'maxlength="200" placeholder="e.g. Air law, meteorology"', true) +
+        input('Aircraft cost per hour', 'rateAircraft', p.rateAircraft || '', 'number', 'min="0" max="5000" step="0.01" inputmode="decimal"', true, 'From your school’s price list. Used to track spending.') +
+        input('Instructor cost per hour', 'rateInstructor', p.rateInstructor || '', 'number', 'min="0" max="2000" step="0.01" inputmode="decimal"', true, 'Leave blank if it’s included in the aircraft rate.')],
       ['Bring the hours you already have.', 'Add the total from your logbook, or leave it at zero and log flights as you go. These hours are kept separate from your dated flights.',
         duration('Existing flight time', 'openingMinutes', p.openingMinutes || 0, false) +
         input('Anything to remember', 'notes', p.notes, 'textarea', '', true)],
@@ -276,6 +282,8 @@
       if (v.countryCode) v.country = R.nameFor(v.countryCode);
       if (form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
       if ('goalHours' in v) v.goalHours = Number(v.goalHours || 0);
+      ['rateAircraft', 'rateInstructor'].forEach(k => { if (k in v) v[k] = Number(v[k] || 0); });
+      if (v.countryCode && !p.currency) v.currency = CURRENCY_BY[v.countryCode] || (EURO.includes(v.countryCode) ? 'EUR' : 'USD');
       btn.disabled = true;
       try {
         await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, 4), complete: s === 4 });
@@ -343,7 +351,7 @@
         <header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>
         ${body}
       </div></main>
-      <nav class="tabbar" aria-label="Flight desk">${PAGES.map(([id, label, icon]) => `<a href="#${id}" ${page === id ? 'aria-current="page"' : ''}>${ico(icon)}${label}</a>`).join('')}</nav>
+      <nav class="tabbar" aria-label="Flight desk">${TABS.map(id => { const pg = PAGES.find(x => x[0] === id) || ['more', 'More', 'more']; const on = page === id || (id === 'more' && !TABS.includes(page)); return `<a href="#${id}" ${on ? 'aria-current="page"' : ''}>${ico(pg[2])}${pg[1]}</a>`; }).join('')}</nav>
     </div>`;
     $$('[data-add]').forEach(b => b.onclick = () => flightSheet());
     $$('[data-logout]').forEach(b => b.onclick = logout);
@@ -405,6 +413,22 @@
           <div class="stat"><span>Last 30 days</span><b>${hrs(sum(last30, f => f.minutes))}<small>h</small></b><em>${last30.length} flight${last30.length === 1 ? '' : 's'}</em></div>
           <div class="stat"><span>Landings</span><b>${sum(state.flights, f => f.landings)}</b><em>Across all flights</em></div>
           <div class="stat"><span>Solo and PIC</span><b>${hrs(sum(state.flights.filter(f => f.role !== 'dual'), f => f.minutes))}<small>h</small></b><em>${hrs(sum(state.flights.filter(f => f.role === 'dual'), f => f.minutes))} h dual</em></div>
+        </section>
+
+        ${(() => { const pc = pace(); const hasRates = Number(p.rateAircraft || 0) > 0 || pc.costedCount; return `<section class="tile span-7 pace" aria-labelledby="pace-h">
+          <div class="tile-head"><h2 id="pace-h">Your pace</h2><a class="link" href="#profile">${hasRates ? 'Edit rates' : 'Add your rates'}</a></div>
+          <div class="pace-grid">
+            <div><span>Flying lately</span><b>${pc.perWeek ? pc.perWeek.toFixed(1) : '0'}<small>h a week</small></b><em>Average over the last 8 weeks</em></div>
+            <div><span>Finish around</span><b>${pc.eta && pc.goal ? esc(pc.eta.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : '—'}</b><em>${!pc.goal ? 'Set an hours goal' : !pc.perWeek ? 'Log recent flights to forecast' : pc.remaining ? `${pc.remaining.toFixed(1)} h to go at this pace` : 'Hours goal reached'}</em></div>
+            <div><span>Spent so far</span><b>${hasRates ? esc(money(pc.spent)) : '—'}</b><em>${hasRates ? `About ${esc(money(pc.perHour))} per hour` : 'Add your aircraft and instructor rates'}</em></div>
+            <div><span>Projected total</span><b>${hasRates && pc.goal ? esc(money(pc.projected)) : '—'}</b><em>${hasRates && pc.goal ? `If you finish at ${pc.goal} h` : 'Needs rates and an hours goal'}</em></div>
+          </div>
+          <p class="footnote">An estimate from your own records. Most students need more than the minimum hours, and costs vary between schools.</p>
+        </section>`; })()}
+        <section class="tile span-5" aria-labelledby="studyt-h">
+          ${(() => { const st = studyOf(p), last = (st._mocks || []).slice(-1)[0], pm = QB ? QB.passMark(regimeOf(p)) : 75, seen = QB ? QB.questions.filter(q => st[q.id]).length : 0; return `<div class="tile-head"><h2 id="studyt-h">Theory</h2><a class="link" href="#study">Study</a></div>
+          ${last ? `<div class="study-last"><b class="${last.s >= pm ? 'pass' : 'fail'}">${last.s}%</b><span>Last mock exam · pass mark ${pm}%</span></div>` : `<p class="hint" style="margin-bottom:14px">${seen ? `${seen} questions practised so far.` : 'Practise theory between lessons in short sessions.'}</p>`}
+          <a class="btn btn-ink btn-has-spark" href="#study">${seen ? 'Keep practising' : 'Start practising'} ${spark}</a>`; })()}
         </section>
 
         <section class="tile span-7" aria-labelledby="recent-h">
@@ -618,6 +642,14 @@
             ${duration('Hours before Boplo', 'openingMinutes', p.openingMinutes || 0, false, 'Kept separate from dated flights.')}
           </div>
         </section>
+        <section class="tile span-12"><div class="tile-head"><h2>Costs</h2></div>
+          <div class="fields" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+            ${select('Currency', 'currency', CURRENCIES.map(c => [c, c]), currencyOf(p))}
+            ${input('Aircraft, per hour', 'rateAircraft', p.rateAircraft || '', 'number', 'min="0" max="5000" step="0.01" inputmode="decimal"', true)}
+            ${input('Instructor, per hour', 'rateInstructor', p.rateInstructor || '', 'number', 'min="0" max="2000" step="0.01" inputmode="decimal"', true, 'Added to dual flights only. Leave at 0 if your aircraft rate includes the instructor.')}
+          </div>
+          <p class="footnote">Used to estimate each flight’s cost when you don’t enter it, and to forecast your total on the overview.</p>
+        </section>
         <div class="span-12 actions"><p class="form-error" role="alert"></p><span class="hint">${state.user?.email ? `Signed in as ${esc(state.user.email)}` : ''}</span><div class="right"><button type="button" class="btn btn-line" data-logout>${ico('out')}${preview ? 'Leave example' : 'Sign out'}</button><button class="btn btn-blue btn-has-spark" type="submit">Save profile ${spark}</button></div></div>
       </form>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
@@ -626,9 +658,304 @@
     form.onsubmit = async e => {
       e.preventDefault(); const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
       const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim()); if (bad) { err.textContent = 'Name, country and authority are required.'; bad.focus(); return; }
-      const v = Object.fromEntries(new FormData(form)); if (v.countryCode) v.country = R.nameFor(v.countryCode); v.openingMinutes = readDuration(form, 'openingMinutes'); v.goalHours = Number(v.goalHours || 0);
+      const v = Object.fromEntries(new FormData(form)); if (v.countryCode) v.country = R.nameFor(v.countryCode); v.openingMinutes = readDuration(form, 'openingMinutes'); v.goalHours = Number(v.goalHours || 0); v.rateAircraft = Number(v.rateAircraft || 0); v.rateInstructor = Number(v.rateInstructor || 0);
       btn.disabled = true;
       try { await saveProfile({ ...v, complete: true, step: 4 }); toast('Profile saved.'); profilePage(); } catch (x) { err.textContent = x.message; btn.disabled = false; }
+    };
+  }
+
+  /* ================= money and pace ================= */
+  const CURRENCY_BY = { GB: 'GBP', US: 'USD', CA: 'CAD', AU: 'AUD', NZ: 'NZD', CH: 'CHF', NO: 'NOK', SE: 'SEK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', HU: 'HUF', IS: 'ISK', ZA: 'ZAR', IN: 'INR', JP: 'JPY', BR: 'BRL', MX: 'MXN' };
+  const EURO = 'AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK'.split(' ');
+  const CURRENCIES = ['GBP', 'EUR', 'USD', 'CAD', 'AUD', 'NZD', 'CHF', 'NOK', 'SEK', 'DKK', 'PLN', 'CZK', 'ZAR', 'INR', 'JPY', 'BRL', 'MXN'];
+  const currencyOf = p => p.currency || CURRENCY_BY[countryCodeOf(p)] || (EURO.includes(countryCodeOf(p)) ? 'EUR' : 'USD');
+  const money = (n, p = state.profile, digits = 0) => { try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currencyOf(p), maximumFractionDigits: digits }).format(n || 0); } catch { return `${Math.round(n || 0)}`; } };
+  const estCost = (f, p = state.profile) => { const r = Number(p.rateAircraft || 0) + (f.role === 'dual' ? Number(p.rateInstructor || 0) : 0); return r ? f.minutes / 60 * r : null; };
+  const costOf = f => f.cost != null && f.cost !== '' ? Number(f.cost) : estCost(f);
+  function pace() {
+    const p = state.profile, goal = Number(p.goalHours || 0), total = totalMin() / 60;
+    const recent = inLast(56), perWeek = sum(recent, f => f.minutes) / 60 / 8;
+    const costed = state.flights.map(f => [f, costOf(f)]).filter(([, c]) => c != null);
+    const spent = sum(costed, ([, c]) => c);
+    const perHour = costed.length ? spent / (sum(costed, ([f]) => f.minutes) / 60) : (Number(p.rateAircraft || 0) + Number(p.rateInstructor || 0) * 0.6) || 0;
+    const remaining = Math.max(0, goal - total);
+    const weeks = perWeek > 0 ? remaining / perWeek : null;
+    const eta = weeks != null ? new Date(Date.now() + weeks * 7 * 86400000) : null;
+    return { goal, total, perWeek, spent, perHour, remaining, weeks, eta, projected: spent + remaining * perHour, costedCount: costed.length };
+  }
+
+  /* ================= syllabus progress ================= */
+  const syllabusOf = p => R.syllabusFor(regimeOf(p));
+  const readJSON = (s, d = {}) => { try { const v = JSON.parse(s || ''); return v && typeof v === 'object' ? v : d; } catch { return d; } };
+  const syllabusState = p => { const all = readJSON(p.syllabus); const s = syllabusOf(p); return { all, s, st: all[s.id] || {} }; };
+  const STATUS = { '': 'Not started', p: 'In progress', d: 'Done' };
+
+  function progressPage() {
+    const p = state.profile, { all, s, st } = syllabusState(p);
+    const doneN = s.items.filter(i => st[i.id] === 'd').length, pct = Math.round(doneN / s.items.length * 100);
+    const ms = milestones();
+    shell('progress', { title: 'Progress', sub: 'Track the syllabus you’ve covered, and share the moments worth celebrating.' },
+      `<div class="grid">
+        <section class="tile span-8" aria-labelledby="syl-h">
+          <div class="tile-head"><h2 id="syl-h">${esc(s.title)}</h2><span class="chip">${doneN} of ${s.items.length} done</span></div>
+          <div class="syl-bar" role="img" aria-label="${pct}% of the syllabus done"><i style="width:${pct}%"></i></div>
+          <p class="footnote" style="margin:10px 0 18px">${esc(s.source)}. Tap an item to move it between not started, in progress and done.</p>
+          ${s.stages.map((stage, si) => { const items = s.items.filter(i => i.stage === si); const d = items.filter(i => st[i.id] === 'd').length; return `<div class="syl-stage"><div class="syl-stage-head"><h3>${esc(stage)}</h3><span>${d}/${items.length}</span></div><div class="syl-items">${items.map(i => `<button type="button" class="syl-item s-${st[i.id] || 'n'}" data-syl="${esc(i.id)}" aria-label="${esc(i.name)}: ${STATUS[st[i.id] || '']}"><span class="syl-dot" aria-hidden="true"></span><span class="syl-id">${esc(i.id)}</span><span class="syl-name">${esc(i.name)}</span><span class="syl-state">${STATUS[st[i.id] || '']}</span></button>`).join('')}</div></div>`; }).join('')}
+          <p class="form-error" role="alert"></p>
+        </section>
+        <section class="tile dark span-4 ms-tile" aria-labelledby="ms-h">${contours('b')}
+          <div class="tile-head"><h2 id="ms-h">Milestones</h2></div>
+          ${ms.length ? `<ol class="ms-list">${ms.map((m, i) => `<li><span class="ms-ic" aria-hidden="true"><svg><use href="#spark"/></svg></span><span class="ms-t"><b>${esc(m.title)}</b><small>${esc(m.date ? fmtDate(m.date, { day: 'numeric', month: 'short', year: 'numeric' }) : '')}${m.detail ? ' · ' + esc(m.detail) : ''}</small></span><button type="button" class="btn btn-light btn-sm" data-share="${i}">Share</button></li>`).join('')}</ol>` : `<div class="empty"><h3>Your first milestone is close.</h3><p>Log your first flight and Boplo starts marking the moments: first solo, every 10 hours, your first cross-country.</p></div>`}
+        </section>
+      </div>`);
+    $$('[data-syl]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.syl, next = { '': 'p', p: 'd', d: '' }[st[id] || ''];
+      if (next) st[id] = next; else delete st[id];
+      all[s.id] = st;
+      b.className = `syl-item s-${next || 'n'}`; b.querySelector('.syl-state').textContent = STATUS[next || ''];
+      try { await saveProfile({ syllabus: JSON.stringify(all) }); } catch (x) { $('.form-error').textContent = x.message; }
+    });
+    $$('[data-share]').forEach(b => b.onclick = () => shareCard(ms[Number(b.dataset.share)]));
+  }
+
+  /* ================= milestones and share cards ================= */
+  function milestones() {
+    const p = state.profile, fl = [...state.flights].sort((a, b) => a.date.localeCompare(b.date)), out = [];
+    if (!fl.length) return out;
+    out.push({ title: 'First flight logged', date: fl[0].date, flight: fl[0], big: hm(fl[0].minutes), unit: 'in the air' });
+    const solo = fl.find(f => f.role === 'solo'); if (solo) out.push({ title: 'First solo', date: solo.date, flight: solo, big: 'SOLO', unit: upper(solo.departure) || 'First solo' });
+    const xc = fl.find(f => (f.points?.length > 1 && f.points.some(pt => BoploMap?.nm ? BoploMap.nm(f.points[0], pt) > 20 : false)) || (upper(f.departure) && upper(f.arrival) && upper(f.departure) !== upper(f.arrival)));
+    if (xc) out.push({ title: 'First cross-country', date: xc.date, flight: xc, big: `${upper(xc.departure)}→${upper(xc.arrival)}`, unit: 'cross-country' });
+    let cum = Number(p.openingMinutes || 0) / 60; const marks = [5, 10, 20, 30, 40, 50, 75, 100, 150, 200];
+    for (const f of fl) { const before = cum; cum += f.minutes / 60; marks.filter(m => before < m && cum >= m).forEach(m => out.push({ title: `${m} hours`, date: f.date, flight: f, big: String(m), unit: 'hours flown', detail: p.licence ? `toward ${p.licence}` : '' })); }
+    let ld = 0; for (const f of fl) { const b = ld; ld += f.landings; [50, 100, 250].filter(m => b < m && ld >= m).forEach(m => out.push({ title: `${m} landings`, date: f.date, flight: f, big: String(m), unit: 'landings' })); }
+    const { s, st } = syllabusState(p);
+    const test = s.items.find(i => /^(ST|CR|G14)$/.test(i.id)); if (test && st[test.id] === 'd') out.push({ title: 'Licence test passed', date: null, flight: null, big: p.licence || 'PILOT', unit: 'licence test passed' });
+    return out.sort((a, b) => String(b.date || '9').localeCompare(String(a.date || '9')));
+  }
+
+  let logoImg = null;
+  const getLogo = () => logoImg || (logoImg = new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = '/assets/boplo-wordmark.webp'; }));
+  async function drawCard(m) {
+    const W = 1080, H = 1920, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    const bg = g.createRadialGradient(W * .75, 0, 50, W * .6, H * .3, H); bg.addColorStop(0, '#0B1E4E'); bg.addColorStop(.5, '#040B22'); bg.addColorStop(1, '#020611'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    // contours from the same field as the app
+    const svg = contourSVG(1080, 1920, 1.9), paths = [...svg.matchAll(/d="([^"]+)"/g)].map(x => x[1]);
+    g.lineWidth = 1.6; paths.forEach((d, i) => { g.strokeStyle = i ? 'rgba(158,216,255,.22)' : 'rgba(47,123,255,.32)'; try { g.stroke(new Path2D(d)); } catch { } });
+    const font = (w, s, it = true) => `${it ? 'italic ' : ''}${w} ${s}px Archivo, system-ui, sans-serif`;
+    // track
+    const f = m.flight;
+    if (f?.points?.length > 1) {
+      const P = project([f.points], 900, 760, 40);
+      g.save(); g.translate(90, 640); g.lineJoin = 'round'; g.lineCap = 'round';
+      const path = () => { g.beginPath(); f.points.forEach((pt, i) => { const [x, y] = P(pt); i ? g.lineTo(x, y) : g.moveTo(x, y); }); };
+      g.shadowColor = 'rgba(10,98,255,.9)'; g.shadowBlur = 40; g.strokeStyle = 'rgba(10,98,255,.8)'; g.lineWidth = 18; path(); g.stroke();
+      g.shadowBlur = 12; g.shadowColor = '#9ED8FF'; g.strokeStyle = '#E8F6FF'; g.lineWidth = 6; path(); g.stroke();
+      const [sx, sy] = P(f.points[0]); g.shadowBlur = 0; g.fillStyle = '#fff'; g.beginPath(); g.arc(sx, sy, 12, 0, 7); g.fill();
+      g.restore();
+    }
+    g.fillStyle = 'rgba(158,216,255,.9)'; g.font = font(600, 44, false); g.fillText(m.title, 90, 260);
+    g.fillStyle = '#fff'; let size = 260; g.font = font(700, size); while (g.measureText(m.big).width > 900 && size > 90) { size -= 10; g.font = font(700, size); } g.fillText(m.big, 82, 260 + size);
+    g.fillStyle = 'rgba(222,233,255,.8)'; g.font = font(500, 52, false); g.fillText(m.unit, 90, 330 + size);
+    const p = state.profile, meta = [m.date ? fmtDate(m.date, { day: 'numeric', month: 'long', year: 'numeric' }) : '', f ? `${upper(f.departure)} → ${upper(f.arrival)}` : '', f?.aircraft || ''].filter(Boolean).join('  ·  ');
+    g.fillStyle = 'rgba(143,160,196,1)'; let ms = 38; g.font = font(500, ms, false); while (g.measureText(meta).width > 900 && ms > 24) { ms -= 2; g.font = font(500, ms, false); } g.fillText(meta, 90, 1520);
+    g.fillStyle = 'rgba(158,216,255,.14)'; g.fillRect(90, 1580, 900, 2);
+    g.fillStyle = '#fff'; g.font = font(600, 42, false); g.fillText(`${hrs(totalMin())} hours logged${p.licence ? ` toward ${p.licence}` : ''}`, 90, 1660);
+    const logo = await getLogo(); if (logo) { const lw = 300, lh = lw * logo.height / logo.width; g.drawImage(logo, 90, 1730, lw, lh); }
+    g.fillStyle = 'rgba(143,160,196,1)'; g.font = font(500, 34, false); g.textAlign = 'right'; g.fillText('boplo.app', 990, 1790);
+    return c;
+  }
+  async function shareCard(m) {
+    if (!m) return;
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Share: ${esc(m.title)}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body share-body"><div class="share-preview" data-prev><p class="hint">Drawing your card…</p></div>
+      <p class="hint">Sized 1080 × 1920 for TikTok, Reels and Stories.</p></div>
+      <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><a class="btn btn-line" data-dl download="boplo-${esc(m.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}.png">Download</a><button type="button" class="btn btn-blue btn-has-spark" data-sharenow>Share ${spark}</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.onclick = e => { if (e.target === sheet) sheet.close(); };
+    sheet.showModal();
+    const c = await drawCard(m), url = c.toDataURL('image/png');
+    const prev = sheet.querySelector('[data-prev]'); prev.innerHTML = ''; const img = new Image(); img.src = url; img.alt = `${m.title} share card`; prev.append(img);
+    sheet.querySelector('[data-dl]').href = url;
+    const btn = sheet.querySelector('[data-sharenow]');
+    c.toBlob(blob => {
+      const file = new File([blob], 'boplo-milestone.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) btn.onclick = () => navigator.share({ files: [file], title: m.title, text: `${m.title} · logged with Boplo Flight` }).catch(() => { });
+      else { btn.textContent = 'Download to share'; btn.onclick = () => sheet.querySelector('[data-dl]').click(); }
+    }, 'image/png');
+  }
+
+  /* ================= study ================= */
+  const QB = window.BOPLO_QUESTIONS;
+  const studyOf = p => readJSON(p.study, {});
+  let quiz = null;
+  function studyPage() {
+    if (!QB) { shell('study', { title: 'Study' }, '<div class="tile empty center"><h3>Questions didn’t load.</h3><p>Reload the page to try again.</p></div>'); return; }
+    if (quiz) return quizView();
+    const p = state.profile, st = studyOf(p), pm = QB.passMark(regimeOf(p));
+    const sub = QB.subjects.map(s => { const qs = QB.questions.filter(q => q.subject === s.id); const seen = qs.filter(q => st[q.id]); const right = qs.filter(q => st[q.id]?.[0] > 0 && st[q.id][0] >= st[q.id][1] - st[q.id][0]); return { ...s, seen: seen.length, score: seen.length ? Math.round(sum(seen, q => st[q.id][0] / st[q.id][1]) / seen.length * 100) : null }; });
+    const weak = sub.filter(s => s.score != null && s.score < pm).sort((a, b) => a.score - b.score);
+    const mocks = (st._mocks || []).slice(-5).reverse();
+    shell('study', { title: 'Study', sub: 'Practise the theory between lessons. Short sessions, explained answers, and a mock exam when you’re ready.', actions: `<button class="btn btn-blue btn-has-spark" data-mock>Start a mock exam ${spark}</button>` },
+      `<p class="callout draft">${QB.reviewed ? `Reviewed by ${esc(QB.reviewed.by)}.` : '<b>Early-access question bank.</b> Original questions written for Boplo, awaiting review by a flight instructor.'} Use them for practice alongside your official study material, not instead of it.</p>
+      <div class="grid" style="margin-top:16px">
+        <section class="span-8 subj-grid">${sub.map(s => `<button type="button" class="tile subj" data-subj="${s.id}"><span class="subj-top"><b>${esc(s.name)}</b>${s.score != null ? `<span class="chip ${s.score >= pm ? 'ok' : 'warn'}">${s.score}%</span>` : `<span class="chip">${s.count} questions</span>`}</span><small>${esc(s.blurb)}</small><span class="subj-bar"><i style="width:${s.count ? s.seen / s.count * 100 : 0}%"></i></span><span class="subj-meta">${s.seen} of ${s.count} practised</span></button>`).join('')}</section>
+        <aside class="span-4" style="display:grid;gap:16px;align-content:start">
+          <section class="tile"><div class="tile-head"><h2>Focus next</h2></div>${weak.length ? `<div class="bars">${weak.slice(0, 3).map(s => `<div class="bar-row"><div><span>${esc(s.name)}</span><b>${s.score}%</b></div><div class="bar-track"><i style="width:${s.score}%;background:var(--electric)"></i></div></div>`).join('')}</div><button class="btn btn-ink btn-sm" style="margin-top:16px" data-subj="${weak[0].id}">Practise ${esc(weak[0].name)}</button>` : `<p class="hint">${sub.some(s => s.seen) ? `Every subject you’ve practised is at or above the ${pm}% pass mark.` : 'Practise a subject and the ones that need work show up here.'}</p>`}</section>
+          <section class="tile"><div class="tile-head"><h2>Mock exams</h2><span class="chip">Pass mark ${pm}%</span></div>${mocks.length ? `<div class="airports">${mocks.map(m => `<div><span>${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b class="${m.s >= pm ? 'pass' : 'fail'}">${m.s}% ${m.s >= pm ? 'pass' : 'below pass'}</b></div>`).join('')}</div>` : '<p class="hint">16 mixed questions across all subjects, scored against the pass mark your authority uses.</p>'}</section>
+        </aside>
+      </div>`);
+    $$('[data-subj]').forEach(b => b.onclick = () => startQuiz(b.dataset.subj));
+    $$('[data-mock]').forEach(b => b.onclick = () => startQuiz(null));
+  }
+  function startQuiz(subject) {
+    const st = studyOf(state.profile);
+    let pool = QB.questions.filter(q => !subject || q.subject === subject);
+    const weight = q => { const r = st[q.id]; return r ? r[0] / r[1] : -1; };
+    pool = pool.map(q => [q, weight(q) + Math.random() * .35]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
+    if (!subject) pool = pool.sort(() => Math.random() - .5);
+    quiz = { subject, mock: !subject, qs: pool.slice(0, subject ? 10 : 16), i: 0, picked: null, right: 0, answers: [] };
+    quizView(); scrollTo({ top: 0 });
+  }
+  function quizView() {
+    const q = quiz.qs[quiz.i], subj = QB.subjects.find(s => s.id === (quiz.subject || q?.subject));
+    if (!q) return quizDone();
+    const order = quiz.order?.[quiz.i] || (quiz.order = quiz.order || [], quiz.order[quiz.i] = [0, 1, 2, 3].sort(() => Math.random() - .5));
+    const answered = quiz.picked != null;
+    shell('study', { title: quiz.mock ? 'Mock exam' : esc(subj.name), sub: `Question ${quiz.i + 1} of ${quiz.qs.length}${quiz.mock ? ` · ${esc(QB.subjects.find(s => s.id === q.subject).name)}` : ''}`, actions: '<button class="btn btn-line" data-quit>End session</button>' },
+      `<section class="tile quiz">
+        <div class="quiz-bar"><i style="width:${quiz.i / quiz.qs.length * 100}%"></i></div>
+        <h2 class="quiz-q">${esc(q.q)}</h2>
+        <div class="quiz-opts" role="group" aria-label="Answers">${order.map(oi => { const cls = !answered ? '' : oi === q.answer ? 'right' : oi === quiz.picked ? 'wrong' : 'dim'; return `<button type="button" class="opt ${cls}" data-opt="${oi}" ${answered ? 'disabled' : ''}>${esc(q.options[oi])}</button>`; }).join('')}</div>
+        ${answered ? `<div class="quiz-explain ${quiz.picked === q.answer ? 'ok' : 'bad'}" role="status"><b>${quiz.picked === q.answer ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explain)}</div>
+        <div class="actions"><span class="hint">${quiz.right} correct so far</span><div class="right"><button class="btn btn-blue btn-has-spark" data-next>${quiz.i + 1 < quiz.qs.length ? 'Next question' : 'See results'} ${spark}</button></div></div>` : ''}
+      </section>`);
+    $$('[data-opt]').forEach(b => b.onclick = () => { quiz.picked = Number(b.dataset.opt); const ok = quiz.picked === q.answer; if (ok) quiz.right++; quiz.answers.push([q.id, ok]); quizView(); $('[data-next]')?.focus(); });
+    const n = $('[data-next]'); if (n) n.onclick = () => { quiz.i++; quiz.picked = null; quizView(); };
+    $('[data-quit]').onclick = () => { if (quiz.answers.length) quizDone(true); else { quiz = null; studyPage(); } };
+  }
+  async function quizDone(early = false) {
+    const p = state.profile, st = studyOf(p), pm = QB.passMark(regimeOf(p));
+    quiz.answers.forEach(([id, ok]) => { const r = st[id] || [0, 0]; st[id] = [r[0] + (ok ? 1 : 0), r[1] + 1]; });
+    const score = Math.round(quiz.right / Math.max(1, quiz.answers.length) * 100);
+    if (quiz.mock && !early) st._mocks = [...(st._mocks || []), { d: todayISO(), s: score }].slice(-20);
+    const missed = quiz.answers.filter(a => !a[1]).map(a => QB.questions.find(q => q.id === a[0]));
+    const res = { ...quiz }; quiz = null;
+    try { await saveProfile({ study: JSON.stringify(st) }); } catch { }
+    shell('study', { title: res.mock ? 'Mock exam result' : 'Session complete', sub: `${res.right} of ${res.answers.length} correct.` },
+      `<section class="tile quiz result">
+        <div class="result-score ${score >= pm ? 'pass' : 'fail'}"><b>${score}%</b><span>${res.mock ? (score >= pm ? `At or above the ${pm}% pass mark` : `Below the ${pm}% pass mark`) : 'this session'}</span></div>
+        ${missed.length ? `<h3>Worth another look</h3><div class="missed">${missed.map(q => `<div><b>${esc(q.q)}</b><p>${esc(q.options[q.answer])}. ${esc(q.explain)}</p></div>`).join('')}</div>` : '<p class="hint">Everything right. Nice work.</p>'}
+        <div class="actions"><button class="btn btn-line" data-back>Back to subjects</button><div class="right"><button class="btn btn-blue btn-has-spark" data-again>${res.mock ? 'Another mock' : 'Practise again'} ${spark}</button></div></div>
+      </section>`);
+    $('[data-back]').onclick = () => studyPage();
+    $('[data-again]').onclick = () => startQuiz(res.subject);
+  }
+
+  /* ================= weather decoder ================= */
+  const CLOUD = { FEW: 'Few (1–2 oktas)', SCT: 'Scattered (3–4 oktas)', BKN: 'Broken (5–7 oktas)', OVC: 'Overcast (8 oktas)', NSC: 'No significant cloud', SKC: 'Sky clear', CLR: 'Clear below 12,000 ft', NCD: 'No cloud detected', VV: 'Vertical visibility (sky obscured)' };
+  const WX = { RA: 'rain', DZ: 'drizzle', SN: 'snow', SG: 'snow grains', GR: 'hail', GS: 'small hail', PL: 'ice pellets', BR: 'mist', FG: 'fog', HZ: 'haze', FU: 'smoke', DU: 'dust', SA: 'sand', SQ: 'squalls', FC: 'funnel cloud', TS: 'thunderstorm', SH: 'showers', FZ: 'freezing', MI: 'shallow', BC: 'patches', PR: 'partial', DR: 'drifting', BL: 'blowing', VC: 'in the vicinity', UP: 'unknown precipitation' };
+  function decodeToken(t, i) {
+    let m;
+    if (i === 0 && /^[A-Z]{4}$/.test(t)) return ['Station', `${t} is the reporting airfield’s ICAO code.`];
+    if ((m = t.match(/^(\d{2})(\d{2})(\d{2})Z$/))) return ['Time', `Observed on day ${+m[1]} at ${m[2]}:${m[3]} UTC.`];
+    if (t === 'AUTO') return ['Automatic', 'Made by an automatic station without a human observer.'];
+    if (t === 'COR') return ['Corrected', 'A corrected report.'];
+    if ((m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) return ['Wind', `${m[1] === 'VRB' ? 'Variable direction' : `From ${m[1]}° true`} at ${+m[2]} ${m[4] === 'KT' ? 'knots' : 'm/s'}${m[3] ? `, gusting ${+m[3]}` : ''}.`];
+    if ((m = t.match(/^(\d{3})V(\d{3})$/))) return ['Wind varies', `Direction varying between ${m[1]}° and ${m[2]}°.`];
+    if (t === 'CAVOK') return ['CAVOK', 'Visibility 10 km or more, no cloud below 5,000 ft (or MSA), no CB or TCU, no significant weather.'];
+    if (t === '9999') return ['Visibility', '10 km or more.'];
+    if (/^\d{4}$/.test(t)) return ['Visibility', `${(+t).toLocaleString('en-GB')} metres.`];
+    if ((m = t.match(/^(\d{1,2}(?:\/\d)?|\d \d\/\d)SM$/))) return ['Visibility', `${m[1]} statute miles.`];
+    if (/^P6SM$/.test(t)) return ['Visibility', 'More than 6 statute miles.'];
+    if ((m = t.match(/^(FEW|SCT|BKN|OVC|VV)(\d{3})(CB|TCU)?$/))) return ['Cloud', `${CLOUD[m[1]]} at ${(+m[2] * 100).toLocaleString('en-GB')} ft above the airfield${m[3] ? `, ${m[3] === 'CB' ? 'cumulonimbus (thunderstorm cloud)' : 'towering cumulus'}` : ''}.`];
+    if (CLOUD[t]) return ['Cloud', CLOUD[t] + '.'];
+    if ((m = t.match(/^(M?\d{2})\/(M?\d{2})?$/))) { const c = s => s ? (s[0] === 'M' ? -s.slice(1) : +s) : null; const a = c(m[1]), b = c(m[2]); return ['Temperature', `${a} °C, dew point ${b ?? '–'} °C${b != null ? `. Spread ${a - b} °C${a - b <= 2 ? ': close to saturation, watch for mist or fog' : ''}` : ''}.`]; }
+    if ((m = t.match(/^Q(\d{4})$/))) return ['QNH', `Pressure ${+m[1]} hPa. Set this to read altitude above sea level.`];
+    if ((m = t.match(/^A(\d{4})$/))) return ['Altimeter', `${m[1].slice(0, 2)}.${m[1].slice(2)} inHg.`];
+    if (t === 'NOSIG') return ['Trend', 'No significant change expected in the next 2 hours.'];
+    if (/^(BECMG|TEMPO|FM\d{6}|PROB\d{2})$/.test(t)) return ['Change group', { BECMG: 'Becoming: a lasting change.', TEMPO: 'Temporarily: fluctuations lasting under an hour each.' }[t] || (t.startsWith('FM') ? `From ${t.slice(4, 6)}:${t.slice(6, 8)} UTC on day ${+t.slice(2, 4)}.` : `${t.slice(4)}% probability.`)];
+    if ((m = t.match(/^(-|\+|VC)?((?:MI|BC|PR|DR|BL|SH|TS|FZ)?)((?:RA|DZ|SN|SG|GR|GS|PL|BR|FG|HZ|FU|DU|SA|SQ|FC|UP)+)$/))) { const ph = (m[3].match(/../g) || []).map(x => WX[x]).join(' and '), d = m[2]; const txt = d === 'SH' ? `${ph} showers` : d === 'TS' ? `thunderstorm${ph ? ' with ' + ph : ''}` : `${d ? WX[d] + ' ' : ''}${ph}`; const lead = m[1] === '-' ? 'Light ' : m[1] === '+' ? 'Heavy ' : ''; const out = lead + txt; return ['Weather', `${out.charAt(0).toUpperCase() + out.slice(1)}${m[1] === 'VC' ? ' in the vicinity' : ''}.`]; }
+    if (/^R\d{2}/.test(t)) return ['Runway', 'Runway visual range or runway condition.'];
+    return null;
+  }
+  const decode = raw => { const toks = String(raw || '').trim().split(/\s+/); const out = []; for (let i = 0; i < toks.length; i++) { if (toks[i] === 'RMK') { out.push([toks.slice(i).join(' '), 'Remarks', 'Extra local information.']); break; } if (/^(METAR|SPECI|TAF)$/.test(toks[i])) continue; const d = decodeToken(toks[i], out.length); out.push([toks[i], ...(d || ['', ''])]); } return out; };
+  function windFor(st, af) {
+    if (!af?.runways?.length || st.wdir == null || st.wdir === 'VRB' || !st.wspd) return [];
+    const ends = af.runways.flatMap(r => String(r[0] || '').split('/')).map(e => e.match(/^(\d{2})/)).filter(Boolean).map(m => +m[1]);
+    return [...new Set(ends)].map(rw => { const a = ((+st.wdir - rw * 10) * Math.PI) / 180; return { rw: String(rw).padStart(2, '0'), head: Math.round(Math.cos(a) * st.wspd), cross: Math.round(Math.sin(a) * st.wspd) }; }).sort((a, b) => b.head - a.head);
+  }
+  const EX_WX = { source: 'Example', stations: [
+    { id: 'EGHI', name: 'Southampton', dist: 17, raw: 'EGHI 211650Z 24012G22KT 210V280 9999 -SHRA FEW018 SCT030CB 14/09 Q1011', obsTime: null, wdir: 240, wspd: 12, fltCat: 'VFR', taf: 'TAF EGHI 211700Z 2118/2218 24012KT 9999 SCT030 TEMPO 2118/2203 7000 -SHRA BKN014 BECMG 2206/2209 30008KT' },
+    { id: 'EGLF', name: 'Farnborough', dist: 22, raw: 'EGLF 211650Z 23010KT 9999 FEW035 15/08 Q1012', wdir: 230, wspd: 10, fltCat: 'VFR', taf: '' }
+  ] };
+  async function weatherPage() {
+    const p = state.profile, cc = countryCodeOf(p), code = upper(p.airport).split(/[\s·]/)[0];
+    shell('weather', { title: 'Weather', sub: 'Practise reading real METARs and TAFs from the reporting stations nearest your home airfield.' },
+      `<p class="callout warn">A learning tool, not a weather briefing. Before any flight, get an official briefing and talk to your instructor.</p>
+       <div data-wx style="margin-top:16px"><div class="tile"><p class="hint">Fetching the latest reports…</p></div></div>`);
+    const box = $('[data-wx]');
+    let af = null; try { const list = window.BoploMap ? await BoploMap.airfields(cc) : []; af = BoploMap?.findAirfield(list, code) || null; } catch { }
+    if (!af && !preview) { box.innerHTML = `<div class="tile empty center"><h3>Set your home airfield first.</h3><p>Choose it in your profile and Boplo finds the nearest weather stations.</p><a class="btn btn-blue" href="#profile">Open profile</a></div>`; return; }
+    let data;
+    try { data = preview ? EX_WX : await api(`weather?lat=${af.lat}&lng=${af.lng}`); }
+    catch (x) { box.innerHTML = `<div class="tile empty center"><h3>Weather reports didn’t load.</h3><p>${esc(x.message)}</p><button class="btn btn-line" data-retry>Try again</button></div>`; $('[data-retry]').onclick = weatherPage; return; }
+    if (!data.stations?.length) { box.innerHTML = `<div class="tile empty center"><h3>No reporting stations nearby.</h3><p>There are no METARs within about 200 NM of ${esc(af?.name || 'your airfield')}.</p></div>`; return; }
+    const cat = c => c ? `<span class="chip cat-${esc(c.toLowerCase())}">${esc(c)}</span>` : '';
+    box.innerHTML = `<div class="grid">${data.stations.map((s, i) => {
+      const dec = decode(s.raw), comp = i === 0 ? windFor(s, af || { runways: [['03/21'], ['08/26']] }) : [];
+      return `<section class="tile ${i === 0 ? 'span-12' : 'span-6'} wx" aria-label="${esc(s.id)} weather">
+        <div class="tile-head"><h2>${esc(s.id)} <span class="wx-name">${esc(s.name || '')}${s.dist != null ? ` · ${s.dist} NM away` : ''}</span></h2>${cat(s.fltCat)}</div>
+        <div class="wx-raw"><code>${esc(s.raw)}</code></div>
+        ${i === 0 ? `<label class="wx-toggle"><input type="checkbox" data-hide> Try reading it yourself first (hide the decode)</label>` : ''}
+        <div class="wx-dec" data-dec>${dec.map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || 'Not decoded here.')}</span></div>`).join('')}</div>
+        ${comp.length ? `<div class="wx-comp"><h3>Wind on ${esc(af?.code || 'your')} runways</h3><div class="wx-comp-grid">${comp.map(c => `<div><b>Runway ${c.rw}</b><span>${c.head >= 0 ? `${c.head} kt headwind` : `${-c.head} kt tailwind`} · ${Math.abs(c.cross)} kt crosswind from the ${c.cross >= 0 ? 'right' : 'left'}</span></div>`).join('')}</div><p class="footnote">Practice maths using ${esc(s.id)}’s wind (true) on ${esc(af?.code || 'your')}’s runways (magnetic), so it’s approximate. Wind ${s.dist ? s.dist + ' NM away' : 'nearby'} can differ from your airfield.</p></div>` : ''}
+        ${s.taf ? `<details class="more wx-taf"><summary>Forecast (TAF)</summary><div class="wx-raw" style="margin:0 16px"><code>${esc(s.taf)}</code></div><div class="wx-dec" style="padding:12px 16px 16px">${decode(s.taf).map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || 'Validity or other group.')}</span></div>`).join('')}</div></details>` : ''}
+      </section>`; }).join('')}</div>
+      <p class="footnote">${preview ? 'Example reports.' : `Source: ${esc(data.source)}, fetched ${esc(new Date(data.fetched).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}.`}</p>`;
+    const hide = box.querySelector('[data-hide]'); if (hide) hide.onchange = () => box.querySelector('[data-dec]').classList.toggle('hidden', hide.checked);
+  }
+
+  /* ================= more (mobile) ================= */
+  function morePage() {
+    shell('more', { title: 'More' }, `<div class="more-grid">${[['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+  }
+
+  /* ================= voice debrief ================= */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function wireDebrief(form) {
+    const ta = form.querySelector('[name=notes]'), mic = form.querySelector('[data-mic]'), tidy = form.querySelector('[data-tidy]'), out = form.querySelector('[data-tidied]');
+    let rec = null, base = '';
+    if (mic) {
+      if (!SR) { mic.title = 'Voice notes need Chrome, Edge or Safari.'; mic.disabled = true; mic.classList.add('off'); }
+      else mic.onclick = () => {
+        if (rec) { rec.stop(); return; }
+        rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = navigator.language || 'en-GB'; base = ta.value ? ta.value.trim() + ' ' : '';
+        rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; ta.value = base + t.trim(); };
+        rec.onend = () => { rec = null; mic.classList.remove('live'); mic.querySelector('span').textContent = 'Speak your debrief'; };
+        rec.onerror = () => { rec = null; mic.classList.remove('live'); };
+        rec.start(); mic.classList.add('live'); mic.querySelector('span').textContent = 'Listening… tap to stop';
+      };
+    }
+    if (tidy) tidy.onclick = async () => {
+      const err = form.querySelector('.form-error'); err.textContent = '';
+      tidy.disabled = true; tidy.textContent = 'Tidying…';
+      try {
+        const lesson = form.querySelector('[name=lesson]')?.value || '';
+        const r = preview ? { summary: 'Navigation went well overall; the reservoir turn was late.', wentWell: ['Radio calls were clear', 'Held altitude well on the first leg'], workOn: ['Start timing turns from overhead, not abeam'], nextPrep: ['Re-plan the reservoir leg timing'], questions: ['When should I divert if a turn point is late?'] } : await api('debrief', 'POST', { transcript: ta.value, lesson });
+        const block = (t, l) => l.length ? `${t}\n${l.map(x => '• ' + x).join('\n')}` : '';
+        const text = [r.summary, block('Went well:', r.wentWell), block('Work on:', r.workOn), block('Prepare next time:', r.nextPrep), block('Ask my instructor:', r.questions)].filter(Boolean).join('\n\n');
+        out.innerHTML = `<div class="tidied"><pre>${esc(text)}</pre><div class="actions"><span class="hint">Only what you said, tidied up.</span><div class="right"><button type="button" class="btn btn-line btn-sm" data-discard>Keep my original</button><button type="button" class="btn btn-ink btn-sm" data-use>Use this${r.nextPrep.length || r.questions.length ? ' and add to next lesson' : ''}</button></div></div></div>`;
+        out.querySelector('[data-discard]').onclick = () => { out.innerHTML = ''; };
+        out.querySelector('[data-use]').onclick = async () => {
+          ta.value = text; out.innerHTML = '';
+          if (r.nextPrep.length || r.questions.length) {
+            const p = state.profile, checks = parseChecks(p.checklist).concat(r.nextPrep.map(t => ({ done: false, text: t })));
+            const qs = [String(p.questions || '').trim(), ...r.questions].filter(Boolean).join('\n');
+            try { await saveProfile({ checklist: writeChecks(checks), questions: qs.slice(0, 3000) }); toast('Added to your next lesson.'); } catch { }
+          }
+        };
+      } catch (x) { err.textContent = x.message; }
+      tidy.disabled = false; tidy.textContent = 'Tidy with Boplo';
     };
   }
 
@@ -659,6 +986,11 @@
         <div class="group"><h3>Lesson and debrief</h3><div class="fields">
           <label class="field full"><span>Lesson or exercise <i>(optional)</i></span><input name="lesson" value="${esc(f.lesson || (editing ? '' : p.nextLesson || ''))}" maxlength="100"></label>
           ${input('Debrief notes', 'notes', f.notes || '', 'textarea', 'placeholder="What went well, what to work on next time"', true)}
+          <div class="debrief-tools full" style="grid-column:1/-1"><button type="button" class="btn btn-line btn-sm mic" data-mic><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg><span>Speak your debrief</span></button><button type="button" class="btn btn-ink btn-sm" data-tidy>Tidy with Boplo</button><span class="hint">Talk it through after the flight, then tidy it into notes.</span></div>
+          <div class="full" style="grid-column:1/-1" data-tidied></div>
+        </div></div>
+        <div class="group"><h3>Cost <span class="hint" style="font-weight:400">optional</span></h3><div class="fields">
+          ${input(`What this flight cost (${esc(currencyOf(p))})`, 'cost', f.cost ?? '', 'number', `min="0" max="100000" step="0.01" inputmode="decimal" placeholder="${Number(p.rateAircraft || 0) ? 'Leave blank to estimate from your rates' : 'e.g. 210'}"`)}
         </div></div>
         <details class="more" ${coords ? 'open' : ''}><summary>Route on the map <span class="hint" style="margin-left:auto;margin-right:12px" data-route-hint>${coords ? `${(f.points || []).length} points` : 'optional'}</span></summary>
           <div class="plot-cta"><button type="button" class="btn btn-ink btn-has-spark" data-plot>${ico('map')} Plot on the map ${spark}</button><span class="hint">Or leave it: picking known airfields for From and To draws a start-to-end line for you.</span></div>
@@ -678,6 +1010,7 @@
     sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close());
     sheet.onclick = e => { if (e.target === sheet) sheet.close(); };
     sheet.showModal();
+    wireDebrief(form);
     const cc = countryCodeOf(p);
     let afList = [];
     if (window.BoploMap && cc) BoploMap.airfields(cc).then(list => { afList = list; const dl = sheet.querySelector('#af-list'); if (dl) dl.innerHTML = list.slice(0, 6000).map(a => `<option value="${esc(a.code)}">${esc(a.name)}${a.city ? ' · ' + esc(a.city) : ''}</option>`).join(''); });
@@ -720,7 +1053,7 @@
           const a = BoploMap.findAirfield(afList, v.departure), b = BoploMap.findAirfield(afList, v.arrival);
           if (a && b && a.code !== b.code) { points.push({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }); kind = 'endpoints'; }
         }
-        const data = { date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
+        const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
         btn.disabled = true;
         const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
@@ -739,9 +1072,10 @@
   /* ---------------- router ---------------- */
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage })[current()]();
+    const k = current(); if (k !== 'study') quiz = null;
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, more: morePage })[k]();
   }
-  addEventListener('hashchange', () => { if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
+  addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
   /* ---------------- example desk ---------------- */
   function demo() {
@@ -756,18 +1090,18 @@
     const area = loop([POP, { lat: 51.255, lng: -1.19 }, { lat: 51.27, lng: -1.30 }, { lat: 51.22, lng: -1.36 }, POP]);
     const nav = loop([POP, { lat: 51.2083, lng: -1.48 }, { lat: 51.11, lng: -1.49 }, { lat: 51.06, lng: -1.31 }, POP]);
     const F = [
-      [170, 'Lesson 1 · Effects of controls', 'dual', 55, 1, 'Light touch on the controls. Use the horizon, not the instruments.', area, 'track'],
-      [160, 'Lesson 2 · Straight and level', 'dual', 60, 1, 'Trim more often. Hold attitude, then check.', area, 'track'],
-      [146, 'Lesson 3 · Climbing and descending', 'dual', 62, 1, 'Power, attitude, trim. Remember to look out during the climb.', area, 'track'],
-      [133, 'Lesson 4 · Medium turns', 'dual', 58, 1, 'Balance with rudder going into the turn. Good lookout.', area, 'track'],
-      [118, 'Lesson 5 · Slow flight', 'dual', 65, 1, 'Stay ahead of the aircraft at low speed.', area, 'track'],
-      [104, 'Lesson 6 · Stalling', 'dual', 60, 1, 'Recovery was smooth. Work on the HASELL checks from memory.', area, 'track'],
-      [86, 'Lesson 7 · Circuits', 'dual', 70, 5, 'Downwind spacing drifted wide. Use the road as a reference.', circuit(), 'track'],
-      [72, 'Lesson 8 · Circuits', 'dual', 68, 6, 'Flare height better. Keep the centreline on short final.', circuit(), 'track'],
-      [57, 'Lesson 9 · Glide approaches', 'dual', 66, 5, 'Judged two of three glides well. Fly the base turn earlier.', circuit(), 'track'],
-      [43, 'Lesson 10 · First solo', 'solo', 18, 1, 'First solo circuit. Calm and on speed.', circuit(), 'track'],
-      [29, 'Lesson 11 · Solo consolidation', 'solo', 52, 5, 'Five full-stop landings. Radio calls more confident.', circuit(), 'track'],
-      [12, 'Lesson 11b · Navigation planning', 'dual', 75, 1, 'Turn at the reservoir was 40 seconds late. Start the timing from overhead, not abeam.', nav, 'track']
+      [118, 'Lesson 1 · Effects of controls', 'dual', 55, 1, 'Light touch on the controls. Use the horizon, not the instruments.', area, 'track'],
+      [109, 'Lesson 2 · Straight and level', 'dual', 60, 1, 'Trim more often. Hold attitude, then check.', area, 'track'],
+      [99, 'Lesson 3 · Climbing and descending', 'dual', 62, 1, 'Power, attitude, trim. Remember to look out during the climb.', area, 'track'],
+      [90, 'Lesson 4 · Medium turns', 'dual', 58, 1, 'Balance with rudder going into the turn. Good lookout.', area, 'track'],
+      [80, 'Lesson 5 · Slow flight', 'dual', 65, 1, 'Stay ahead of the aircraft at low speed.', area, 'track'],
+      [70, 'Lesson 6 · Stalling', 'dual', 60, 1, 'Recovery was smooth. Work on the HASELL checks from memory.', area, 'track'],
+      [59, 'Lesson 7 · Circuits', 'dual', 70, 5, 'Downwind spacing drifted wide. Use the road as a reference.', circuit(), 'track'],
+      [49, 'Lesson 8 · Circuits', 'dual', 68, 6, 'Flare height better. Keep the centreline on short final.', circuit(), 'track'],
+      [38, 'Lesson 9 · Glide approaches', 'dual', 66, 5, 'Judged two of three glides well. Fly the base turn earlier.', circuit(), 'track'],
+      [29, 'Lesson 10 · First solo', 'solo', 18, 1, 'First solo circuit. Calm and on speed.', circuit(), 'track'],
+      [19, 'Lesson 11 · Solo consolidation', 'solo', 52, 5, 'Five full-stop landings. Radio calls more confident.', circuit(), 'track'],
+      [8, 'Lesson 11b · Navigation planning', 'dual', 75, 1, 'Turn at the reservoir was 40 seconds late. Start the timing from overhead, not abeam.', nav, 'track']
     ];
     state = {
       user: { display_name: 'Alex Morgan', email: '' }, mapsKey: '',
@@ -777,6 +1111,9 @@
         target: ahead(240), goalHours: 40, openingMinutes: 0, nextLesson: 'Lesson 12 · Navigation', lessonDate: ahead(4),
         questions: 'When would you divert if the reservoir turn is late?\nWhich frequency do I change to first after departure?',
         notes: 'Plan the route the evening before and print the log.', checklist: '[x] Plot the route and mark the turn points\n[x] Work out diversion timings\n[ ] Read through the radio calls\n[ ] Check the aircraft tech log',
+        currency: 'GBP', rateAircraft: 185, rateInstructor: 45,
+        syllabus: JSON.stringify({ 'easa-ppl-a': Object.fromEntries(['1', '1E', '2', '3', '4', '5', '6', '7', '8', '9', '10A', '10B', '11', '12', '13', '12E/13E', '14'].map(k => [k, 'd']).concat([['15', 'd'], ['16', 'p'], ['18A', 'p'], ['RT', 'p']])) }),
+        study: JSON.stringify({ al1: [1, 1], al2: [1, 1], al5: [0, 1], me1: [1, 1], me3: [0, 1], me5: [1, 1], na3: [0, 2], na4: [1, 1], pf2: [1, 1], _mocks: [{ d: ago(9), s: 69 }, { d: ago(2), s: 81 }] }),
         complete: true, step: 4
       },
       flights: F.map(([d, lesson, role, minutes, landings, notes, points, routeKind], i) => ({ id: 'demo-' + i, date: ago(d), departure: 'EGHP', arrival: 'EGHP', aircraft: 'PA-28 Warrior', registration: 'G-BOPL', role, minutes, landings, instructor: role === 'dual' ? 'Sam Patel' : '', lesson, notes, points, routeKind }))
@@ -786,7 +1123,11 @@
   /* ---------------- start ---------------- */
   async function start() {
     if (preview) { demo(); render(); return; }
-    try { const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.'); state = ws; render(); }
+    try {
+      const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
+      if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
+      state = ws; render();
+    }
     catch (e) { if (e.status === 401) auth(); else failure(e); }
   }
   start();

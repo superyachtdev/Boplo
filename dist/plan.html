@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Pilot licence cost planner · Boplo Flight</title>
+  <meta name="description" content="Work out what your private pilot licence could cost and when you could finish, using your country’s published minimum hours and your school’s prices.">
+  <meta name="theme-color" content="#020611">
+  <meta property="og:title" content="What would a pilot licence cost you?">
+  <meta property="og:description" content="Pick your country and licence, add your school’s prices, and see your total and finish date.">
+  <link rel="icon" href="/boplo-mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="/flight-app.css?v=13">
+  <style>
+    body{background:var(--cloud)}
+    .plan-hero{margin:10px;border-radius:var(--r-frame);padding:clamp(28px,5vw,64px) clamp(20px,5vw,64px) clamp(40px,6vw,80px);box-shadow:inset 0 0 0 1px var(--hair-d)}
+    .plan-hero>*{position:relative}
+    .plan-hero nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(36px,6vw,72px)}
+    .plan-hero h1{font-size:clamp(40px,6vw,84px);max-width:13ch}
+    .plan-hero p{margin-top:18px;color:rgba(222,233,255,.76);font-size:clamp(16px,1.4vw,19px);max-width:34em}
+    .plan-wrap{max-width:1180px;margin:-48px auto 0;padding:0 clamp(16px,3vw,32px) 64px;position:relative;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px;align-items:start}
+    .plan-form{display:grid;gap:20px}
+    .plan-form h2{font-size:18px;font-weight:620;font-variation-settings:'wdth' 106}
+    .range-row{display:grid;gap:8px}
+    .range-row label{display:flex;justify-content:space-between;font-size:13.5px;font-weight:550;color:var(--ink-2)}
+    .range-row label b{color:var(--ink);font-variant-numeric:tabular-nums}
+    .range-row input[type=range]{width:100%;accent-color:var(--electric)}
+    .result{position:sticky;top:16px;display:grid;gap:18px}
+    .result .big{font-size:clamp(48px,5.5vw,76px);line-height:1;font-weight:620;font-style:italic;font-variation-settings:'wdth' 112;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums}
+    .result .lines{display:grid;gap:1px;background:var(--hair-d);border-radius:14px;overflow:hidden}
+    .result .lines div{display:flex;justify-content:space-between;gap:12px;padding:12px 14px;background:rgba(6,16,42,.9);font-size:14.5px;color:rgba(222,233,255,.86)}
+    .result .lines b{color:#fff;font-variant-numeric:tabular-nums}
+    .result small{color:var(--mist);font-size:12.5px}
+    .result .btn{width:100%}
+    .extras{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    footer.pf{max-width:1180px;margin:0 auto;padding:0 clamp(16px,3vw,32px) 48px;color:var(--ink-3);font-size:13px}
+    @media (max-width:900px){.plan-wrap{grid-template-columns:1fr;margin-top:-36px}.result{position:static}}
+    @media (max-width:640px){.extras{grid-template-columns:1fr}}
+  </style>
+  <script src="/flight-rules.js?v=2" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></symbol></svg>
+  <header class="plan-hero night" data-hero>
+    <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a><a class="btn btn-ghost btn-sm" href="/flight-app.html">Sign in</a></nav>
+    <h1 class="display">What would your pilot licence cost?</h1>
+    <p>Pick your country and licence. We start from the published minimum hours. Add your school’s prices and see your total and when you could finish.</p>
+  </header>
+
+  <main class="plan-wrap">
+    <form class="tile plan-form" data-form novalidate>
+      <h2>Your licence</h2>
+      <div class="fields">
+        <label class="field"><span>Country</span><select name="country" data-country></select></label>
+        <label class="field"><span>Licence</span><select name="licence" data-licence></select></label>
+      </div>
+      <p class="callout" data-min></p>
+
+      <h2>Your school’s prices</h2>
+      <div class="fields">
+        <label class="field"><span>Aircraft, per hour <i>(<span data-cur>GBP</span>)</i></span><input name="rateAircraft" type="number" min="0" step="1" inputmode="decimal" placeholder="From your school’s price list"></label>
+        <label class="field"><span>Instructor, per hour <i>(dual flights)</i></span><input name="rateInstructor" type="number" min="0" step="1" inputmode="decimal" placeholder="0 if included"></label>
+      </div>
+      <div class="extras">
+        <label class="field"><span>Medical <i>(optional)</i></span><input name="medical" type="number" min="0" step="1" inputmode="decimal"></label>
+        <label class="field"><span>Theory exams and books <i>(optional)</i></span><input name="exams" type="number" min="0" step="1" inputmode="decimal"></label>
+        <label class="field"><span>Flight test fee <i>(optional)</i></span><input name="test" type="number" min="0" step="1" inputmode="decimal"></label>
+        <label class="field"><span>Headset, charts and kit <i>(optional)</i></span><input name="kit" type="number" min="0" step="1" inputmode="decimal"></label>
+      </div>
+
+      <h2>Your plan</h2>
+      <div class="range-row"><label for="hours">Hours you plan for <b data-hours-out></b></label><input id="hours" name="hours" type="range" min="10" max="120" step="1"><small class="hint">Starts above the minimum, because most students need more. Ask your school what’s typical there.</small></div>
+      <div class="range-row"><label for="dual">Share of flying with an instructor <b data-dual-out></b></label><input id="dual" name="dual" type="range" min="50" max="95" step="5" value="75"></div>
+      <div class="range-row"><label for="pw">Lessons a week <b data-pw-out></b></label><input id="pw" name="pw" type="range" min="0.5" max="5" step="0.5" value="1.5"><small class="hint">About an hour each. Weather and aircraft availability usually slow this down.</small></div>
+    </form>
+
+    <aside class="tile dark result" aria-live="polite" data-result>
+      <div><small>Estimated total</small><div class="big" data-total>—</div></div>
+      <div class="lines">
+        <div><span>Flying</span><b data-flying>—</b></div>
+        <div><span>Medical, exams, test and kit</span><b data-other>—</b></div>
+        <div><span>Finish around</span><b data-finish>—</b></div>
+        <div><span>Per month while training</span><b data-month>—</b></div>
+      </div>
+      <a class="btn btn-light btn-has-spark" href="/flight-app.html" data-save>Save this plan and track it <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+      <small>An estimate from the numbers you enter. Prices, hours and pace vary between schools and students.</small>
+    </aside>
+  </main>
+  <footer class="pf">Minimum hours come from each authority’s published rules (sources linked above). Boplo is a training companion, not a flight school or a substitute for your instructor.</footer>
+
+  <script>
+  addEventListener('DOMContentLoaded', () => {
+    const R = window.BOPLO_RULES, f = document.querySelector('[data-form]'), $ = s => document.querySelector(s);
+    const CUR = { GB: 'GBP', US: 'USD', CA: 'CAD', AU: 'AUD', NZ: 'NZD', CH: 'CHF', NO: 'NOK', SE: 'SEK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', ZA: 'ZAR', IN: 'INR' };
+    const EURO = 'AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK'.split(' ');
+    const cur = c => CUR[c] || (EURO.includes(c) ? 'EUR' : 'USD');
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const pop = R.popular.map(c => R.countries.find(x => x.code === c)).filter(Boolean);
+    const guess = (() => { try { const l = (navigator.language || '').split('-')[1]; return R.countries.some(c => c.code === l) ? l : 'GB'; } catch { return 'GB'; } })();
+    f.country.innerHTML = `<optgroup label="Most common">${pop.map(c => `<option value="${c.code}">${esc(c.name)}</option>`).join('')}</optgroup><optgroup label="All countries">${R.countries.map(c => `<option value="${c.code}">${esc(c.name)}</option>`).join('')}</optgroup>`;
+    f.country.value = guess;
+    let lastMin = null;
+    const licences = () => R.licencesFor(R.regimeFor(f.country.value)).filter(l => l.minHours);
+    const fillLic = () => { f.licence.innerHTML = licences().map(l => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join(''); };
+    const lic = () => R.licence(R.regimeFor(f.country.value), f.licence.value);
+    function syncMin() {
+      const l = lic(); if (!l) return;
+      $('[data-min]').innerHTML = `<b>Published minimum: ${l.minHours} hours.</b> ${esc(l.summary)} <a class="link" href="${esc(l.url)}" target="_blank" rel="noopener">Source: ${esc(l.source)}</a>`;
+      f.hours.min = l.minHours; f.hours.max = Math.round(l.minHours * 2.4);
+      if (lastMin == null || Number(f.hours.value) < l.minHours || Number(f.hours.value) === Math.round(lastMin * 1.4)) f.hours.value = Math.round(l.minHours * 1.4);
+      lastMin = l.minHours;
+    }
+    function calc() {
+      const c = cur(f.country.value), fmt = n => { try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: c, maximumFractionDigits: 0 }).format(n); } catch { return Math.round(n); } };
+      document.querySelectorAll('[data-cur]').forEach(e => e.textContent = c);
+      const h = +f.hours.value, dual = +f.dual.value / 100, pw = +f.pw.value, ra = +f.rateAircraft.value || 0, ri = +f.rateInstructor.value || 0;
+      $('[data-hours-out]').textContent = `${h} h`; $('[data-dual-out]').textContent = `${Math.round(dual * 100)}%`; $('[data-pw-out]').textContent = pw;
+      const flying = h * ra + h * dual * ri, other = ['medical', 'exams', 'test', 'kit'].reduce((n, k) => n + (+f[k].value || 0), 0);
+      const weeks = h / pw, finish = new Date(Date.now() + weeks * 7 * 86400000), months = Math.max(1, weeks / 4.345);
+      const have = ra > 0;
+      $('[data-total]').textContent = have ? fmt(flying + other) : 'Add a price';
+      $('[data-flying]').textContent = have ? fmt(flying) : '—';
+      $('[data-other]').textContent = other ? fmt(other) : '—';
+      $('[data-finish]').textContent = finish.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      $('[data-month]').textContent = have ? fmt((flying + other) / months) : '—';
+      try { localStorage.setItem('boplo-plan', JSON.stringify({ countryCode: f.country.value, licence: f.licence.value, goalHours: h, rateAircraft: ra, rateInstructor: ri, currency: c, lessonsPerWeek: pw })); } catch { }
+    }
+    f.country.onchange = () => { fillLic(); syncMin(); calc(); };
+    f.licence.onchange = () => { syncMin(); calc(); };
+    f.oninput = calc;
+    fillLic(); syncMin(); calc();
+  });
+  </script>
+</body>
+</html>
