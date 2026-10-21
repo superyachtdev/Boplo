@@ -46,7 +46,15 @@ window.BoploSim = (() => {
       });
       cache.set(k, p); p.catch(() => cache.delete(k)); if (cache.size > 300) cache.delete(cache.keys().next().value); return p;
     };
-    return new C.CustomHeightmapTerrainProvider({ width: N, height: N, tilingScheme: new C.WebMercatorTilingScheme(), credit: 'Terrain: AWS Terrain Tiles', callback: (x, y, level) => {
+    // exact ground height from the full-detail z14 tile (null until that tile has loaded)
+    const ready = new Map();
+    const sampleAt = (lng, lat) => {
+      const n = 2 ** MAXZ, fx = (lng + 180) / 360 * n, r = lat * Math.PI / 180, fy = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n, tx = Math.floor(fx), ty = Math.floor(fy), k = MAXZ + '/' + tx + '/' + ty;
+      const h = ready.get(k); if (!h) { tile(MAXZ, tx, ty).then(d => { ready.set(k, d); if (ready.size > 120) ready.delete(ready.keys().next().value); }).catch(() => { }); return null; }
+      const u = clamp((fx - tx) * 256 - .5, 0, 255), v = clamp((fy - ty) * 256 - .5, 0, 255), x0 = Math.floor(u), y0 = Math.floor(v), x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1), ax = u - x0, ay = v - y0;
+      return (h[y0 * 256 + x0] * (1 - ax) + h[y0 * 256 + x1] * ax) * (1 - ay) + (h[y1 * 256 + x0] * (1 - ax) + h[y1 * 256 + x1] * ax) * ay;
+    };
+    const provider = new C.CustomHeightmapTerrainProvider({ width: N, height: N, tilingScheme: new C.WebMercatorTilingScheme(), credit: 'Terrain: AWS Terrain Tiles', callback: (x, y, level) => {
       let z = level, tx = x, ty = y, sub = 1, ox = 0, oy = 0;
       if (z > MAXZ) { const d = z - MAXZ; sub = 2 ** d; tx = x >> d; ty = y >> d; ox = x - tx * sub; oy = y - ty * sub; z = MAXZ; }
       return tile(z, tx, ty).then(h => {
@@ -58,6 +66,8 @@ window.BoploSim = (() => {
         return out;
       }).catch(() => new Float32Array(N * N));
     } });
+    provider.sampleAt = sampleAt;
+    return provider;
   }
   function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=3'; l.dataset.simcss = '1'; document.head.append(l); }
 
@@ -393,14 +403,14 @@ window.BoploSim = (() => {
 
     // ground height under a point: rendered 3D tiles, or the terrain globe
     const gcache = new Map();
-    const rawGround = (x, z) => { try { const c = carto(x, z); const h = tileset ? scene.sampleHeight(c, exclude, .6) : scene.globe.getHeight(c); return Number.isFinite(h) ? h : null; } catch { return null; } };
+    const rawGround = (x, z) => { try { const c = carto(x, z); const h = tileset ? scene.sampleHeight(c, exclude, .6) : scene.terrainProvider.sampleAt(C.Math.toDegrees(c.longitude), C.Math.toDegrees(c.latitude)); return Number.isFinite(h) ? h : null; } catch { return null; } };
     const elevAt = (x, z, fresh) => { const k = Math.round(x / 20) + ',' + Math.round(z / 20), now = performance.now(), c = gcache.get(k); if (c && !fresh && now - c.t < 1500 && c.e != null) return c.e; const e = rawGround(x, z); gcache.set(k, { e, t: now }); if (gcache.size > 600) gcache.delete(gcache.keys().next().value); return e ?? c?.e ?? null; };
     // wait for the scenery at the start, then read the ground height there (most detailed)
     const mostDetailed = async pts => {
       try {
         if (tileset) { const r = await Promise.race([scene.sampleHeightMostDetailed(pts.map(p => carto(...p)), exclude), new Promise(res => setTimeout(() => res(null), 15000))]); return r ? r.map(c => Number.isFinite(c?.height) ? c.height : null) : pts.map(() => null); }
-        const r = await Promise.race([C.sampleTerrain(scene.terrainProvider, 13, pts.map(p => carto(...p))), new Promise(res => setTimeout(() => res(null), 12000))]);
-        return r ? r.map(c => Number.isFinite(c?.height) ? c.height : null) : pts.map(() => null);
+        for (let i = 0; i < 60; i++) { const v = pts.map(p => { const [lng, lat] = F.ll(...p); return scene.terrainProvider.sampleAt(lng, lat); }); if (v.every(x => x != null)) return v; await new Promise(r => setTimeout(r, 200)); }
+        return pts.map(() => null);
       } catch { return pts.map(() => null); }
     };
     const last = P[P.length - 1], sameEnd = Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
