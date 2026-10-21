@@ -1,0 +1,3 @@
+.bl-brand{width:150px;height:39px;overflow:hidden}
+.bl-brand img{width:150px;height:150px;max-width:none;object-fit:cover;transform:none}
+@media(max-width:760px){.bl-brand{width:125px;height:33px}.bl-brand img{width:128px;height:128px;transform:none}}

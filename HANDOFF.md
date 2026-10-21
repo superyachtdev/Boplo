@@ -1,0 +1,26 @@
+# Boplo — handoff notes
+
+Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update this file at the end of each session.
+
+## Current product
+
+**Boplo Flight**: a flight desk for student pilots (PPL(A), LAPL, next rating). Prepare for the next lesson, log flights, see tracks on a map and hours by month/role. It never clears anyone to fly and never replaces the instructor, the official logbook or official weather/NOTAM sources. Older products in this repo (Scout, Darts, Wingman, Landing/Move) are legacy.
+
+- Landing page: `dist/index.html` + `dist/flight-home.css` + `dist/flight-home.js`
+- App: `dist/flight-app.html` (`?preview=1` shows example data). See `docs/FLIGHT_SETUP.md`.
+- Hosting: Cloudflare Pages, output dir `dist`, Functions in `functions/`, D1 bound as `DB`.
+
+## Landing page (rebuilt 2026-10-21, Claude)
+
+- Hero is a 560vh scroll section with a sticky, rounded frame. A dependency-free WebGL2 scene renders procedural terrain as contour-chart lines in electric blue; scrolling flies an example lesson (Lesson 12, navigation) from runway 09 round 6 waypoints and back. A HUD shows altitude/heading/speed, and captions step through: before the lesson → in the air → after landing → toward your licence. The end pulls back to show the logged track.
+- The terrain, route, minimap (desk section) and final-card contours all come from the same `height()` function in `flight-home.js`, so they match.
+- No WebGL2 or `prefers-reduced-motion` → `.static` layout with the captions shown as cards.
+- Smooth scroll uses the existing `vendor/lenis.min.js` (desktop only). GSAP is no longer used by the landing.
+- Font: Archivo (Google Fonts), italic at width 112 for display, regular for body.
+- Previous landing (`flight-landing.*`, `flight-expansion.css`) is untouched on disk; the old `index.html` is backed up at `work/index.flight-landing-previous.html`.
+
+## Open items
+
+- Pricing section shows £9.99 one-off, but Flight checkout isn't wired up yet (CTA goes to sign-in). Decide: hide price, label "at launch", or build checkout.
+- No privacy or terms pages exist yet; the footer Legal column was removed until they do.
+- Unused legacy CSS/JS in `dist/` could be cleaned up.

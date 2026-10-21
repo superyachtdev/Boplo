@@ -3,18 +3,347 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="description" content="Boplo Flight keeps private-pilot training visible, one lesson at a time.">
-  <title>Boplo Flight — Train with a clear view</title>
+  <title>Boplo Flight — Your licence, one lesson at a time</title>
+  <meta name="description" content="Boplo Flight is a flight desk for student pilots: prepare for the next lesson, log what you flew and watch the hours build toward your licence.">
+  <meta name="theme-color" content="#020611">
+  <meta property="og:title" content="Boplo Flight — Your licence, one lesson at a time">
+  <meta property="og:description" content="Prepare for the next lesson, log what you flew and watch the hours build toward your licence.">
+  <link rel="icon" href="boplo-mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="/flight-landing.css?v=10">
-  <link rel="stylesheet" href="/flight-expansion.css?v=3">
-  <script src="/vendor/gsap.min.js" defer></script>
-  <script src="/vendor/ScrollTrigger.min.js" defer></script>
-  <script src="/vendor/lenis.min.js" defer></script>
-  <script src="/flight-landing.js?v=11" defer></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="flight-home.css?v=1">
+  <script src="vendor/lenis.min.js" defer></script>
+  <script src="flight-home.js?v=1" defer></script>
 </head>
 <body>
-  <div id="marketing"></div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></symbol>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" data-nav>
+    <a class="nav-brand" href="#top" aria-label="Boplo Flight, back to top">
+      <img src="assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163">
+      <span>Flight</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#desk">The desk</a>
+      <a href="#rules">Rules</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#questions">Questions</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="nav-signin" href="/flight-app.html">Sign in</a>
+      <a class="btn btn-light btn-sm" href="/flight-app.html">Open flight desk <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero: one example lesson, flown by scroll -->
+    <section class="flight" id="top" data-flight aria-label="An example lesson, from preparation to logbook">
+      <div class="flight-stage">
+        <div class="frame">
+          <canvas class="terrain" data-canvas aria-hidden="true"></canvas>
+          <div class="frame-glow" aria-hidden="true"></div>
+          <svg class="overlay" data-overlay aria-hidden="true"><line data-drop x1="0" y1="0" x2="0" y2="0"/></svg>
+          <div class="labels" data-labels aria-hidden="true"></div>
+          <div class="craft" data-craft aria-hidden="true"><svg><use href="#spark"/></svg></div>
+
+          <div class="hero-copy" data-hero-copy>
+            <p class="pill"><span>New</span> For student pilots<em> working toward PPL(A) or LAPL</em></p>
+            <h1>Your licence,<br>one lesson<br>at a time.</h1>
+            <p class="lede">Prepare for the next lesson, log what you flew and watch the hours build toward your licence. One flight desk that stays on the ground with you.</p>
+            <div class="cta-row">
+              <a class="btn btn-light" href="/flight-app.html">Open my flight desk <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+              <a class="btn btn-ghost" href="/flight-app.html?preview=1">Try the example desk</a>
+            </div>
+            <p class="scroll-hint"><span aria-hidden="true"></span>Scroll to fly an example lesson</p>
+          </div>
+
+          <aside class="hud" data-hud aria-hidden="true">
+            <div class="hud-head">
+              <span class="hud-dot"></span>
+              <span data-hud-title>Lesson 12 · Navigation</span>
+            </div>
+            <dl class="hud-grid" data-hud-live>
+              <div><dt>Altitude</dt><dd><b data-alt>0</b> ft</dd></div>
+              <div><dt>Heading</dt><dd><b data-hdg>090</b>°</dd></div>
+              <div><dt>Ground speed</dt><dd><b data-gs>0</b> kt</dd></div>
+              <div><dt>Next</dt><dd data-next>Reservoir turn</dd></div>
+            </dl>
+            <dl class="hud-grid hud-logged" data-hud-logged>
+              <div><dt>Flight time</dt><dd><b>1.1</b> h</dd></div>
+              <div><dt>Role</dt><dd>Dual</dd></div>
+              <div><dt>Landings</dt><dd><b>1</b></dd></div>
+              <div><dt>Recorded</dt><dd>23.4 h total</dd></div>
+            </dl>
+            <p class="hud-foot">Example flight. Not navigation data.</p>
+          </aside>
+
+          <div class="captions" data-captions>
+            <article class="caption" data-stage="0">
+              <h2>Before the lesson</h2>
+              <p>Lesson 12 is navigation. Your preparation notes and the questions for your instructor are already attached to it.</p>
+            </article>
+            <article class="caption" data-stage="1">
+              <h2>In the air</h2>
+              <p>Boplo isn’t in the cockpit. You fly the lesson with your instructor and check weather and NOTAMs through official sources.</p>
+            </article>
+            <article class="caption" data-stage="2">
+              <h2>After landing</h2>
+              <p>Log the flight while it’s fresh: time, role, landings and the debrief. The track sits on the map beside it.</p>
+            </article>
+            <article class="caption" data-stage="3">
+              <h2>Toward your licence</h2>
+              <p>Every flight adds to one record, so you can see the hours build toward the goal you set.</p>
+            </article>
+          </div>
+
+          <ol class="stops" data-stops aria-hidden="true">
+            <li>Depart runway 09</li>
+            <li>Reservoir turn</li>
+            <li>Ridge crossing</li>
+            <li>Town overhead</li>
+            <li>Diversion check</li>
+            <li>Final approach</li>
+            <li>Full stop</li>
+          </ol>
+          <div class="stops-bar" aria-hidden="true"><i data-stops-fill></i></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Statement -->
+    <section class="statement" aria-label="Why Boplo Flight">
+      <p>Flight training is spread across a paper logbook, a notes app and whatever you remember from the debrief. <span>Boplo keeps the next lesson, the last one and every hour in between in one place.</span></p>
+    </section>
+
+    <!-- The desk -->
+    <section class="desk" id="desk">
+      <div class="desk-inner">
+        <header class="section-head">
+          <h2>Everything between one lesson and the next.</h2>
+          <p>The flight desk is built around the licence you chose and the lesson you have booked. Here it is with an example account.</p>
+        </header>
+
+        <div class="bento">
+          <!-- Prepare -->
+          <article class="tile tile-prep">
+            <div class="ui ui-prep">
+              <div class="ui-bar"><span>Up next</span><span class="chip">Sat 29 · 10:30</span></div>
+              <h3 class="ui-title">Lesson 12 · Navigation</h3>
+              <ul class="checks">
+                <li class="done">Plot the route and mark the turn points</li>
+                <li class="done">Work out diversion timings</li>
+                <li>Read through the radio calls</li>
+              </ul>
+              <div class="ui-sub">Questions for your instructor</div>
+              <p class="quote">When would you divert if the reservoir turn is late?</p>
+              <p class="quote">Which frequency do I change to first after departure?</p>
+            </div>
+            <div class="tile-copy">
+              <h3>Prepare for the next lesson</h3>
+              <p>Keep preparation notes and questions with the lesson they belong to, so the briefing starts where you left off.</p>
+            </div>
+          </article>
+
+          <!-- Track -->
+          <article class="tile tile-track dark">
+            <div class="ui ui-track">
+              <svg viewBox="0 0 400 260" data-minimap role="img" aria-label="Example flight track drawn on a map">
+                <defs>
+                  <pattern id="mm-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="rgba(158,216,255,.08)"/></pattern>
+                </defs>
+                <rect width="400" height="260" fill="url(#mm-grid)"/>
+                <g data-minimap-contours fill="none" stroke="rgba(10,98,255,.35)" stroke-width="1"></g>
+                <path data-minimap-route fill="none" stroke="#9ED8FF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="track-meta"><span>EGHP → EGHP</span><span>1.1 h · PA-28</span></div>
+            </div>
+            <div class="tile-copy">
+              <h3>See the track</h3>
+              <p>Add the points you flew and the route sits on satellite imagery next to the flight it came from.</p>
+            </div>
+          </article>
+
+          <!-- Log -->
+          <article class="tile tile-log">
+            <div class="ui ui-log">
+              <div class="ui-bar"><span>Flight record</span><span class="chip chip-blue">Saved</span></div>
+              <dl class="record">
+                <div><dt>Date</dt><dd>Sat 29 Oct</dd></div>
+                <div><dt>Aircraft</dt><dd>PA-28 · G-BOPL</dd></div>
+                <div><dt>Route</dt><dd>EGHP · Popham, local nav</dd></div>
+                <div><dt>Time</dt><dd>1 h 06 min</dd></div>
+                <div><dt>Role</dt><dd>Dual instruction</dd></div>
+                <div><dt>Landings</dt><dd>1</dd></div>
+              </dl>
+              <p class="debrief">“Turn at the reservoir was 40 seconds late. Start the timing from overhead, not abeam.”</p>
+            </div>
+            <div class="tile-copy">
+              <h3>Log what you flew</h3>
+              <p>Time, role, aircraft, landings and the debrief notes, recorded against the lesson.</p>
+            </div>
+          </article>
+
+          <!-- Hours -->
+          <article class="tile tile-hours">
+            <div class="ui ui-hours">
+              <div class="ui-bar"><span>Recorded time</span><span class="legend"><i class="k-dual"></i>Dual <i class="k-solo"></i>Solo</span></div>
+              <div class="bars" role="img" aria-label="Example monthly hours: June 3.2, July 4.6, August 2.1, September 6.0, October 7.5">
+                <div style="--d:2.8;--s:.4"><span>Jun</span></div>
+                <div style="--d:4.1;--s:.5"><span>Jul</span></div>
+                <div style="--d:2.1;--s:0"><span>Aug</span></div>
+                <div style="--d:4.6;--s:1.4"><span>Sep</span></div>
+                <div style="--d:5.5;--s:2"><span>Oct</span></div>
+              </div>
+            </div>
+            <div class="tile-copy">
+              <h3>Watch the hours add up</h3>
+              <p>See flight time by month and by role, alongside the hours you already had when you joined.</p>
+            </div>
+          </article>
+
+          <!-- Licence -->
+          <article class="tile tile-goal dark">
+            <div class="ui ui-goal">
+              <div class="ring" style="--p:.52" role="img" aria-label="23.4 of a 45 hour goal recorded">
+                <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="ring-fill" cx="60" cy="60" r="52"/></svg>
+                <div><b>23.4</b><span>of 45 h goal</span></div>
+              </div>
+              <dl class="goal-meta">
+                <div><dt>Licence</dt><dd>PPL(A)</dd></div>
+                <div><dt>Authority</dt><dd>UK CAA</dd></div>
+                <div><dt>Target date</dt><dd>June 2027</dd></div>
+              </dl>
+            </div>
+            <div class="tile-copy">
+              <h3>Built around your licence</h3>
+              <p>Choose the licence, the authority and a date that belongs to you. The goal is yours to set.</p>
+            </div>
+          </article>
+        </div>
+        <p class="footnote">Example account. Your instructor and your licensing authority decide what counts toward a licence.</p>
+      </div>
+    </section>
+
+    <!-- Rules -->
+    <section class="rules" id="rules">
+      <header class="section-head">
+        <h2>Clear preparation. Never false certainty.</h2>
+        <p>Boplo is training support. These are the rules it runs on.</p>
+      </header>
+      <div class="rule-list">
+        <article class="rule">
+          <svg class="spark" aria-hidden="true"><use href="#spark"/></svg>
+          <h3>No clearance to fly. Ever.</h3>
+          <p>Boplo never tells you that you are ready for a flight, a solo or a test. That judgement belongs to your instructor.</p>
+        </article>
+        <article class="rule">
+          <svg class="spark" aria-hidden="true"><use href="#spark"/></svg>
+          <h3>Official information stays official.</h3>
+          <p>Weather, NOTAMs and operating decisions come from the proper sources. Boplo doesn’t replace or summarise them.</p>
+        </article>
+        <article class="rule">
+          <svg class="spark" aria-hidden="true"><use href="#spark"/></svg>
+          <h3>Your record stays yours.</h3>
+          <p>Your notes, flights and hours sit in your account. Edit or delete any flight whenever you like.</p>
+        </article>
+        <article class="rule">
+          <svg class="spark" aria-hidden="true"><use href="#spark"/></svg>
+          <h3>Keep your official logbook.</h3>
+          <p>Boplo is a personal record that explains how you got here. It sits alongside your logbook, not in place of it.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing" id="pricing">
+      <div class="pricing-inner">
+        <header class="section-head">
+          <h2>Start with the training you’re actually doing.</h2>
+          <p>Sign in, choose your licence and add the next lesson. One plan, no subscription.</p>
+        </header>
+        <div class="plan">
+          <div class="plan-price">
+            <span class="plan-name">Flight Plan</span>
+            <strong>£9.99</strong>
+            <span class="plan-note">One-off</span>
+          </div>
+          <ul class="plan-list">
+            <li>Your licence route and target date</li>
+            <li>Preparation notes for every lesson</li>
+            <li>Flight records with debrief notes</li>
+            <li>Track maps on satellite imagery</li>
+            <li>Hours by month and by role</li>
+          </ul>
+          <div class="plan-cta">
+            <a class="btn btn-blue" href="/flight-app.html">Open my flight desk <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+            <a class="text-link" href="/flight-app.html?preview=1">Try the example desk first</a>
+            <p>For training support. Not flight instruction or operational approval.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Questions -->
+    <section class="faq" id="questions">
+      <header class="section-head">
+        <h2>Worth knowing before you start.</h2>
+      </header>
+      <div class="faq-list">
+        <details>
+          <summary>Is Boplo a flight school or a course?</summary>
+          <p>No. Boplo doesn’t teach you to fly. It keeps your preparation, flights and hours organised around the training you’re already doing with your school and instructor.</p>
+        </details>
+        <details>
+          <summary>Which licences does it support?</summary>
+          <p>You can set a goal of PPL(A), LAPL or a next rating, or choose “still exploring” if you haven’t started. You also pick your licensing authority and country of training.</p>
+        </details>
+        <details>
+          <summary>Does it replace my logbook?</summary>
+          <p>No. Keep your official logbook as your school and authority require. Boplo is a personal record with the context behind each flight.</p>
+        </details>
+        <details>
+          <summary>Does Boplo check weather or NOTAMs?</summary>
+          <p>No. Always check weather, NOTAMs and operating information through official sources and with your instructor.</p>
+        </details>
+        <details>
+          <summary>Can I bring the hours I already have?</summary>
+          <p>Yes. Add your existing flight time when you set up, and it’s kept separate from the flights you log in Boplo.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Final call -->
+    <section class="final">
+      <div class="final-card">
+        <svg class="final-contours" data-final-contours viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+        <svg class="final-spark" aria-hidden="true"><use href="#spark"/></svg>
+        <h2>Make the next lesson count.</h2>
+        <p>Set your licence, add Lesson 1 or Lesson 21, and keep everything after it in one place.</p>
+        <div class="cta-row">
+          <a class="btn btn-light" href="/flight-app.html">Open my flight desk <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+          <a class="btn btn-ghost" href="/flight-app.html?preview=1">Try the example desk</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <img src="assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163">
+        <p>A flight desk for student pilots. Prepare, log and see the hours build.</p>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div><h3>Product</h3><a href="#desk">The desk</a><a href="#pricing">Pricing</a><a href="/flight-app.html?preview=1">Example desk</a></div>
+        <div><h3>Account</h3><a href="/flight-app.html">Sign in</a><a href="/flight-app.html">Open flight desk</a></div>
+      </nav>
+    </div>
+    <p class="footer-legal">Boplo supports preparation and record keeping. It is not flight instruction, operational approval, or a substitute for your instructor and official aviation information. © <span data-year>2026</span> Boplo</p>
+  </footer>
 </body>
 </html>

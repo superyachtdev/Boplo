@@ -10,7 +10,56 @@
     <section class="w-cta"><div class="w-wrap w-reveal"><span class="w-eyebrow">YOUR NEXT MOVE STARTS HERE</span><h2>Get the rizz.<br>Keep the credit.</h2><p>Three free chat reads. No card required. Keep what sounds like you.</p><button class="w-button gradient" data-wingman-start>Try Boplo free ↗</button></div></section>
     <footer class="w-footer"><div class="w-wrap"><a class="w-logo" href="#top" aria-label="Boplo home"><i aria-hidden="true"></i><span>boplo</span></a><small>AI rizz that sounds like you. · © ${new Date().getFullYear()} Boplo</small></div></footer>`;
   document.body.prepend(site);
+  // Boplo Landing: the marketing surface deliberately stays separate from the
+  // authenticated product below, so the relocation direction can evolve without
+  // disrupting the existing account flow.
+  site.innerHTML = `
+    <div class="l-noise" aria-hidden="true"></div>
+    <div class="l-wrap">
+      <header class="l-nav">
+        <a class="l-brand" href="#top" aria-label="Boplo Landing home"><i aria-hidden="true"></i><span>boplo</span><b>landing</b></a>
+        <nav><a href="#how">How it works</a><a href="#cities">Cities</a><a href="#locals">For locals</a><button data-wingman-start onclick="document.querySelector('#modal')?.classList.remove('hidden')">Build my move plan <span>↗</span></button></nav>
+      </header>
+    </div>
+    <main id="top">
+      <section class="l-hero">
+        <div class="l-wrap l-hero-grid">
+          <div class="l-hero-copy">
+            <p class="l-kicker"><i></i> BUILT FOR THE MOVE, NOT THE MOODBOARD</p>
+            <h1>Make your next<br>city <em>make sense.</em></h1>
+            <p class="l-lead">Your personal plan for moving abroad—real costs, the right areas, and every next step before you land.</p>
+            <div class="l-actions"><button class="l-primary" data-wingman-start onclick="document.querySelector('#modal')?.classList.remove('hidden')">Build my move plan <span>↗</span></button><a href="#how">See how it works <span>↓</span></a></div>
+            <p class="l-note"><b>Free to start.</b> A clear answer before a big decision.</p>
+          </div>
+          <div class="l-hero-art" aria-label="Illustrative Boplo city move plan">
+            <div class="l-orbit l-orbit-one"></div><div class="l-orbit l-orbit-two"></div><div class="l-sun"></div>
+            <div class="l-map"><span class="l-map-line one"></span><span class="l-map-line two"></span><span class="l-map-line three"></span><span class="l-pin p1"></span><span class="l-pin p2"></span><span class="l-pin p3"></span></div>
+            <article class="l-plan-card">
+              <div class="l-card-head"><span><i></i> YOUR MOVE PLAN</span><b>01 / 04</b></div>
+              <div class="l-city-row"><div class="l-city-mark">BCN</div><div><small>DESTINATION</small><strong>Barcelona</strong><p>September 2027</p></div></div>
+              <div class="l-plan-score"><span>MOVE REALITY</span><b>Possible <i>●</i></b><p>With a €3,150 first-month target.</p></div>
+              <div class="l-mini-route"><span>Manchester</span><i></i><span>Barcelona</span></div>
+            </article>
+            <div class="l-float-card l-float-one"><span>EST. MONTHLY</span><b>€1,180</b><small>in your range</small></div>
+            <div class="l-float-card l-float-two"><i>✦</i><div><span>LOCAL TAKE</span><b>Ask Maya about Gràcia</b></div></div>
+          </div>
+        </div>
+      </section>
+      <section class="l-rail" aria-label="What Boplo helps with"><div><span>MOVE WITH CLARITY</span><i>✦</i><span>KNOW YOUR FIRST MONTH</span><i>✦</i><span>LAND LIKE A LOCAL</span><i>✦</i><span>MOVE WITH CLARITY</span><i>✦</i><span>KNOW YOUR FIRST MONTH</span><i>✦</i></div></section>
+      <section class="l-intro" id="how"><div class="l-wrap"><p class="l-kicker l-dark-kicker"><i></i> A BETTER WAY TO BEGIN</p><div class="l-intro-grid"><h2>Moving abroad<br>shouldn’t feel like<br><em>guesswork.</em></h2><div><p>Rent listings, TikToks, group chats and twenty open tabs are not a plan. Boplo turns your move into a clear route—from the money you need to the things you should do first.</p><a href="#cities">Explore the first cities <span>↘</span></a></div></div></div></section>
+      <section class="l-steps"><div class="l-wrap"><div class="l-section-head"><p class="l-kicker"><i></i> YOUR MOVE, IN ORDER</p><h2>One decision.<br>One clear route.</h2></div><div class="l-steps-grid"><article><span>01</span><div class="l-step-icon l-icon-pin"></div><h3>Tell us your move.</h3><p>Where you’re going, when you’re leaving, what you can spend and what matters to you.</p></article><article><span>02</span><div class="l-step-icon l-icon-grid"></div><h3>See the reality.</h3><p>Get a real first-month target, area direction and the risks worth sorting early.</p></article><article><span>03</span><div class="l-step-icon l-icon-spark"></div><h3>Land prepared.</h3><p>Follow a personalised pre-arrival and first-week plan, built around your move.</p></article></div></div></section>
+      <section class="l-plan-section"><div class="l-wrap"><div class="l-plan-layout"><div class="l-plan-copy"><p class="l-kicker"><i></i> NOT ANOTHER GENERIC CITY GUIDE</p><h2>Know the number<br>before the move.</h2><p>See the things that actually decide whether a move works: upfront costs, a sensible buffer, neighbourhood fit, and the setup jobs waiting for you on the other side.</p><ul><li><b>First-month target</b><span>Deposit, rent, setup and breathing room.</span></li><li><b>Your area direction</b><span>Based on your lifestyle, commute and budget.</span></li><li><b>A plan that moves</b><span>From “thinking about it” to day one.</span></li></ul></div><div class="l-breakdown"><div class="l-breakdown-top"><span>BARCELONA · SEPT 2027</span><b>YOUR FIRST MONTH</b></div><div class="l-total"><small>REALISTIC TARGET</small><strong>€3,150</strong><p>Built around your move, not a city average.</p></div><div class="l-cost"><span>First rent + deposit</span><b>€1,980</b><i style="--w:82%"></i></div><div class="l-cost"><span>Food, travel + setup</span><b>€690</b><i style="--w:48%"></i></div><div class="l-cost"><span>Keep-back buffer</span><b>€480</b><i style="--w:32%"></i></div><footer><span>MOVE REALITY</span><b>Possible with a plan <i>●</i></b></footer></div></div></div></section>
+      <section class="l-cities" id="cities"><div class="l-wrap"><div class="l-cities-top"><div><p class="l-kicker l-dark-kicker"><i></i> STARTING SMALL. GOING FAR.</p><h2>Three cities.<br>Done properly.</h2></div><p>We are beginning with a small set of places where moving young, alone or for the first time should feel less impossible.</p></div><div class="l-city-cards"><article class="l-city-card london"><div class="l-city-visual"><span>LDN</span><i></i><i></i><i></i></div><div><small>UNITED KINGDOM</small><h3>London</h3><p>For ambition, energy and a very real budget.</p><b>Move plan coming first</b></div></article><article class="l-city-card barcelona"><div class="l-city-visual"><span>BCN</span><i></i><i></i><i></i></div><div><small>SPAIN</small><h3>Barcelona</h3><p>For sun, study and building a life that spills outside.</p><b>Move plan coming first</b></div></article><article class="l-city-card amsterdam"><div class="l-city-visual"><span>AMS</span><i></i><i></i><i></i></div><div><small>NETHERLANDS</small><h3>Amsterdam</h3><p>For big ideas, bikes and careful housing choices.</p><b>Move plan coming first</b></div></article></div></div></section>
+      <section class="l-locals" id="locals"><div class="l-wrap l-locals-inner"><div><p class="l-kicker"><i></i> HUMAN HELP, WHEN IT MATTERS</p><h2>Plans get you<br>there. Locals help<br>you <em>belong.</em></h2><p>Later, Boplo will connect movers with carefully vetted people who have already made the move—the local knowledge no database can give you.</p><a href="#top">Become an early local <span>↗</span></a></div><div class="l-local-collage"><article class="l-local-portrait portrait-one"><div class="l-face face-one"></div><span>“I moved here for uni too.”</span></article><article class="l-local-portrait portrait-two"><div class="l-face face-two"></div><span>MAYA · BARCELONA</span></article><div class="l-local-prompt"><i>?</i><p>“Is this area actually good for students?”</p><b>Ask someone who knows.</b></div></div></div></section>
+      <section class="l-final"><div class="l-wrap"><p class="l-kicker"><i></i> YOUR NEXT CITY IS WAITING</p><h2>Make the move<br>feel <em>possible.</em></h2><p>Start with a clear picture of what it takes. The rest gets easier from there.</p><button class="l-primary" data-wingman-start onclick="document.querySelector('#modal')?.classList.remove('hidden')">Build my move plan <span>↗</span></button></div></section>
+    </main>
+    <footer class="l-footer"><div class="l-wrap"><a class="l-brand" href="#top"><i></i><span>boplo</span><b>landing</b></a><p>For the move ahead. © ${new Date().getFullYear()} Boplo.</p><div><a href="#how">How it works</a><a href="#cities">Cities</a><a href="#locals">For locals</a></div></div></footer>`;
   site.querySelectorAll('[data-wingman-start]').forEach(button => button.addEventListener('click', () => document.querySelector('#modal')?.classList.remove('hidden')));
+  // The landing surface is replaced dynamically above. Delegation keeps every
+  // current and future move-plan call-to-action connected to the early-access form.
+  document.addEventListener('click', event => {
+    if (event.target.closest('#wingman-site [data-wingman-start]')) document.querySelector('#modal')?.classList.remove('hidden');
+  });
   const observer = new IntersectionObserver(entries => entries.forEach(entry => {
     if (entry.isIntersecting) { entry.target.classList.add('on'); observer.unobserve(entry.target); }
   }), { threshold: .12 });
