@@ -49,6 +49,15 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Voice debrief:** browser speech recognition fills the debrief notes; `POST /flight/debrief` uses Gemini (`GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`) to tidy only what the student said into went well / work on / prepare / questions, and can add prep items and questions to the next lesson.
 - **Public cost planner:** `dist/plan.html` (no sign-in). Saves the plan to localStorage; signing up pre-fills setup from it. Linked from the landing nav, pricing and footer.
 
+## Pilot tools (2026-10-21, Claude, second round)
+
+- **Weather lookup:** `GET /flight/weather?ids=CODE&lat&lng` returns the exact station's METAR + TAF (`exact:true`), falling back to the nearest stations by bbox. The app searches any ICAO code or airfield name (home country first, then `dist/airfields/codes.json`, built by `scripts/build-airfields.mjs`). Decodes US RMK remarks (AO1/AO2, SLP, T-group, pressure tendency, PRESRR/PRESFR) and colour states. Live NOAA data; only `?preview=1` shows example data.
+- **Nav log (#navlog):** plot a route or start from a logged flight's route; TAS, wind, variation (user-entered), fuel burn, taxi and reserve. Per leg: TT, distance, WCA, TH, MH, GS, time, fuel. "Use wind from the departure METAR", printable kneeboard, up to 8 saved plans in profile `navlogs`. Labelled as a planning aid.
+- **Currency (#currency):** user-entered medical / rating / FAA flight review / solo endorsement / custom dates in profile `docs`. Passenger currency (3 landings in 90 days), FAA night currency from flight `nightLandings`, UK/EASA SEP revalidation-by-experience bars (FCL.740.A). Sources linked.
+- **Logbook:** Export CSV, Print (EASA/UK or FAA-style columns, landscape), Import CSV with a preview → `POST /flight/flights/import` (≤500 rows per call, returns per-row errors).
+- **Instructor share:** Progress → "Share with your instructor". `POST /flight/share` returns a 48-hex token (only its SHA-256 is stored as `shareHash`); `DELETE` revokes. Public read-only `dist/share.html?t=` calls `GET /flight/shared` (first name, next lesson, prep, questions, syllabus, totals, last 12 flights with debriefs). `share.html?t=example` shows a sample.
+- **Radio practice (#radio):** UK/ICAO or FAA scenarios using the student's own registration spelled phonetically. Speech recognition or typing; checks each required element, shows a model call; best scores in profile `radio`. Labelled as practice.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

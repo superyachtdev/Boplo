@@ -629,3 +629,67 @@ details.more .fields{padding:0 16px 16px}
 .sheet-body,.sheet-body .group,.sheet-body .fields{min-width:0}
 .tidied .actions .right{flex-wrap:wrap}
 @media (max-width:640px){.tidied .actions .right{margin-left:0}.tidied .actions .right .btn{white-space:normal;height:auto;min-height:36px;padding:8px 14px;text-align:left}}
+
+/* ---------- sidebar with more pages ---------- */
+.side-in{gap:22px}
+.side nav{overflow-y:auto;min-height:0;flex:1 1 auto;align-content:start;scrollbar-width:thin;scrollbar-color:rgba(158,216,255,.2) transparent}
+.side nav a{height:42px;flex:none}
+@media (max-height:760px){.side nav a{height:38px;font-size:14px}.side-in{gap:16px;padding-top:20px}}
+
+/* ---------- nav log ---------- */
+.nav-tools{display:grid;gap:10px;margin-top:14px}
+.nav-tools .btn{justify-self:start}
+.plog table td,.plog table th{white-space:nowrap}
+.plog tr.bad td{color:var(--danger)}
+.plog tfoot td{font-weight:650}
+.nav-sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--hair-l);border-radius:14px;overflow:hidden;margin:16px 0 10px}
+.nav-sum>div{background:var(--well);padding:14px 16px;display:grid;gap:3px}
+.nav-sum span{font-size:12.5px;color:var(--ink-3);font-weight:550}
+.nav-sum b{font-size:22px;font-weight:640;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.nav-sum em{font-style:normal;font-size:12px;color:var(--ink-3)}
+.saved-navs{margin-top:22px;border-top:1px solid var(--hair-l);padding-top:16px;display:grid;gap:8px}
+.saved-navs h3{font-size:14px;font-weight:620}
+.saved-nav{display:flex;align-items:center;gap:8px;border:1px solid var(--hair-l);border-radius:var(--r-ui);padding:4px 4px 4px 0}
+.saved-nav>button:first-child{flex:1;min-width:0;text-align:left;padding:8px 14px;display:grid;gap:2px}
+.saved-nav small{color:var(--ink-3);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- currency ---------- */
+.cur-list{display:grid;gap:12px;align-content:start}
+.cur{display:grid;gap:10px;border-left:4px solid var(--hair-l)}
+.cur.ok{border-left-color:var(--ok)}.cur.warn{border-left-color:#E0A100}.cur.bad{border-left-color:var(--danger)}
+.cur-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.cur-top h2{font-size:17px;font-weight:620}
+.cur p{color:var(--ink-2);font-size:14.5px}
+.chip.cur-ok{background:rgba(28,140,94,.1);color:var(--ok);border-color:transparent}
+.chip.cur-warn{background:rgba(224,161,0,.13);color:#8A5D00;border-color:transparent}
+.chip.cur-bad{background:rgba(217,58,74,.08);color:var(--danger);border-color:transparent}
+.chip.cur-none{color:var(--ink-3)}
+.cur-row{display:flex;gap:8px;align-items:center}
+.cur-row input{flex:1;min-width:0}
+.cur .field{max-width:360px}
+
+/* ---------- share ---------- */
+.share-link{display:flex;gap:8px}
+.share-link input{flex:1;min-width:0;font-size:13px;height:40px;border-radius:var(--r-ui);border:1px solid var(--hair-l);padding:0 12px;background:var(--well);color:var(--ink)}
+.share-tile .actions{display:flex;justify-content:space-between;align-items:center;gap:10px}
+
+/* ---------- radio ---------- */
+.radio{display:grid;gap:16px}
+.atc{border-radius:16px;padding:16px 18px;background:var(--night);color:#fff;display:grid;gap:8px;justify-items:start}
+.atc.you{background:var(--well);color:var(--ink)}
+.atc span,.model span{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ice)}
+.atc.you span,.model span{color:var(--electric)}
+.atc p{font-size:clamp(17px,1.8vw,20px);line-height:1.4}
+.atc .btn-line{color:#fff;border-color:var(--hair-d)}
+.radio textarea{min-height:96px}
+.radio-res{display:grid;gap:16px;border-top:1px solid var(--hair-l);padding-top:16px}
+.radio-checks{list-style:none;padding:0;display:grid;gap:6px;font-size:14.5px}
+.radio-checks .ok{color:var(--ok)}.radio-checks .miss{color:var(--danger)}
+.model{display:grid;gap:6px;background:var(--well);border-radius:14px;padding:14px 16px}
+.model p{font-size:15.5px}
+@media (max-width:640px){.nav-sum{grid-template-columns:1fr}.share-link{flex-direction:column}.cur .field{max-width:none}}
+.plog.table-wrap{display:block!important;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.atc .btn.btn-line{background:transparent;color:#fff;border-color:rgba(158,216,255,.3)}
+@media (max-width:900px){.nav-inputs{order:2}}
+#sheet .table-wrap{display:block!important}
+@media (max-width:640px){.plog table{font-size:13px}.plog th,.plog td{padding-left:7px!important;padding-right:7px!important}}

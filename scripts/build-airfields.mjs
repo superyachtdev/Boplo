@@ -64,4 +64,5 @@ for (const [cc, rows] of Object.entries(byCountry)) {
   writeFileSync(join(out, cc + '.json'), JSON.stringify({ v: 1, country: cc, built, source: 'OurAirports (public domain), ourairports.com', fields: ['code', 'name', 'lat', 'lng', 'type', 'elevationFt', 'city', 'iata', 'runways[ident,lengthM,surface]', 'freqs[type,desc,mhz]'], rows }));
 }
 writeFileSync(join(out, 'index.json'), JSON.stringify({ built, source: 'OurAirports (public domain)', counts }));
+writeFileSync(join(out, 'codes.json'), JSON.stringify(Object.fromEntries(Object.entries(byCountry).filter(([cc]) => /^[A-Z]{2}$/.test(cc)).map(([cc, rows]) => [cc, rows.map(r => r[0]).join(' ')]))));
 console.log(`Wrote ${Object.keys(counts).length} countries, ${Object.values(counts).reduce((a, b) => a + b, 0)} airfields to ${out}`);

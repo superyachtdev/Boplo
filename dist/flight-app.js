@@ -50,7 +50,7 @@
 
   /* ---------------- state ---------------- */
   let state = { user: null, profile: null, flights: [], mapsKey: '' };
-  const ui = { step: 0, q: '', role: 'all', range: '365', mapSel: null };
+  const ui = { step: 0, q: '', role: 'all', range: '365', mapSel: null, wxq: '' };
 
   const PAGES = [
     ['overview', 'Overview', 'overview'],
@@ -58,7 +58,10 @@
     ['progress', 'Progress', 'progress'],
     ['study', 'Study', 'study'],
     ['prepare', 'Prepare', 'prepare'],
+    ['navlog', 'Nav log', 'navlog'],
     ['weather', 'Weather', 'weather'],
+    ['currency', 'Currency', 'currency'],
+    ['radio', 'Radio', 'radio'],
     ['map', 'Map', 'map'],
     ['analytics', 'Analytics', 'analytics']
   ];
@@ -448,7 +451,7 @@
     const q = ui.q.toLowerCase();
     const list = sorted().filter(f => (ui.role === 'all' || f.role === ui.role) && (!q || [f.departure, f.arrival, f.aircraft, f.registration, f.instructor, f.lesson, f.notes, f.date].join(' ').toLowerCase().includes(q)));
     const totalM = sum(list, f => f.minutes);
-    shell('logbook', { title: 'Logbook', sub: 'Every flight you’ve logged, with the context behind it.', actions: '<button class="btn btn-blue btn-has-spark" data-add>Log a flight ' + spark + '</button>' },
+    shell('logbook', { title: 'Logbook', sub: 'Every flight you’ve logged, with the context behind it.', actions: `${state.flights.length ? '<button class="btn btn-line" data-print>Print</button><button class="btn btn-line" data-csv>Export CSV</button>' : ''}<button class="btn btn-line" data-import>Import</button><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button>` },
       state.flights.length ? `
       <div class="toolbar">
         <label class="search">${ico('search')}<span class="sr">Search flights</span><input type="search" data-q value="${esc(ui.q)}" placeholder="Search airfield, lesson, aircraft…"></label>
@@ -473,6 +476,9 @@
     if (qi) qi.oninput = () => { ui.q = qi.value; const pos = qi.selectionStart; logbook(); const n = $('[data-q]'); n.focus(); n.setSelectionRange(pos, pos); };
     $$('[data-role]').forEach(b => b.onclick = () => { ui.role = b.dataset.role; logbook(); });
     const c = $('[data-clear]'); if (c) c.onclick = () => { ui.q = ''; ui.role = 'all'; logbook(); };
+    const pb = $('[data-print]'); if (pb) pb.onclick = printLogbook;
+    const cb = $('[data-csv]'); if (cb) cb.onclick = exportCSV;
+    $('[data-import]').onclick = importSheet;
     $$('tbody tr').forEach(tr => tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tr.click(); } });
   }
 
@@ -703,11 +709,12 @@
           ${s.stages.map((stage, si) => { const items = s.items.filter(i => i.stage === si); const d = items.filter(i => st[i.id] === 'd').length; return `<div class="syl-stage"><div class="syl-stage-head"><h3>${esc(stage)}</h3><span>${d}/${items.length}</span></div><div class="syl-items">${items.map(i => `<button type="button" class="syl-item s-${st[i.id] || 'n'}" data-syl="${esc(i.id)}" aria-label="${esc(i.name)}: ${STATUS[st[i.id] || '']}"><span class="syl-dot" aria-hidden="true"></span><span class="syl-id">${esc(i.id)}</span><span class="syl-name">${esc(i.name)}</span><span class="syl-state">${STATUS[st[i.id] || '']}</span></button>`).join('')}</div></div>`; }).join('')}
           <p class="form-error" role="alert"></p>
         </section>
-        <section class="tile dark span-4 ms-tile" aria-labelledby="ms-h">${contours('b')}
+        <div class="span-4" style="display:grid;gap:16px;align-content:start"><section class="tile dark ms-tile" aria-labelledby="ms-h">${contours('b')}
           <div class="tile-head"><h2 id="ms-h">Milestones</h2></div>
           ${ms.length ? `<ol class="ms-list">${ms.map((m, i) => `<li><span class="ms-ic" aria-hidden="true"><svg><use href="#spark"/></svg></span><span class="ms-t"><b>${esc(m.title)}</b><small>${esc(m.date ? fmtDate(m.date, { day: 'numeric', month: 'short', year: 'numeric' }) : '')}${m.detail ? ' · ' + esc(m.detail) : ''}</small></span><button type="button" class="btn btn-light btn-sm" data-share="${i}">Share</button></li>`).join('')}</ol>` : `<div class="empty"><h3>Your first milestone is close.</h3><p>Log your first flight and Boplo starts marking the moments: first solo, every 10 hours, your first cross-country.</p></div>`}
-        </section>
+        </section>${shareTile()}</div>
       </div>`);
+    wireShare();
     $$('[data-syl]').forEach(b => b.onclick = async () => {
       const id = b.dataset.syl, next = { '': 'p', p: 'd', d: '' }[st[id] || ''];
       if (next) st[id] = next; else delete st[id];
@@ -888,36 +895,378 @@
     { id: 'EGHI', name: 'Southampton', dist: 17, raw: 'EGHI 211650Z 24012G22KT 210V280 9999 -SHRA FEW018 SCT030CB 14/09 Q1011', obsTime: null, wdir: 240, wspd: 12, fltCat: 'VFR', taf: 'TAF EGHI 211700Z 2118/2218 24012KT 9999 SCT030 TEMPO 2118/2203 7000 -SHRA BKN014 BECMG 2206/2209 30008KT' },
     { id: 'EGLF', name: 'Farnborough', dist: 22, raw: 'EGLF 211650Z 23010KT 9999 FEW035 15/08 Q1012', wdir: 230, wspd: 10, fltCat: 'VFR', taf: '' }
   ] };
-  async function weatherPage() {
-    const p = state.profile, cc = countryCodeOf(p), code = upper(p.airport).split(/[\s·]/)[0];
-    shell('weather', { title: 'Weather', sub: 'Practise reading real METARs and TAFs from the reporting stations nearest your home airfield.' },
-      `<p class="callout warn">A learning tool, not a weather briefing. Before any flight, get an official briefing and talk to your instructor.</p>
+  async function anyAirfield(code) {
+    const c = upper(code).split(/[\s·]/)[0]; if (!c || !window.BoploMap) return null;
+    const home = countryCodeOf(state.profile);
+    let a = home ? BoploMap.findAirfield(await BoploMap.airfields(home), c) : null; if (a) return { ...a, cc: home };
+    try {
+      window.__afCodes = window.__afCodes || fetch('/airfields/codes.json').then(r => r.json());
+      const idx = await window.__afCodes; const cc = Object.keys(idx).find(k => (' ' + idx[k] + ' ').includes(' ' + c + ' '));
+      if (cc) { a = BoploMap.findAirfield(await BoploMap.airfields(cc), c); if (a) return { ...a, cc }; }
+    } catch { }
+    return null;
+  }
+  const RMK = (t, all) => {
+    let m;
+    if (t === 'AO1' || t === 'A01') return ['Station type', 'Automated station without a precipitation sensor.'];
+    if (t === 'AO2' || t === 'A02') return ['Station type', 'Automated station with a precipitation sensor.'];
+    if ((m = t.match(/^SLP(\d{3})$/))) { const v = +m[1] / 10; return ['Sea-level pressure', `${(v < 50 ? 1000 + v : 900 + v).toFixed(1)} hPa.`]; }
+    if (t === 'SLPNO') return ['Sea-level pressure', 'Not available.'];
+    if ((m = t.match(/^T([01])(\d{3})([01])(\d{3})$/))) { const f = (s, n) => (s === '1' ? -1 : 1) * +n / 10; return ['Precise temperature', `${f(m[1], m[2]).toFixed(1)} °C, dew point ${f(m[3], m[4]).toFixed(1)} °C.`]; }
+    if ((m = t.match(/^1([01])(\d{3})$/))) return ['6-hour maximum', `${((m[1] === '1' ? -1 : 1) * +m[2] / 10).toFixed(1)} °C.`];
+    if ((m = t.match(/^2([01])(\d{3})$/))) return ['6-hour minimum', `${((m[1] === '1' ? -1 : 1) * +m[2] / 10).toFixed(1)} °C.`];
+    if ((m = t.match(/^5(\d)(\d{3})$/))) return ['3-hour pressure trend', `Changed by ${(+m[2] / 10).toFixed(1)} hPa (trend type ${m[1]}).`];
+    if ((m = t.match(/^P(\d{4})$/))) return ['Precipitation', `${(+m[1] / 100).toFixed(2)} in in the last hour.`];
+    if (t === 'PRESRR') return ['Pressure', 'Rising rapidly.'];
+    if (t === 'PRESFR') return ['Pressure', 'Falling rapidly.'];
+    if (t === 'TSNO') return ['Sensor', 'Thunderstorm sensor not available.'];
+    if (t === '$') return ['Maintenance', 'The station needs maintenance.'];
+    if (/^(BLU|WHT|GRN|YLO1?|YLO2|AMB|RED)\+?$/.test(t)) return ['Colour state', `Military airfield colour code ${t} (visibility and cloud category).`];
+    return null;
+  };
+  const decodeAll = raw => {
+    const toks = String(raw || '').trim().split(/\s+/), out = [];
+    let rmk = false;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i];
+      if (/^(METAR|SPECI|TAF)$/.test(t)) continue;
+      if (t === 'RMK') { rmk = true; out.push([t, 'Remarks', 'Everything after this is extra local information.']); continue; }
+      const d = rmk ? RMK(t) : decodeToken(t, out.length);
+      out.push([t, ...(d || [rmk ? 'Remark' : '', rmk ? 'Local remark.' : ''])]);
+    }
+    return out;
+  };
+  const EX_ONE = { id: 'KBHM', name: 'Birmingham Intl, AL, US', dist: 0, raw: 'METAR KBHM 211553Z 09004KT 10SM FEW250 23/08 A3026 RMK AO2 SLP241 T02280083', wdir: 90, wspd: 4, fltCat: 'VFR', taf: '' };
+  function stationCard(s, i, af) {
+    const dec = decodeAll(s.raw), comp = windFor(s, af);
+    const cat = c => c ? `<span class="chip cat-${esc(String(c).toLowerCase())}">${esc(c)}</span>` : '';
+    return `<section class="tile ${i === 0 ? 'span-12' : 'span-6'} wx" aria-label="${esc(s.id)} weather">
+      <div class="tile-head"><h2>${esc(s.id)} <span class="wx-name">${esc(s.name || '')}${s.dist ? ` · ${s.dist} NM away` : ''}</span></h2>${cat(s.fltCat)}</div>
+      <div class="wx-raw"><code>${esc(s.raw)}</code></div>
+      ${i === 0 ? `<label class="wx-toggle"><input type="checkbox" data-hide> Try reading it yourself first (hide the decode)</label>` : ''}
+      <div class="wx-dec" data-dec>${dec.map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || 'Not decoded here.')}</span></div>`).join('')}</div>
+      ${comp.length ? `<div class="wx-comp"><h3>Wind on ${esc(af.code)} runways</h3><div class="wx-comp-grid">${comp.map(c => `<div><b>Runway ${c.rw}</b><span>${c.head >= 0 ? `${c.head} kt headwind` : `${-c.head} kt tailwind`} · ${Math.abs(c.cross)} kt crosswind from the ${c.cross >= 0 ? 'right' : 'left'}</span></div>`).join('')}</div><p class="footnote">Practice maths using ${esc(s.id)}’s wind (true) on ${esc(af.code)}’s runways (magnetic), so it’s approximate.${s.dist ? ` Wind ${s.dist} NM away can differ.` : ''}</p></div>` : ''}
+      ${s.taf ? `<details class="more wx-taf" ${i === 0 ? 'open' : ''}><summary>Forecast (TAF)</summary><div class="wx-raw" style="margin:0 16px"><code>${esc(s.taf)}</code></div><div class="wx-dec" style="padding:12px 16px 16px">${decodeAll(s.taf).map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || (/^\d{4}\/\d{4}$/.test(t) ? `Valid from day ${+t.slice(0, 2)} ${t.slice(2, 4)}:00 to day ${+t.slice(5, 7)} ${t.slice(7, 9)}:00 UTC.` : 'Other group.'))}</span></div>`).join('')}</div></details>` : ''}
+    </section>`;
+  }
+  async function weatherPage(query) {
+    const p = state.profile, homeCode = upper(p.airport).split(/[\s·]/)[0];
+    const q = upper(query || ui.wxq || '').trim();
+    shell('weather', { title: 'Weather', sub: 'Look up the live METAR and TAF for any airport or airfield, with every group explained.' },
+      `<form class="wx-search" data-wxform role="search"><label class="search">${ico('search')}<span class="sr">Airport or airfield code</span><input data-wxq list="wx-af" value="${esc(q)}" placeholder="ICAO code or airfield name, e.g. EGLL, KJFK" autocomplete="off" autocapitalize="characters"><datalist id="wx-af"></datalist></label><button class="btn btn-blue" type="submit">Get weather</button>${homeCode ? `<button type="button" class="btn btn-line" data-wxhome>${esc(homeCode)} (home)</button>` : ''}</form>
+       <p class="callout warn" style="margin-top:14px">A learning tool, not a weather briefing. Before any flight, get an official briefing and talk to your instructor.</p>
        <div data-wx style="margin-top:16px"><div class="tile"><p class="hint">Fetching the latest reports…</p></div></div>`);
+    const form = $('[data-wxform]'), inp = $('[data-wxq]');
+    form.onsubmit = e => { e.preventDefault(); ui.wxq = inp.value.trim(); weatherPage(ui.wxq); };
+    const hb = $('[data-wxhome]'); if (hb) hb.onclick = () => { ui.wxq = ''; weatherPage(''); };
+    if (window.BoploMap && countryCodeOf(p)) BoploMap.airfields(countryCodeOf(p)).then(list => { const dl = $('#wx-af'); if (dl) dl.innerHTML = list.filter(a => a.type !== 'S' || /^[A-Z]{4}$/.test(a.code)).slice(0, 5000).map(a => `<option value="${esc(a.code)}">${esc(a.name)}</option>`).join(''); });
     const box = $('[data-wx]');
-    let af = null; try { const list = window.BoploMap ? await BoploMap.airfields(cc) : []; af = BoploMap?.findAirfield(list, code) || null; } catch { }
-    if (!af && !preview) { box.innerHTML = `<div class="tile empty center"><h3>Set your home airfield first.</h3><p>Choose it in your profile and Boplo finds the nearest weather stations.</p><a class="btn btn-blue" href="#profile">Open profile</a></div>`; return; }
+    const target = q || homeCode;
+    // resolve a typed name to a code
+    let code = target, af = null;
+    if (target && !/^[A-Z0-9]{3,4}$/.test(target) && window.BoploMap) { const list = await BoploMap.airfields(countryCodeOf(p)); const hit = list.find(a => a.name.toUpperCase().includes(target)); if (hit) code = hit.code; }
+    if (code) af = await anyAirfield(code);
+    if (!code) { box.innerHTML = `<div class="tile empty center"><h3>Search for an airfield.</h3><p>Type an ICAO code like EGLL or KJFK, or set your home airfield in your profile.</p></div>`; return; }
     let data;
-    try { data = preview ? EX_WX : await api(`weather?lat=${af.lat}&lng=${af.lng}`); }
-    catch (x) { box.innerHTML = `<div class="tile empty center"><h3>Weather reports didn’t load.</h3><p>${esc(x.message)}</p><button class="btn btn-line" data-retry>Try again</button></div>`; $('[data-retry]').onclick = weatherPage; return; }
-    if (!data.stations?.length) { box.innerHTML = `<div class="tile empty center"><h3>No reporting stations nearby.</h3><p>There are no METARs within about 200 NM of ${esc(af?.name || 'your airfield')}.</p></div>`; return; }
-    const cat = c => c ? `<span class="chip cat-${esc(c.toLowerCase())}">${esc(c)}</span>` : '';
-    box.innerHTML = `<div class="grid">${data.stations.map((s, i) => {
-      const dec = decode(s.raw), comp = i === 0 ? windFor(s, af || { runways: [['03/21'], ['08/26']] }) : [];
-      return `<section class="tile ${i === 0 ? 'span-12' : 'span-6'} wx" aria-label="${esc(s.id)} weather">
-        <div class="tile-head"><h2>${esc(s.id)} <span class="wx-name">${esc(s.name || '')}${s.dist != null ? ` · ${s.dist} NM away` : ''}</span></h2>${cat(s.fltCat)}</div>
-        <div class="wx-raw"><code>${esc(s.raw)}</code></div>
-        ${i === 0 ? `<label class="wx-toggle"><input type="checkbox" data-hide> Try reading it yourself first (hide the decode)</label>` : ''}
-        <div class="wx-dec" data-dec>${dec.map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || 'Not decoded here.')}</span></div>`).join('')}</div>
-        ${comp.length ? `<div class="wx-comp"><h3>Wind on ${esc(af?.code || 'your')} runways</h3><div class="wx-comp-grid">${comp.map(c => `<div><b>Runway ${c.rw}</b><span>${c.head >= 0 ? `${c.head} kt headwind` : `${-c.head} kt tailwind`} · ${Math.abs(c.cross)} kt crosswind from the ${c.cross >= 0 ? 'right' : 'left'}</span></div>`).join('')}</div><p class="footnote">Practice maths using ${esc(s.id)}’s wind (true) on ${esc(af?.code || 'your')}’s runways (magnetic), so it’s approximate. Wind ${s.dist ? s.dist + ' NM away' : 'nearby'} can differ from your airfield.</p></div>` : ''}
-        ${s.taf ? `<details class="more wx-taf"><summary>Forecast (TAF)</summary><div class="wx-raw" style="margin:0 16px"><code>${esc(s.taf)}</code></div><div class="wx-dec" style="padding:12px 16px 16px">${decode(s.taf).map(([t, k, v]) => `<div class="wx-row"><code>${esc(t)}</code><span><b>${esc(k || 'Code')}</b> ${esc(v || 'Validity or other group.')}</span></div>`).join('')}</div></details>` : ''}
-      </section>`; }).join('')}</div>
-      <p class="footnote">${preview ? 'Example reports.' : `Source: ${esc(data.source)}, fetched ${esc(new Date(data.fetched).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}.`}</p>`;
+    try {
+      if (preview) data = { source: 'Example', stations: [q && q !== 'EGHP' ? { ...EX_ONE, id: code, name: af?.name || code, raw: EX_ONE.raw.replace('KBHM', code) } : EX_WX.stations[0], ...(q ? [] : [EX_WX.stations[1]])], exact: !!q };
+      else data = await api(`weather?ids=${encodeURIComponent(code)}${af ? `&lat=${af.lat}&lng=${af.lng}` : ''}`);
+    } catch (x) { box.innerHTML = `<div class="tile empty center"><h3>Weather reports didn’t load.</h3><p>${esc(x.message)}</p><button class="btn btn-line" data-retry>Try again</button></div>`; $('[data-retry]').onclick = () => weatherPage(q); return; }
+    if (!data.stations?.length) { box.innerHTML = `<div class="tile empty center"><h3>No reports for ${esc(code)}.</h3><p>${af ? `${esc(af.name)} doesn’t publish a METAR and there are no reporting stations within about 200 NM.` : `We couldn’t find a METAR for ${esc(code)}. Check the code, or try a larger airport nearby.`}</p></div>`; return; }
+    const note = !data.exact && code ? `<p class="callout" style="margin-bottom:16px">${esc(af?.name || code)} doesn’t publish its own METAR. These are the nearest stations that do.</p>` : '';
+    const ref = af || (homeCode ? await anyAirfield(homeCode) : null);
+    box.innerHTML = `${note}<div class="grid">${data.stations.map((s, i) => stationCard(s, i, data.exact ? (af || ref) : ref)).join('')}</div>
+      <p class="footnote">${preview ? 'Example reports in the example desk.' : `Live data from ${esc(data.source)}, fetched ${esc(new Date(data.fetched).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}.`}</p>`;
     const hide = box.querySelector('[data-hide]'); if (hide) hide.onchange = () => box.querySelector('[data-dec]').classList.toggle('hidden', hide.checked);
+  }
+
+  /* ================= nav log (planning log) ================= */
+  const toR = d => d * Math.PI / 180, toD = r => r * 180 / Math.PI, norm360 = d => ((d % 360) + 360) % 360;
+  const bearing = (a, b) => norm360(toD(Math.atan2(Math.sin(toR(b.lng - a.lng)) * Math.cos(toR(b.lat)), Math.cos(toR(a.lat)) * Math.sin(toR(b.lat)) - Math.sin(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.cos(toR(b.lng - a.lng)))));
+  const distNM = (a, b) => { const h = Math.sin(toR(b.lat - a.lat) / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(toR(b.lng - a.lng) / 2) ** 2; return 2 * 3440.065 * Math.asin(Math.sqrt(h)); };
+  const pad3 = n => String(Math.round(norm360(n)) % 360).padStart(3, '0');
+  function legsFor(pts, inp) {
+    const tas = +inp.tas || 0, wd = +inp.wdir || 0, ws = +inp.wspd || 0, vr = (+inp.vari || 0) * (inp.vdir === 'E' ? -1 : 1), burn = +inp.burn || 0;
+    const out = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i], tt = bearing(a, b), d = distNM(a, b), rel = toR(wd - tt);
+      const x = tas ? ws * Math.sin(rel) / tas : 0, ok = Math.abs(x) < 1;
+      const wca = ok ? toD(Math.asin(x)) : NaN, gs = ok ? tas * Math.cos(toR(wca)) - ws * Math.cos(rel) : NaN;
+      const th = tt + wca, mh = th + vr, mins = gs > 0 ? d / gs * 60 : NaN;
+      out.push({ from: a.code || `TP${i}`, to: b.code || (i === pts.length - 1 ? 'END' : `TP${i + 1}`), tt, d, wca, th, mh, gs, mins, fuel: Number.isFinite(mins) ? burn * mins / 60 : NaN, ok: ok && gs > 0 });
+    }
+    return out;
+  }
+  const navStore = () => readJSON(state.profile.navlogs, { logs: [] });
+  function navPage() {
+    const p = state.profile;
+    ui.nav = ui.nav || { name: '', points: [], inp: { tas: p.aircraftTas || 95, wdir: '', wspd: '', vari: '', vdir: 'W', burn: '', unit: 'L', taxi: '', reserve: 45, alt: '' } };
+    const N = ui.nav, inp = N.inp, legs = legsFor(N.points, inp), saved = navStore().logs || [];
+    const tot = { d: sum(legs, l => l.d), m: sum(legs, l => l.mins || 0), f: sum(legs, l => l.fuel || 0) };
+    const resFuel = (+inp.burn || 0) * (+inp.reserve || 0) / 60, allFuel = tot.f + resFuel + (+inp.taxi || 0);
+    const routeFlights = sorted().filter(f => f.points?.length > 1 && f.points.length <= 40);
+    const fmtM = m => Number.isFinite(m) ? `${Math.floor(m / 60) ? Math.floor(m / 60) + ':' + String(Math.round(m % 60)).padStart(2, '0') : Math.round(m) + ' min'}` : '—';
+    shell('navlog', { title: 'Nav log', sub: 'Plot a route, add the forecast wind, and Boplo works out heading, groundspeed, time and fuel for each leg.', actions: `<button class="btn btn-blue btn-has-spark" data-plotnav>${ico('map')} ${N.points.length ? 'Edit route' : 'Plot a route'} ${spark}</button>` },
+      `<p class="callout warn">A planning aid for training. Check every figure against your own calculation, your chart and official weather before you fly.</p>
+      <div class="grid" style="margin-top:16px">
+        <section class="tile span-4 nav-inputs"><div class="tile-head"><h2>Flight details</h2></div>
+          <form class="fields" style="grid-template-columns:1fr 1fr" data-navform novalidate>
+            <label class="field full"><span>Plan name <i>(optional)</i></span><input name="name" value="${esc(N.name)}" maxlength="80" placeholder="e.g. Lesson 12 nav"></label>
+            <label class="field"><span>True airspeed (kt)</span><input name="tas" type="number" min="30" max="300" value="${esc(inp.tas)}"></label>
+            <label class="field"><span>Cruise altitude <i>(ft)</i></span><input name="alt" type="number" min="0" max="20000" step="100" value="${esc(inp.alt)}"></label>
+            <label class="field"><span>Wind from (°T)</span><input name="wdir" type="number" min="0" max="360" value="${esc(inp.wdir)}" placeholder="e.g. 250"></label>
+            <label class="field"><span>Wind speed (kt)</span><input name="wspd" type="number" min="0" max="150" value="${esc(inp.wspd)}" placeholder="e.g. 15"></label>
+            <label class="field"><span>Variation (°)</span><input name="vari" type="number" min="0" max="40" step="0.5" value="${esc(inp.vari)}" placeholder="From your chart"></label>
+            <label class="field"><span>East or west</span><select name="vdir"><option ${inp.vdir === 'W' ? 'selected' : ''} value="W">West (add)</option><option ${inp.vdir === 'E' ? 'selected' : ''} value="E">East (subtract)</option></select></label>
+            <label class="field"><span>Fuel burn per hour</span><input name="burn" type="number" min="0" max="500" step="0.1" value="${esc(inp.burn)}" placeholder="From the POH"></label>
+            <label class="field"><span>Units</span><select name="unit">${['L', 'USG', 'IG', 'kg'].map(u => `<option ${inp.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></label>
+            <label class="field"><span>Taxi and run-up fuel</span><input name="taxi" type="number" min="0" max="200" step="0.1" value="${esc(inp.taxi)}"></label>
+            <label class="field"><span>Reserve (minutes)</span><input name="reserve" type="number" min="0" max="240" value="${esc(inp.reserve)}"></label>
+          </form>
+          <div class="nav-tools">${N.points.length ? '<button type="button" class="btn btn-line btn-sm" data-wxwind>Use wind from the departure METAR</button>' : ''}${routeFlights.length ? `<label class="field"><span>Or start from a flight’s route</span><select data-fromflight><option value="">Choose a flight</option>${routeFlights.slice(0, 30).map(f => `<option value="${esc(f.id)}">${esc(fmtDate(f.date))} · ${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</option>`).join('')}</select></label>` : ''}</div>
+          <p class="footnote" data-wxnote>Wind at height usually differs from the surface report. Use the forecast wind for your cruise level if you have it.</p>
+        </section>
+        <section class="tile span-8"><div class="tile-head"><h2>${esc(N.name || 'Planning log')}</h2><div style="display:flex;gap:8px">${N.points.length > 1 ? '<button class="btn btn-line btn-sm" data-savenav>Save</button><button class="btn btn-ink btn-sm" data-printnav>Print kneeboard</button>' : ''}</div></div>
+          ${N.points.length > 1 ? `<div class="table-wrap plog"><table>
+            <thead><tr><th>Leg</th><th class="r">TT</th><th class="r">Dist</th><th class="r">WCA</th><th class="r">TH</th><th class="r">MH</th><th class="r">GS</th><th class="r">Time</th><th class="r">Fuel</th></tr></thead>
+            <tbody>${legs.map(l => `<tr class="${l.ok ? '' : 'bad'}"><td class="route">${esc(l.from)} → ${esc(l.to)}</td><td class="r">${pad3(l.tt)}°</td><td class="r">${l.d.toFixed(1)}</td><td class="r">${Number.isFinite(l.wca) ? (l.wca >= 0 ? '+' : '−') + Math.abs(l.wca).toFixed(0) + '°' : '—'}</td><td class="r">${Number.isFinite(l.th) ? pad3(l.th) + '°' : '—'}</td><td class="r"><b>${Number.isFinite(l.mh) ? pad3(l.mh) + '°' : '—'}</b></td><td class="r">${Number.isFinite(l.gs) ? Math.round(l.gs) : '—'}</td><td class="r"><b>${fmtM(l.mins)}</b></td><td class="r">${Number.isFinite(l.fuel) && inp.burn ? l.fuel.toFixed(1) : '—'}</td></tr>`).join('')}</tbody>
+            <tfoot><tr><td>Total</td><td></td><td class="r">${tot.d.toFixed(1)}</td><td colspan="4"></td><td class="r">${fmtM(tot.m)}</td><td class="r">${inp.burn ? tot.f.toFixed(1) : '—'}</td></tr></tfoot>
+          </table></div>
+          <div class="nav-sum"><div><span>Distance</span><b>${tot.d.toFixed(1)} NM</b></div><div><span>Flight time</span><b>${fmtM(tot.m)}</b></div><div><span>Fuel needed</span><b>${inp.burn ? `${allFuel.toFixed(1)} ${esc(inp.unit)}` : '—'}</b><em>${inp.burn ? `Trip ${tot.f.toFixed(1)} + taxi ${(+inp.taxi || 0).toFixed(1)} + reserve ${resFuel.toFixed(1)}` : 'Add a fuel burn'}</em></div></div>
+          ${legs.some(l => !l.ok) ? '<p class="form-error">The wind is too strong for this airspeed on at least one leg. Check the wind and TAS.</p>' : ''}
+          <p class="footnote">TT true track · WCA wind correction angle · TH true heading · MH magnetic heading (TH ${inp.vdir === 'E' ? '−' : '+'} ${esc(inp.vari || 0)}° variation, constant along the route) · GS groundspeed in knots. Times exclude climb and descent.</p>`
+        : `<div class="empty"><h3>Start with a route.</h3><p>Plot your departure, turning points and destination on the map. Your legs and headings appear here.</p><button class="btn btn-blue btn-has-spark" data-plotnav>${ico('map')} Plot a route ${spark}</button></div>`}
+          ${saved.length ? `<div class="saved-navs"><h3>Saved plans</h3>${saved.map((s, i) => `<div class="saved-nav"><button type="button" data-loadnav="${i}"><b>${esc(s.name || 'Plan')}</b><small>${esc(s.points.map(x => x.code || '·').filter(x => x !== '·').join(' → ') || `${s.points.length} points`)}</small></button><button type="button" class="icon-btn" data-delnav="${i}" aria-label="Delete plan">${ico('close')}</button></div>`).join('')}</div>` : ''}
+        </section>
+      </div>`);
+    const form = $('[data-navform]');
+    form.oninput = () => { const v = Object.fromEntries(new FormData(form)); N.name = v.name; delete v.name; Object.assign(inp, v); clearTimeout(navPage.t); navPage.t = setTimeout(() => { const pos = document.activeElement?.name; navPage(); if (pos) $(`[data-navform] [name="${pos}"]`)?.focus(); }, 450); };
+    $$('[data-plotnav]').forEach(b => b.onclick = () => {
+      const dlg = document.getElementById('plot'); dlg.showModal();
+      BoploMap.mountPlotter(dlg, { country: countryCodeOf(p), home: upper(p.airport).split(/[\s·]/)[0], points: N.points, onCancel: () => dlg.close(), onDone: ({ points }) => { dlg.close(); BoploMap.airfields(countryCodeOf(p)).then(list => { N.points = points.map(x => { const a = list.find(y => Math.abs(y.lat - x.lat) < .003 && Math.abs(y.lng - x.lng) < .003); return { ...x, code: a ? a.code : '' }; }); navPage(); }); } });
+    });
+    const ff = $('[data-fromflight]'); if (ff) ff.onchange = async () => { const f = state.flights.find(x => x.id === ff.value); if (!f) return; const list = await BoploMap.airfields(countryCodeOf(p)); N.points = f.points.map(x => { const a = list.find(y => Math.abs(y.lat - x.lat) < .003 && Math.abs(y.lng - x.lng) < .003); return { lat: x.lat, lng: x.lng, code: a ? a.code : '' }; }); N.name = N.name || `${upper(f.departure)} → ${upper(f.arrival)}`; navPage(); };
+    const ww = $('[data-wxwind]'); if (ww) ww.onclick = async () => {
+      const first = N.points[0]; ww.disabled = true; ww.textContent = 'Fetching…';
+      try { const d = preview ? EX_WX : await api(`weather?${first.code ? `ids=${encodeURIComponent(first.code)}&` : ''}lat=${first.lat}&lng=${first.lng}`); const s = d.stations?.[0]; if (s && s.wdir != null && s.wdir !== 'VRB') { inp.wdir = s.wdir; inp.wspd = s.wspd; navPage(); toast(`Surface wind from ${s.id}: ${pad3(s.wdir)}° at ${s.wspd} kt.`); } else { ww.textContent = 'No usable wind nearby'; } } catch (x) { ww.textContent = x.message; }
+    };
+    const sv = $('[data-savenav]'); if (sv) sv.onclick = async () => { const st = navStore(); st.logs = [{ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, ...(st.logs || []).filter(x => x.name !== N.name)].slice(0, 8); try { await saveProfile({ navlogs: JSON.stringify(st) }); toast('Plan saved.'); navPage(); } catch (x) { toast(x.message); } };
+    $$('[data-loadnav]').forEach(b => b.onclick = () => { const s = saved[+b.dataset.loadnav]; ui.nav = { name: s.name, points: s.points, inp: { ...inp, ...s.inp } }; navPage(); });
+    $$('[data-delnav]').forEach(b => b.onclick = async () => { const st = navStore(); st.logs.splice(+b.dataset.delnav, 1); try { await saveProfile({ navlogs: JSON.stringify(st) }); navPage(); } catch { } });
+    const pr = $('[data-printnav]'); if (pr) pr.onclick = () => printDoc(`${N.name || 'Planning log'}`, `<h1>${esc(N.name || 'Planning log')}</h1><p class="meta">${esc([fmtDate(todayISO(), { day: 'numeric', month: 'long', year: 'numeric' }), p.aircraft, p.registration, inp.alt ? `${inp.alt} ft` : ''].filter(Boolean).join(' · '))} · TAS ${esc(inp.tas)} kt · W/V ${inp.wdir ? pad3(inp.wdir) : '—'}°/${esc(inp.wspd || '—')} kt · Var ${esc(inp.vari || 0)}°${esc(inp.vdir)}</p>
+      <table><thead><tr><th>Leg</th><th>TT</th><th>Dist</th><th>WCA</th><th>TH</th><th>MH</th><th>GS</th><th>Time</th><th>Fuel</th><th>ETA</th><th>ATA</th></tr></thead><tbody>${legs.map(l => `<tr><td>${esc(l.from)} → ${esc(l.to)}</td><td>${pad3(l.tt)}</td><td>${l.d.toFixed(1)}</td><td>${Number.isFinite(l.wca) ? Math.round(l.wca) : ''}</td><td>${Number.isFinite(l.th) ? pad3(l.th) : ''}</td><td><b>${Number.isFinite(l.mh) ? pad3(l.mh) : ''}</b></td><td>${Number.isFinite(l.gs) ? Math.round(l.gs) : ''}</td><td><b>${fmtM(l.mins)}</b></td><td>${inp.burn && Number.isFinite(l.fuel) ? l.fuel.toFixed(1) : ''}</td><td></td><td></td></tr>`).join('')}</tbody>
+      <tfoot><tr><td>Total</td><td></td><td>${tot.d.toFixed(1)}</td><td colspan="4"></td><td>${fmtM(tot.m)}</td><td>${inp.burn ? tot.f.toFixed(1) : ''}</td><td colspan="2"></td></tr></tfoot></table>
+      ${inp.burn ? `<p>Fuel: trip ${tot.f.toFixed(1)} + taxi ${(+inp.taxi || 0).toFixed(1)} + reserve ${resFuel.toFixed(1)} = <b>${allFuel.toFixed(1)} ${esc(inp.unit)}</b></p>` : ''}
+      <p class="small">Planning aid made with Boplo Flight. Check against your own calculation and official sources.</p>`);
+  }
+  function printDoc(title, body) {
+    const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print.'); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:13px/1.4 -apple-system,Segoe UI,Arial,sans-serif;color:#000;margin:18mm 12mm}h1{font-size:20px;margin:0 0 4px}.meta{color:#333;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #999;padding:5px 6px;text-align:left;vertical-align:top}th{background:#eee;font-weight:600}tfoot td{font-weight:600;background:#f6f6f6}.small{color:#555;font-size:11px;margin-top:14px}@page{size:${body.includes('data-landscape') ? 'A4 landscape' : 'A4'};margin:10mm}</style></head><body>${body}<script>setTimeout(()=>print(),300)<\/script></body></html>`);
+    w.document.close();
+  }
+
+  /* ================= currency and expiry ================= */
+  const addDays = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const endOfCalMonth = (iso, months) => { const d = parseISO(iso); const e = new Date(d.getFullYear(), d.getMonth() + months + 1, 0); return `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, '0')}-${String(e.getDate()).padStart(2, '0')}`; };
+  const docsOf = p => readJSON(p.docs, {});
+  function landingCurrency(field) {
+    const fl = sorted(); let n = 0;
+    for (const f of fl) { n += Number(f[field] || 0); if (n >= 3) return { date: f.date, until: addDays(f.date, 90) }; }
+    return null;
+  }
+  const dueState = until => { if (!until) return ['none', 'Not set']; const d = daysUntil(until); return d < 0 ? ['bad', `Expired ${-d} day${d === -1 ? '' : 's'} ago`] : d <= 60 ? ['warn', d === 0 ? 'Due today' : `Due in ${d} day${d === 1 ? '' : 's'}`] : ['ok', `Valid until ${fmtDate(until, { day: 'numeric', month: 'short', year: 'numeric' })}`]; };
+  function currencyItems() {
+    const p = state.profile, r = regimeOf(p), faa = r === 'faa', docs = docsOf(p), out = [];
+    out.push({ id: 'medical', title: 'Medical certificate', kind: 'date', label: 'Expiry date on your medical', value: docs.medical, until: docs.medical, note: 'From your medical certificate. Validity depends on your age and class.' });
+    if (faa) {
+      out.push({ id: 'review', title: 'Flight review', kind: 'date', label: 'Date of your last flight review (or checkride)', value: docs.review, until: docs.review ? endOfCalMonth(docs.review, 24) : '', note: 'Required every 24 calendar months under 14 CFR § 61.56.', url: 'https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-61/subpart-A/section-61.56' });
+      out.push({ id: 'solo', title: 'Student solo endorsement', kind: 'date', label: 'Date of your latest solo endorsement', value: docs.solo, until: docs.solo ? addDays(docs.solo, 90) : '', note: 'An instructor must update it every 90 days (14 CFR § 61.87).', url: 'https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-61/subpart-C/section-61.87' });
+    } else {
+      out.push({ id: 'rating', title: 'SEP class rating', kind: 'date', label: 'Rating expiry date on your licence', value: docs.rating, until: docs.rating, note: 'Shown on your licence once it’s issued.' });
+    }
+    const day = landingCurrency('landings');
+    out.push({ id: 'pax', title: 'Carrying passengers', kind: 'calc', until: day?.until || '', detail: day ? `3 landings in the last 90 days. Current until ${fmtDate(day.until, { day: 'numeric', month: 'short' })} unless you fly again.` : 'Needs 3 take-offs and landings in the last 90 days.', note: faa ? 'Day rule in 14 CFR § 61.57(a). Tailwheel landings must be to a full stop. Counted from all your logged landings.' : 'FCL.060(b): 3 take-offs, approaches and landings in the same class or type in the last 90 days.', url: faa ? 'https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-61/subpart-A/section-61.57' : 'https://www.transport.gov.mt/PEL-95-Guidance-to-Flight-Instructors-Recording-of-flight-time.pdf-f8182' });
+    if (faa) { const n = landingCurrency('nightLandings'); out.push({ id: 'night', title: 'Carrying passengers at night', kind: 'calc', until: n?.until || '', detail: n ? `3 night full-stop landings in the last 90 days. Current until ${fmtDate(n.until, { day: 'numeric', month: 'short' })}.` : 'Needs 3 full-stop landings at night (1 hour after sunset to 1 hour before sunrise) in the last 90 days.', note: '14 CFR § 61.57(b). Log night landings on each flight to track this.', url: 'https://www.ecfr.gov/current/title-14/chapter-I/subchapter-D/part-61/subpart-A/section-61.57' }); }
+    (docs.custom || []).forEach((c, i) => out.push({ id: 'c' + i, title: c.label, kind: 'custom', value: c.date, until: c.date, i }));
+    return out;
+  }
+  function revalidation() {
+    const p = state.profile, docs = docsOf(p); if (regimeOf(p) === 'faa' || !docs.rating) return null;
+    const start = (() => { const d = parseISO(docs.rating); d.setFullYear(d.getFullYear() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+    const w = state.flights.filter(f => f.date >= start && f.date <= docs.rating);
+    return { start, end: docs.rating, rows: [['Flight time', sum(w, f => f.minutes) / 60, 12, 'h'], ['As pilot in command', sum(w.filter(f => f.role !== 'dual'), f => f.minutes) / 60, 6, 'h'], ['Take-offs and landings', sum(w, f => f.landings), 12, ''], ['With an instructor', sum(w.filter(f => f.role === 'dual'), f => f.minutes) / 60, 1, 'h']] };
+  }
+  function currencyPage() {
+    const items = currencyItems(), rv = revalidation();
+    shell('currency', { title: 'Currency', sub: 'The dates and recent-experience rules that decide what you can fly, worked out from your logbook.' },
+      `<div class="grid">
+        <section class="span-8 cur-list">${items.map(it => { const [cls, txt] = it.kind === 'calc' ? (it.until ? dueState(it.until) : ['bad', 'Not current']) : dueState(it.until); return `<article class="tile cur ${cls}">
+          <div class="cur-top"><h2>${esc(it.title)}</h2><span class="chip cur-${cls}">${esc(txt)}</span></div>
+          ${it.kind === 'calc' ? `<p>${esc(it.detail)}</p>` : `<label class="field"><span>${esc(it.label || 'Date')}</span><div class="cur-row"><input type="date" value="${esc(it.value || '')}" data-doc="${esc(it.id)}" ${it.kind === 'custom' ? `data-ci="${it.i}"` : ''}>${it.kind === 'custom' ? `<button type="button" class="icon-btn" data-delc="${it.i}" aria-label="Remove">${ico('close')}</button>` : ''}</div></label>`}
+          ${it.note ? `<p class="footnote">${esc(it.note)}${it.url ? ` <a class="link" href="${esc(it.url)}" target="_blank" rel="noopener">Source</a>` : ''}</p>` : ''}
+        </article>`; }).join('')}
+          <form class="tile add-doc" data-adddoc><div class="tile-head"><h2>Add another date</h2></div><div class="fields" style="grid-template-columns:2fr 1fr auto;align-items:end"><label class="field"><span>What it is</span><input name="label" maxlength="60" placeholder="e.g. Radio licence, theory exam deadline"></label><label class="field"><span>Date</span><input name="date" type="date"></label><button class="btn btn-ink">Add</button></div></form>
+        </section>
+        <aside class="span-4" style="display:grid;gap:16px;align-content:start">
+          ${rv ? `<section class="tile"><div class="tile-head"><h2>Revalidation by experience</h2></div><p class="hint" style="margin-bottom:14px">Between ${esc(fmtDate(rv.start, { day: 'numeric', month: 'short', year: 'numeric' }))} and your rating expiry.</p><div class="bars">${rv.rows.map(([k, v, need, u]) => `<div class="bar-row"><div><span>${k}</span><b>${u ? v.toFixed(1) : v} / ${need}${u ? ' ' + u : ''}</b></div><div class="bar-track"><i style="width:${Math.min(100, v / need * 100)}%;background:${v >= need ? 'var(--ok)' : 'var(--electric)'}"></i></div></div>`).join('')}</div><p class="footnote">FCL.740.A: 12 hours including 6 as PIC, 12 take-offs and landings, and a 1-hour training flight with an instructor. An instructor or examiner signs it off. <a class="link" href="https://www.caa.co.uk/general-aviation/pilot-licences/part-fcl-requirements/ratings/single-engine-piston-rating-for-aeroplanes/" target="_blank" rel="noopener">UK CAA guidance</a></p></section>` : ''}
+          <section class="tile"><div class="tile-head"><h2>How this works</h2></div><p class="hint">Expiry dates come from your own documents, so they’re exact. Recent-experience rules are counted from the flights in your logbook. Your licence, your instructor and your authority have the final say.</p></section>
+        </aside>
+      </div>`);
+    const save = async docs => { try { await saveProfile({ docs: JSON.stringify(docs) }); currencyPage(); } catch (x) { toast(x.message); } };
+    $$('[data-doc]').forEach(el => el.onchange = () => { const d = docsOf(state.profile); if (el.dataset.ci != null) d.custom[+el.dataset.ci].date = el.value; else d[el.dataset.doc] = el.value; save(d); });
+    $$('[data-delc]').forEach(b => b.onclick = () => { const d = docsOf(state.profile); d.custom.splice(+b.dataset.delc, 1); save(d); });
+    const af = $('[data-adddoc]'); af.onsubmit = e => { e.preventDefault(); const v = Object.fromEntries(new FormData(af)); if (!v.label.trim() || !v.date) return; const d = docsOf(state.profile); d.custom = [...(d.custom || []), { label: v.label.trim().slice(0, 60), date: v.date }].slice(0, 10); save(d); };
+  }
+  const nextDue = () => currencyItems().filter(i => i.until && i.kind !== 'calc').map(i => ({ ...i, d: daysUntil(i.until) })).sort((a, b) => a.d - b.d)[0];
+
+  /* ================= logbook export / import / print ================= */
+  const csvCell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  function exportCSV() {
+    const cols = ['date', 'departure', 'arrival', 'aircraft', 'registration', 'role', 'minutes', 'hours', 'landings', 'night_landings', 'instructor', 'lesson', 'cost', 'notes'];
+    const rows = sorted().reverse().map(f => [f.date, upper(f.departure), upper(f.arrival), f.aircraft, f.registration, f.role, f.minutes, (f.minutes / 60).toFixed(1), f.landings, f.nightLandings || 0, f.instructor, f.lesson, f.cost ?? '', f.notes]);
+    const blob = new Blob([[cols, ...rows].map(r => r.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `boplo-logbook-${todayISO()}.csv`; document.body.append(a); a.click(); a.remove();
+  }
+  function printLogbook() {
+    const p = state.profile, faa = regimeOf(p) === 'faa', fl = sorted().reverse(), me = 'SELF';
+    const head = faa ? ['Date', 'Make and model', 'Ident', 'From', 'To', 'Day ldg', 'Night ldg', 'SEL', 'Dual received', 'PIC', 'Solo', 'Total', 'Remarks'] : ['Date', 'Departure', 'Arrival', 'Type', 'Registration', 'Total time', 'Name of PIC', 'Ldg day', 'Ldg night', 'PIC', 'Dual', 'Remarks'];
+    const T = m => hm(m);
+    const rows = fl.map(f => { const n = f.nightLandings || 0, d = f.landings - n, pic = f.role !== 'dual' ? f.minutes : 0, dual = f.role === 'dual' ? f.minutes : 0; return faa ? [f.date, f.aircraft, f.registration, upper(f.departure), upper(f.arrival), d, n, T(f.minutes), dual ? T(dual) : '', pic ? T(pic) : '', f.role === 'solo' ? T(f.minutes) : '', T(f.minutes), f.lesson || ''] : [f.date, upper(f.departure), upper(f.arrival), f.aircraft, f.registration, T(f.minutes), f.role === 'dual' ? (f.instructor || 'Instructor') : me, d, n, pic ? T(pic) : '', dual ? T(dual) : '', f.lesson || '']; });
+    const tot = faa ? ['Totals', '', '', '', '', sum(fl, f => f.landings - (f.nightLandings || 0)), sum(fl, f => f.nightLandings || 0), T(sum(fl, f => f.minutes)), T(sum(fl.filter(f => f.role === 'dual'), f => f.minutes)), T(sum(fl.filter(f => f.role !== 'dual'), f => f.minutes)), T(sum(fl.filter(f => f.role === 'solo'), f => f.minutes)), T(sum(fl, f => f.minutes)), ''] : ['Totals', '', '', '', '', T(sum(fl, f => f.minutes)), '', sum(fl, f => f.landings - (f.nightLandings || 0)), sum(fl, f => f.nightLandings || 0), T(sum(fl.filter(f => f.role !== 'dual'), f => f.minutes)), T(sum(fl.filter(f => f.role === 'dual'), f => f.minutes)), ''];
+    printDoc('Logbook', `<div data-landscape></div><h1>Pilot logbook: ${esc(p.name)}</h1><p class="meta">${esc([p.licence, p.authority].filter(Boolean).join(' · '))} · ${fl.length} flights · printed ${esc(fmtDate(todayISO(), { day: 'numeric', month: 'long', year: 'numeric' }))}${p.openingMinutes ? ` · brought forward ${T(p.openingMinutes)}` : ''}</p>
+      <table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody><tfoot><tr>${tot.map(c => `<td>${esc(c)}</td>`).join('')}</tr></tfoot></table>
+      <p class="small">Columns follow the ${faa ? 'common FAA logbook layout' : 'EASA/UK Part-FCL logbook layout (AMC1 FCL.050)'}. Departure and arrival times aren’t recorded in Boplo. Check what format your authority and school accept for your official logbook.</p>`);
+  }
+  function parseCSV(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) { const c = text[i]; if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; } else if (c === '"') q = true; else if (c === ',' || c === ';' || c === '\t') { row.push(f); f = ''; } else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; } else if (c !== '\r') f += c; }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows.filter(r => r.some(x => x.trim()));
+  }
+  function importRows(text) {
+    const rows = parseCSV(text); if (rows.length < 2) throw new Error('That file has no flights in it.');
+    const h = rows[0].map(x => x.trim().toLowerCase().replace(/[^a-z]/g, ''));
+    const col = (...names) => h.findIndex(x => names.some(n => x === n || x.includes(n)));
+    const C = { date: col('date'), dep: col('departure', 'from', 'origin'), arr: col('arrival', 'to', 'destination'), type: col('aircraft', 'type', 'makemodel', 'model'), reg: col('registration', 'reg', 'ident', 'tail'), role: col('role', 'function'), min: col('minutes'), dur: col('hours', 'duration', 'totaltime', 'total', 'time'), ldg: col('landings', 'ldg'), nld: col('nightlandings', 'nightldg'), ins: col('instructor'), les: col('lesson', 'exercise'), notes: col('notes', 'remarks', 'comments'), cost: col('cost') };
+    if (C.date < 0) throw new Error('Add a “date” column to your file.');
+    const dur = s => { s = String(s || '').trim(); if (!s) return 0; if (/^\d+:\d{1,2}$/.test(s)) { const [a, b] = s.split(':').map(Number); return a * 60 + b; } const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 60) : 0; };
+    const date = s => { s = String(s || '').trim(); let m; if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`; if ((m = s.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/))) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; const us = regimeOf(state.profile) === 'faa'; const [d, mo] = us ? [m[2], m[1]] : [m[1], m[2]]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } return s; };
+    const role = s => { s = String(s || '').toLowerCase(); return /dual|instr|student/.test(s) ? 'dual' : /solo/.test(s) ? 'solo' : /pic|p1|command/.test(s) ? 'pic' : 'dual'; };
+    const g = (r, i) => i >= 0 ? (r[i] || '').trim() : '';
+    return rows.slice(1).map(r => ({ date: date(g(r, C.date)), departure: g(r, C.dep), arrival: g(r, C.arr) || g(r, C.dep), aircraft: g(r, C.type), registration: g(r, C.reg), role: role(g(r, C.role)), minutes: C.min >= 0 ? Math.round(+g(r, C.min) || 0) : dur(g(r, C.dur)), landings: Math.round(+g(r, C.ldg) || 0), nightLandings: Math.round(+g(r, C.nld) || 0), instructor: g(r, C.ins), lesson: g(r, C.les), notes: g(r, C.notes), cost: g(r, C.cost) === '' ? null : +g(r, C.cost), points: [], routeKind: 'endpoints' }));
+  }
+  function importSheet() {
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Import flights</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p>Upload a CSV from a spreadsheet or another logbook app. Boplo looks for columns named <b>date</b>, <b>from</b>, <b>to</b>, <b>aircraft</b>, <b>registration</b>, <b>role</b>, <b>duration</b> (h:mm or decimal hours) or <b>minutes</b>, <b>landings</b> and <b>remarks</b>.</p>
+      <label class="btn btn-line" style="justify-self:start">Choose a CSV file<input type="file" accept=".csv,text/csv" data-file hidden></label>
+      <div data-prev></div><p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><span class="hint" data-count></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-go disabled>Import</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
+    let rows = [];
+    const err = sheet.querySelector('.form-error'), go = sheet.querySelector('[data-go]');
+    sheet.querySelector('[data-file]').onchange = async e => {
+      err.textContent = ''; const file = e.target.files[0]; if (!file) return;
+      try { rows = importRows(await file.text()); }
+      catch (x) { err.textContent = x.message; return; }
+      const good = rows.filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.minutes > 0 && r.departure);
+      sheet.querySelector('[data-prev]').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Aircraft</th><th>Role</th><th class="r">Time</th><th class="r">Ldg</th></tr></thead><tbody>${rows.slice(0, 6).map(r => `<tr><td>${esc(r.date)}</td><td class="route">${esc(upper(r.departure))} → ${esc(upper(r.arrival))}</td><td>${esc(r.aircraft || r.registration)}</td><td>${esc(roleName(r.role))}</td><td class="r">${hm(r.minutes)}</td><td class="r">${r.landings}</td></tr>`).join('')}</tbody></table></div>`;
+      sheet.querySelector('[data-count]').textContent = `${good.length} of ${rows.length} rows look complete.`;
+      rows = good; go.disabled = !good.length; go.textContent = `Import ${good.length} flight${good.length === 1 ? '' : 's'}`;
+    };
+    go.onclick = async () => {
+      go.disabled = true; err.textContent = '';
+      try {
+        let saved = [], errors = [];
+        if (preview) saved = rows.map((r, i) => ({ ...r, id: 'imp-' + i + Math.random().toString(36).slice(2) }));
+        else for (let i = 0; i < rows.length; i += 500) { const r = await api('flights/import', 'POST', { flights: rows.slice(i, i + 500) }); saved = saved.concat(r.flights); errors = errors.concat(r.errors || []); }
+        state.flights = [...saved, ...state.flights]; sheet.close(); render(); toast(`Imported ${saved.length} flight${saved.length === 1 ? '' : 's'}${errors.length ? `, skipped ${errors.length}` : ''}.`);
+      } catch (x) { err.textContent = x.message; go.disabled = false; }
+    };
+  }
+
+  /* ================= instructor sharing ================= */
+  function shareTile() {
+    const on = state.profile.shareOn;
+    return `<section class="tile share-tile"><div class="tile-head"><h2>Share with your instructor</h2>${on ? '<span class="chip ok">Link is on</span>' : ''}</div>
+      <p class="hint">A read-only page with your next lesson, preparation, syllabus progress and recent debriefs. No sign-in needed to view it, and you can turn it off any time.</p>
+      <div data-sharebox style="margin-top:12px"></div>
+      <div class="actions" style="margin-top:12px">${on ? '<button class="btn btn-line btn-sm" data-shareoff>Turn off the link</button>' : '<span></span>'}<div class="right"><button class="btn btn-ink btn-sm" data-shareon>${on ? 'Make a new link' : 'Create a link'}</button></div></div></section>`;
+  }
+  function wireShare() {
+    const box = $('[data-sharebox]'); if (!box) return;
+    const show = url => { box.innerHTML = `<div class="share-link"><input readonly value="${esc(url)}" aria-label="Share link"><button class="btn btn-blue btn-sm" data-copy>Copy</button></div><p class="footnote">Only people with this link can open it. Making a new link turns this one off.</p>`; box.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch { box.querySelector('input').select(); } }; };
+    const on = $('[data-shareon]'); if (on) on.onclick = async () => { on.disabled = true; try { const r = preview ? { token: 'example' } : await api('share', 'POST', {}); state.profile.shareOn = true; progressPage(); show(`${location.origin}/share.html?t=${r.token}`); } catch (x) { toast(x.message); on.disabled = false; } };
+    const off = $('[data-shareoff]'); if (off) off.onclick = async () => { try { if (!preview) await api('share', 'DELETE'); state.profile.shareOn = false; progressPage(); toast('Sharing turned off.'); } catch (x) { toast(x.message); } };
+  }
+
+  /* ================= radio practice ================= */
+  const PHON = { alpha: 'a', alfa: 'a', bravo: 'b', charlie: 'c', delta: 'd', echo: 'e', foxtrot: 'f', golf: 'g', hotel: 'h', india: 'i', juliet: 'j', juliett: 'j', kilo: 'k', lima: 'l', mike: 'm', november: 'n', oscar: 'o', papa: 'p', quebec: 'q', romeo: 'r', sierra: 's', tango: 't', uniform: 'u', victor: 'v', whiskey: 'w', whisky: 'w', xray: 'x', yankee: 'y', zulu: 'z', zero: '0', one: '1', wun: '1', two: '2', three: '3', tree: '3', four: '4', fower: '4', five: '5', fife: '5', six: '6', seven: '7', eight: '8', ait: '8', nine: '9', niner: '9', thousand: '000', hundred: '00', decimal: '' };
+  const LETTER = Object.fromEntries('alpha bravo charlie delta echo foxtrot golf hotel india juliett kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey x-ray yankee zulu'.split(' ').map(w => [w[0], w[0].toUpperCase() + w.slice(1)]));
+  const DIGIT = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Niner'];
+  const spell = s => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '').split('').map(c => /\d/.test(c) ? DIGIT[+c] : LETTER[c.toLowerCase()]).join(' ');
+  const compact = t => String(t || '').toLowerCase().replace(/x-ray/g, 'xray').split(/[^a-z0-9.]+/).filter(Boolean).map(w => PHON[w] ?? w).join('').replace(/\./g, '');
+  function radioScenarios() {
+    const p = state.profile, faa = regimeOf(p) === 'faa';
+    const reg = upper(p.registration || (faa ? 'N123AB' : 'G-ABCD')).replace(/\s/g, '');
+    const cs = spell(reg), csC = compact(cs), type = p.aircraft || (faa ? 'Cessna 172' : 'PA-28');
+    const abbr = faa ? `${type.split(/\s/)[0]} ${spell(reg.slice(-3))}` : `${spell(reg[0])} ${spell(reg.slice(-2))}`, abC = compact(abbr), abReg = faa ? compact(reg.slice(-3)) : compact(reg[0] + reg.slice(-2));
+    const code = upper(p.airport).split(/[\s·]/)[0] || (faa ? 'KAPA' : 'EGHP');
+    const place = (String(p.airport || '').split('·')[1] || '').trim().replace(/\s+(Airfield|Airport|Aerodrome)$/i, '') || (faa ? 'Centennial' : 'Popham');
+    const cs1 = { k: 'Your callsign', re: [csC, abC, abReg, compact(reg)] };
+    const shortCS = { k: 'Your callsign', re: [csC, abC, abReg, compact(reg)] };
+    const may = { k: 'MAYDAY three times', test: t => (t.match(/mayday/g) || []).length >= 3 };
+    const S = faa ? [
+      { id: 'f-ctaf', title: 'Position report at a non-towered airport', situation: `You’re on the left downwind for runway 28 at ${place}, planning to land.`, atc: '', model: `${place} traffic, ${type} ${cs}, left downwind runway two eight, full stop, ${place}.`, el: [{ k: 'Starts with the airport and “traffic”', re: [compact(place) + 'traffic'] }, cs1, { k: 'Position: left downwind', re: ['leftdownwind'] }, { k: 'Runway 28', re: ['runway28', '28'] }, { k: 'Intentions (full stop or touch and go)', re: ['fullstop', 'touchandgo', 'land'] }, { k: 'Ends with the airport name', test: t => t.endsWith(compact(place)) }] },
+      { id: 'f-gnd', title: 'Ground: ready to taxi', situation: `You’re at the flight school ramp at ${place} with ATIS information Bravo, departing VFR to the north.`, atc: '', model: `${place} Ground, ${type} ${cs}, at the flight school ramp, ready to taxi, VFR northbound, with information Bravo.`, el: [{ k: 'Who you’re calling (Ground)', re: ['ground'] }, cs1, { k: 'Where you are', re: ['ramp', 'parking', 'flightschool', 'apron'] }, { k: 'Ready to taxi', re: ['readytotaxi', 'taxi'] }, { k: 'VFR and direction', re: ['vfr'] }, { k: 'ATIS: information Bravo', re: ['informationb', 'withb', 'atisb'] }] },
+      { id: 'f-hold', title: 'Read back a taxi clearance', situation: 'Ground replies with your taxi instructions. Read them back.', atc: `${abbr}, runway two eight, taxi via Alpha, hold short of runway two eight.`, model: `Runway two eight, taxi via Alpha, hold short runway two eight, ${abbr}.`, el: [{ k: 'Runway 28', re: ['runway28', '28'] }, { k: 'Taxi via Alpha', re: ['viaa', 'taxia', 'alpha'] }, { k: 'Hold short runway 28 (hold-short instructions must be read back)', re: ['holdshortrunway28', 'holdshortofrunway28', 'holdshort28', 'holdshort'] }, shortCS] },
+      { id: 'f-to', title: 'Read back a take-off clearance', situation: 'Tower clears you for take-off.', atc: `${abbr}, wind two six zero at eight, runway two eight, cleared for takeoff.`, model: `Runway two eight, cleared for takeoff, ${abbr}.`, el: [{ k: 'Runway 28', re: ['runway28', '28'] }, { k: 'Cleared for takeoff', re: ['clearedfortakeoff', 'clearedtakeoff'] }, shortCS] },
+      { id: 'f-may', title: 'MAYDAY: engine failure', situation: `Your engine has failed 10 miles north of ${place} at 3,500 ft, heading 180, two people on board. You’re going to make a forced landing.`, atc: '', model: `MAYDAY MAYDAY MAYDAY, ${place} Tower, ${type} ${cs}, engine failure, forced landing, one zero miles north of ${place}, three thousand five hundred feet, heading one eight zero, two persons on board.`, el: [may, cs1, { k: 'Nature of the emergency', re: ['engine', 'failure', 'fire', 'fuel'] }, { k: 'Intentions', re: ['forcedlanding', 'landing', 'land'] }, { k: 'Position', re: ['miles', 'north', 'south', 'east', 'west', 'overhead'] }, { k: 'Altitude', re: ['feet', 'altitude', '3500'] }, { k: 'Heading', re: ['heading'] }, { k: 'People on board', re: ['onboard', 'pob', 'souls'] }] }
+    ] : [
+      { id: 'u-check', title: 'Radio check', situation: `You’ve just started up at ${place} and want to check your radio with ${place} Radio.`, atc: '', model: `${place} Radio, ${cs}, radio check.`, reply: `${cs}, ${place} Radio, readability five.`, el: [{ k: 'Station you’re calling', re: [compact(place) + 'radio', compact(place)] }, cs1, { k: '“Radio check”', re: ['radiocheck'] }] },
+      { id: 'u-taxi', title: 'Read back a taxi clearance', situation: 'ATC gives you taxi instructions and the pressure setting. Read back everything that must be read back.', atc: `${abbr}, taxi holding point Alpha One, runway two seven, QNH one zero one three.`, model: `Taxi holding point Alpha One, runway two seven, QNH one zero one three, ${abbr}.`, el: [{ k: 'Holding point Alpha One', re: ['holdingpointa1', 'a1'] }, { k: 'Runway 27', re: ['runway27', '27'] }, { k: 'QNH 1013', re: ['qnh1013', '1013'] }, shortCS] },
+      { id: 'u-dep', title: 'Read back a take-off clearance', situation: 'Tower clears you for take-off and gives the surface wind.', atc: `${abbr}, runway two seven, cleared for take-off, surface wind two five zero degrees eight knots.`, model: `Runway two seven, cleared for take-off, ${abbr}.`, el: [{ k: 'Runway 27', re: ['runway27', '27'] }, { k: 'Cleared for take-off', re: ['clearedfortakeoff', 'clearedtakeoff'] }, shortCS] },
+      { id: 'u-dw', title: 'Downwind call', situation: `You’re turning downwind in the circuit at ${place} and plan to land.`, atc: '', model: `${abbr}, downwind to land.`, el: [shortCS, { k: 'Downwind', re: ['downwind'] }, { k: 'Intentions (land, touch and go)', re: ['toland', 'land', 'touchandgo', 'fullstop', 'lowapproach'] }] },
+      { id: 'u-may', title: 'MAYDAY: engine failure', situation: `Your engine has failed 10 miles north of ${place} at 2,500 ft, heading 180, two people on board. You’re going to make a forced landing.`, atc: '', model: `MAYDAY MAYDAY MAYDAY, ${place} Radio, ${cs}, ${type}, engine failure, forced landing, one zero miles north of ${place}, passing two thousand five hundred feet, heading one eight zero, student pilot, two persons on board.`, el: [may, { k: 'Station you’re calling', re: [compact(place), 'radio', 'information', 'centre', 'approach', 'tower'] }, cs1, { k: 'Nature of the emergency', re: ['engine', 'failure', 'fire', 'fuel'] }, { k: 'Intentions', re: ['forcedlanding', 'landing', 'land'] }, { k: 'Position', re: ['miles', 'north', 'south', 'east', 'west', 'overhead'] }, { k: 'Level or altitude', re: ['feet', 'altitude', 'flightlevel', '2500'] }, { k: 'Heading', re: ['heading'] }, { k: 'Pilot qualification', re: ['studentpilot', 'student', 'ppl', 'qualif'] }, { k: 'People on board', re: ['onboard', 'pob'] }] }
+    ];
+    return { S, cs, faa, reg };
+  }
+  function radioPage(id) {
+    const { S, cs, faa, reg } = radioScenarios(), best = readJSON(state.profile.radio, {});
+    const sc = S.find(s => s.id === id);
+    if (!sc) {
+      shell('radio', { title: 'Radio practice', sub: `Practise ${faa ? 'FAA' : 'UK and ICAO'}-style calls out loud. Boplo listens and checks you included everything.` },
+        `<p class="callout draft"><b>Practice scripts.</b> Phraseology varies between airfields and countries; follow your school and ${faa ? 'the AIM' : 'CAP 413 or your national phraseology guide'}. Your callsign is <b>${esc(cs)}</b> (${esc(reg)}). Change your registration in your profile.</p>
+        <div class="grid" style="margin-top:16px">${S.map(s => `<button type="button" class="tile subj span-4" data-sc="${s.id}"><span class="subj-top"><b>${esc(s.title)}</b>${best[s.id] != null ? `<span class="chip ${best[s.id] >= 100 ? 'ok' : 'warn'}">${best[s.id]}%</span>` : ''}</span><small>${esc(s.situation)}</small></button>`).join('')}</div>`);
+      $$('[data-sc]').forEach(b => b.onclick = () => radioPage(b.dataset.sc));
+      return;
+    }
+    shell('radio', { title: esc(sc.title), sub: esc(sc.situation), actions: '<button class="btn btn-line" data-rback>All scenarios</button>' },
+      `<section class="tile quiz radio">
+        ${sc.atc ? `<div class="atc"><span>ATC says</span><p>“${esc(sc.atc)}”</p>${'speechSynthesis' in window ? '<button type="button" class="btn btn-line btn-sm" data-say>Play</button>' : ''}</div>` : `<div class="atc you"><span>Your call</span><p>Make the call for this situation.</p></div>`}
+        <label class="field"><span>Your transmission</span><textarea data-call rows="3" placeholder="Tap the microphone and speak, or type your call"></textarea></label>
+        <div class="debrief-tools"><button type="button" class="btn btn-line btn-sm mic" data-rmic><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg><span>Speak</span></button><button type="button" class="btn btn-blue" data-check>Check my call</button></div>
+        <div data-rres></div>
+      </section>`);
+    $('[data-rback]').onclick = () => radioPage();
+    const ta = $('[data-call]'), mic = $('[data-rmic]');
+    const say = $('[data-say]'); if (say) say.onclick = () => { const u = new SpeechSynthesisUtterance(sc.atc); u.rate = 1.05; speechSynthesis.cancel(); speechSynthesis.speak(u); };
+    let rec = null;
+    if (!SR) { mic.disabled = true; mic.title = 'Voice needs Chrome, Edge or Safari.'; }
+    else mic.onclick = () => { if (rec) { rec.stop(); return; } rec = new SR(); rec.lang = navigator.language || 'en-GB'; rec.interimResults = true; rec.continuous = true; rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; ta.value = t; }; rec.onend = () => { rec = null; mic.classList.remove('live'); mic.querySelector('span').textContent = 'Speak'; }; rec.start(); mic.classList.add('live'); mic.querySelector('span').textContent = 'Listening… tap to stop'; };
+    $('[data-check]').onclick = async () => {
+      const t = compact(ta.value); if (!t) { ta.focus(); return; }
+      const res = sc.el.map(e => ({ k: e.k, ok: e.test ? e.test(t) : e.re.some(r => r && t.includes(r)) })), score = Math.round(res.filter(r => r.ok).length / res.length * 100);
+      $('[data-rres]').innerHTML = `<div class="radio-res"><div class="result-score ${score === 100 ? 'pass' : 'fail'}" style="padding:0"><b style="font-size:52px">${score}%</b><span>${score === 100 ? 'Everything included.' : 'Some parts are missing.'}</span></div>
+        <ul class="radio-checks">${res.map(r => `<li class="${r.ok ? 'ok' : 'miss'}">${r.ok ? '✓' : '✗'} ${esc(r.k)}</li>`).join('')}</ul>
+        <div class="model"><span>A model call</span><p>“${esc(sc.model)}”</p>${sc.reply ? `<span>Reply</span><p>“${esc(sc.reply)}”</p>` : ''}</div></div>`;
+      const b = readJSON(state.profile.radio, {}); b[sc.id] = Math.max(b[sc.id] || 0, score);
+      try { await saveProfile({ radio: JSON.stringify(b) }); } catch { }
+    };
   }
 
   /* ================= more (mobile) ================= */
   function morePage() {
-    shell('more', { title: 'More' }, `<div class="more-grid">${[['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+    shell('more', { title: 'More' }, `<div class="more-grid">${[['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
   }
 
   /* ================= voice debrief ================= */
@@ -980,6 +1329,7 @@
           <div class="segmented" role="radiogroup" aria-label="Your role">${['dual', 'solo', 'pic'].map(r => `<label><input type="radio" name="role" value="${r}" ${role === r ? 'checked' : ''}><span>${roleLong(r)}</span></label>`).join('')}</div>
           <div class="fields">
             ${input('Landings', 'landings', f.landings ?? 1, 'number', 'required min="0" max="100" step="1" inputmode="numeric"')}
+            ${input('Of which at night', 'nightLandings', f.nightLandings ?? 0, 'number', 'min="0" max="100" step="1" inputmode="numeric"', true)}
             ${input('Instructor', 'instructor', f.instructor || '', 'text', 'maxlength="100"', true)}
           </div>
         </div>
@@ -1053,7 +1403,7 @@
           const a = BoploMap.findAirfield(afList, v.departure), b = BoploMap.findAirfield(afList, v.arrival);
           if (a && b && a.code !== b.code) { points.push({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }); kind = 'endpoints'; }
         }
-        const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
+        const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), nightLandings: Math.min(Number(v.nightLandings || 0), Number(v.landings || 0)), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
         btn.disabled = true;
         const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
@@ -1073,7 +1423,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -1114,6 +1464,9 @@
         currency: 'GBP', rateAircraft: 185, rateInstructor: 45,
         syllabus: JSON.stringify({ 'easa-ppl-a': Object.fromEntries(['1', '1E', '2', '3', '4', '5', '6', '7', '8', '9', '10A', '10B', '11', '12', '13', '12E/13E', '14'].map(k => [k, 'd']).concat([['15', 'd'], ['16', 'p'], ['18A', 'p'], ['RT', 'p']])) }),
         study: JSON.stringify({ al1: [1, 1], al2: [1, 1], al5: [0, 1], me1: [1, 1], me3: [0, 1], me5: [1, 1], na3: [0, 2], na4: [1, 1], pf2: [1, 1], _mocks: [{ d: ago(9), s: 69 }, { d: ago(2), s: 81 }] }),
+        docs: JSON.stringify({ medical: ahead(410), rating: ahead(300), custom: [{ label: 'FRTOL radio practical', date: ahead(52) }] }),
+        navlogs: JSON.stringify({ logs: [{ name: 'Popham → Lasham → Romsey', points: [{ lat: 51.1939, lng: -1.2347, code: 'EGHP' }, { lat: 51.1872, lng: -1.0335, code: 'EGHL' }, { lat: 50.99, lng: -1.4967, code: '' }, { lat: 51.1939, lng: -1.2347, code: 'EGHP' }], inp: { tas: 95, wdir: 250, wspd: 15, vari: 1, vdir: 'W', burn: 32, unit: 'L', taxi: 4, reserve: 45, alt: 2400 } }] }),
+        radio: JSON.stringify({ 'u-check': 100, 'u-taxi': 75 }),
         complete: true, step: 4
       },
       flights: F.map(([d, lesson, role, minutes, landings, notes, points, routeKind], i) => ({ id: 'demo-' + i, date: ago(d), departure: 'EGHP', arrival: 'EGHP', aircraft: 'PA-28 Warrior', registration: 'G-BOPL', role, minutes, landings, instructor: role === 'dual' ? 'Sam Patel' : '', lesson, notes, points, routeKind }))
