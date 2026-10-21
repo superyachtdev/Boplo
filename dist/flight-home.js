@@ -131,6 +131,14 @@
     return `<path d="${d}"/>`;
   }
 
+  /* ---------------- billing period switch ---------------- */
+  const billing = $('[data-billing]'), plans = $('[data-plans]');
+  if (billing && plans) billing.addEventListener('click', e => {
+    const b = e.target.closest('button[data-period]'); if (!b) return;
+    plans.dataset.period = b.dataset.period;
+    $$('button', billing).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+
   /* ---------------- nav tone + desk reveal ---------------- */
   const nav = $('[data-nav]');
   const lightSections = $$('.desk, .pricing');

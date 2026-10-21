@@ -21,6 +21,6 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 
 ## Open items
 
-- Pricing section shows £9.99 one-off, but Flight checkout isn't wired up yet (CTA goes to sign-in). Decide: hide price, label "at launch", or build checkout.
+- Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).
 - No privacy or terms pages exist yet; the footer Legal column was removed until they do.
 - Unused legacy CSS/JS in `dist/` could be cleaned up.
