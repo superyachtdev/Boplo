@@ -157,9 +157,9 @@ window.BoploSim = (() => {
     // wings: rectangular inner panel, tapered outer panel, 7° dihedral, blue tips
     const wf = foil(.15, .02), dih = Math.tan(7 * Math.PI / 180);
     for (const side of [1, -1]) {
-      const secs = [[.12, .52, .62], [.5, .52, .62], [1, .5, .58], [1.42, .46, .5], [1.58, .44, .46], [1.62, .42, .4]];
+      const secs = [[.12, .52, .62], [.5, .52, .62], [1, .5, .58], [1.39, .465, .505], [1.4, .464, .503], [1.58, .44, .46], [1.62, .42, .4]];
       const rings = secs.map(([x, zLE, c]) => wingSec(wf, side * x, zLE, c, -.13 + (x - .12) * dih));
-      loft('paint', side > 0 ? rings : rings.map(r => r.slice().reverse()), secs.map(([x]) => x > 1.4 ? BLUE : WHITE), { capEnd: true });
+      loft('paint', side > 0 ? rings : rings.map(r => r.slice().reverse()), secs.map(([x]) => x >= 1.4 ? BLUE : WHITE), { capEnd: true });
       // flap and aileron hinge lines (thin dark strips on top)
       loft('matte', [[.2, .66], [.95, .66], [1, .64], [1.5, .64]].map(([x, s]) => [[side * x, -.13 + (x - .12) * dih + .045, .52 - s * .62 + .008], [side * x, -.13 + (x - .12) * dih + .048, .52 - s * .62 - .008]]), GREY, { closed: false });
     }
@@ -357,7 +357,10 @@ window.BoploSim = (() => {
       try {
         tileset = await C.createGooglePhotorealistic3DTileset({ key: O.googleKey, onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: coarse ? 22 : 14, dynamicScreenSpaceError: true, dynamicScreenSpaceErrorFactor: 18, foveatedScreenSpaceError: true, cacheBytes: 640 * 1024 * 1024, skipLevelOfDetail: true, shadows: C.ShadowMode.RECEIVE_ONLY });
         scene.primitives.add(tileset); scene.globe.show = false; scenery = 'google';
-      } catch (e) { tileset = null; console.warn('Google 3D tiles unavailable', e); }
+        let failed = 0; tileset.tileFailed.addEventListener(() => failed++);
+        const ok = await Promise.race([new Promise(r => tileset.initialTilesLoaded.addEventListener(() => r(true))), new Promise(r => setTimeout(() => r(false), 14000))]);
+        if (!ok && failed > 0) throw new Error('Google 3D tiles failed to load');
+      } catch (e) { if (tileset) { try { scene.primitives.remove(tileset); } catch { } } tileset = null; scene.globe.show = true; scenery = 'globe'; console.warn('Google 3D tiles unavailable', e); }
     }
     if (!tileset) {
       scene.terrainProvider = terrariumTerrain(C);
@@ -436,7 +439,7 @@ window.BoploSim = (() => {
       const W = circuit ? 70 : 110, Hh = circuit ? 40 : 60, pr = path.project(st.x, st.z), near = showGates && camI !== 2 ? gates.filter(g => g.s > pr.s + 15).slice(0, 5) : [];
       gatePool.forEach(p => p.show = false);
       near.forEach((g, i) => {
-        const d = Math.hypot(g.x - st.x, g.z - st.z), a = (i === 0 ? .85 : .45) * clamp(1 - d / (circuit ? 2400 : 6000), 0, 1) * clamp(d / 50, 0, 1);
+        const d = Math.hypot(g.x - st.x, g.z - st.z), a = (i === 0 ? .85 : .45) * clamp(1 - d / (circuit ? 2400 : 6000), 0, 1) * clamp((d - 90) / 220, 0, 1);
         if (a < .03) return;
         const r = [Math.cos(g.h), -Math.sin(g.h)], pt = (u, v) => LLH(g.x + r[0] * u, g.z + r[1] * u, g.y + v);
         const c = W * .22, k = Hh * .3, col = i === 0 ? new C.Color(1, .84, .3, a) : new C.Color(1, 1, 1, a);
