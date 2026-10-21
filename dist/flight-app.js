@@ -59,6 +59,7 @@
     ['study', 'Study', 'study'],
     ['prepare', 'Prepare', 'prepare'],
     ['navlog', 'Nav log', 'navlog'],
+    ['sim', 'Simulator', 'sim'],
     ['weather', 'Weather', 'weather'],
     ['currency', 'Currency', 'currency'],
     ['radio', 'Radio', 'radio'],
@@ -357,6 +358,7 @@
       <nav class="tabbar" aria-label="Flight desk">${TABS.map(id => { const pg = PAGES.find(x => x[0] === id) || ['more', 'More', 'more']; const on = page === id || (id === 'more' && !TABS.includes(page)); return `<a href="#${id}" ${on ? 'aria-current="page"' : ''}>${ico(pg[2])}${pg[1]}</a>`; }).join('')}</nav>
     </div>`;
     $$('[data-add]').forEach(b => b.onclick = () => flightSheet());
+    $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
     $$('[data-logout]').forEach(b => b.onclick = logout);
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
   }
@@ -440,7 +442,7 @@
         </section>
 
         <section class="tile span-5" aria-labelledby="track-h">
-          <div class="tile-head"><h2 id="track-h">Latest track</h2>${latest ? '<a class="link" href="#map">Open map</a>' : ''}</div>
+          <div class="tile-head"><h2 id="track-h">Latest track</h2>${latest ? `<div style="display:flex;gap:14px;align-items:center"><a class="link" href="#map">Open map</a><button class="btn btn-blue btn-sm" data-flyagain="${esc(latest.id)}">Fly it again</button></div>` : ''}</div>
           <div class="mini">${latest ? trackSVG([latest], 480, 300) : `<div class="mini-empty"><b>No track yet</b>Add coordinates to a flight and its route is drawn here.</div>`}</div>
           ${latest ? `<div class="mini-meta"><span><b>${esc(upper(latest.departure))} → ${esc(upper(latest.arrival))}</b> · ${esc(fmtDate(latest.date))}</span><span>${hm(latest.minutes)} · ${esc(roleName(latest.role))}</span></div>` : ''}
         </section>
@@ -1026,7 +1028,7 @@
           <div class="nav-tools">${N.points.length ? '<button type="button" class="btn btn-line btn-sm" data-wxwind>Use wind from the departure METAR</button>' : ''}${routeFlights.length ? `<label class="field"><span>Or start from a flight’s route</span><select data-fromflight><option value="">Choose a flight</option>${routeFlights.slice(0, 30).map(f => `<option value="${esc(f.id)}">${esc(fmtDate(f.date))} · ${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</option>`).join('')}</select></label>` : ''}</div>
           <p class="footnote" data-wxnote>Wind at height usually differs from the surface report. Use the forecast wind for your cruise level if you have it.</p>
         </section>
-        <section class="tile span-8"><div class="tile-head"><h2>${esc(N.name || 'Planning log')}</h2><div style="display:flex;gap:8px">${N.points.length > 1 ? '<button class="btn btn-line btn-sm" data-savenav>Save</button><button class="btn btn-ink btn-sm" data-printnav>Print kneeboard</button>' : ''}</div></div>
+        <section class="tile span-8"><div class="tile-head"><h2>${esc(N.name || 'Planning log')}</h2><div style="display:flex;gap:8px">${N.points.length > 1 ? '<button class="btn btn-line btn-sm" data-savenav>Save</button><button class="btn btn-line btn-sm" data-flynav>Fly this route</button><button class="btn btn-ink btn-sm" data-printnav>Print kneeboard</button>' : ''}</div></div>
           ${N.points.length > 1 ? `<div class="table-wrap plog"><table>
             <thead><tr><th>Leg</th><th class="r">TT</th><th class="r">Dist</th><th class="r">WCA</th><th class="r">TH</th><th class="r">MH</th><th class="r">GS</th><th class="r">Time</th><th class="r">Fuel</th></tr></thead>
             <tbody>${legs.map(l => `<tr class="${l.ok ? '' : 'bad'}"><td class="route">${esc(l.from)} → ${esc(l.to)}</td><td class="r">${pad3(l.tt)}°</td><td class="r">${l.d.toFixed(1)}</td><td class="r">${Number.isFinite(l.wca) ? (l.wca >= 0 ? '+' : '−') + Math.abs(l.wca).toFixed(0) + '°' : '—'}</td><td class="r">${Number.isFinite(l.th) ? pad3(l.th) + '°' : '—'}</td><td class="r"><b>${Number.isFinite(l.mh) ? pad3(l.mh) + '°' : '—'}</b></td><td class="r">${Number.isFinite(l.gs) ? Math.round(l.gs) : '—'}</td><td class="r"><b>${fmtM(l.mins)}</b></td><td class="r">${Number.isFinite(l.fuel) && inp.burn ? l.fuel.toFixed(1) : '—'}</td></tr>`).join('')}</tbody>
@@ -1053,6 +1055,7 @@
     const sv = $('[data-savenav]'); if (sv) sv.onclick = async () => { const st = navStore(); st.logs = [{ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, ...(st.logs || []).filter(x => x.name !== N.name)].slice(0, 8); try { await saveProfile({ navlogs: JSON.stringify(st) }); toast('Plan saved.'); navPage(); } catch (x) { toast(x.message); } };
     $$('[data-loadnav]').forEach(b => b.onclick = () => { const s = saved[+b.dataset.loadnav]; ui.nav = { name: s.name, points: s.points, inp: { ...inp, ...s.inp } }; navPage(); });
     $$('[data-delnav]').forEach(b => b.onclick = async () => { const st = navStore(); st.logs.splice(+b.dataset.delnav, 1); try { await saveProfile({ navlogs: JSON.stringify(st) }); navPage(); } catch { } });
+    const fn = $('[data-flynav]'); if (fn) fn.onclick = () => openSim({ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, 'fly');
     const pr = $('[data-printnav]'); if (pr) pr.onclick = () => printDoc(`${N.name || 'Planning log'}`, `<h1>${esc(N.name || 'Planning log')}</h1><p class="meta">${esc([fmtDate(todayISO(), { day: 'numeric', month: 'long', year: 'numeric' }), p.aircraft, p.registration, inp.alt ? `${inp.alt} ft` : ''].filter(Boolean).join(' · '))} · TAS ${esc(inp.tas)} kt · W/V ${inp.wdir ? pad3(inp.wdir) : '—'}°/${esc(inp.wspd || '—')} kt · Var ${esc(inp.vari || 0)}°${esc(inp.vdir)}</p>
       <table><thead><tr><th>Leg</th><th>TT</th><th>Dist</th><th>WCA</th><th>TH</th><th>MH</th><th>GS</th><th>Time</th><th>Fuel</th><th>ETA</th><th>ATA</th></tr></thead><tbody>${legs.map(l => `<tr><td>${esc(l.from)} → ${esc(l.to)}</td><td>${pad3(l.tt)}</td><td>${l.d.toFixed(1)}</td><td>${Number.isFinite(l.wca) ? Math.round(l.wca) : ''}</td><td>${Number.isFinite(l.th) ? pad3(l.th) : ''}</td><td><b>${Number.isFinite(l.mh) ? pad3(l.mh) : ''}</b></td><td>${Number.isFinite(l.gs) ? Math.round(l.gs) : ''}</td><td><b>${fmtM(l.mins)}</b></td><td>${inp.burn && Number.isFinite(l.fuel) ? l.fuel.toFixed(1) : ''}</td><td></td><td></td></tr>`).join('')}</tbody>
       <tfoot><tr><td>Total</td><td></td><td>${tot.d.toFixed(1)}</td><td colspan="4"></td><td>${fmtM(tot.m)}</td><td>${inp.burn ? tot.f.toFixed(1) : ''}</td><td colspan="2"></td></tr></tfoot></table>
@@ -1264,9 +1267,64 @@
     };
   }
 
+  /* ================= simulator ================= */
+  ui.sim = ui.sim || { wind: 'calm', start: 'ground' };
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=2'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
+  const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
+  async function openSim(src, mode) {
+    const p = state.profile, isPlan = !!src.inp;
+    toast(mode === 'replay' ? 'Loading the replay…' : 'Loading the simulator…');
+    try {
+      const [Sim, dep, arr] = await Promise.all([loadSimLib(), isPlan ? anyAirfield(src.points[0]?.code) : anyAirfield(src.departure), isPlan ? anyAirfield(src.points[src.points.length - 1]?.code) : anyAirfield(src.arrival)]);
+      let points = (src.points || []).map(x => ({ lat: +x.lat, lng: +x.lng })).filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
+      if (!points.length && dep) points = [{ lat: dep.lat, lng: dep.lng }, ...(arr && arr.code !== dep.code ? [{ lat: arr.lat, lng: arr.lng }] : [])];
+      if (!points.length) { toast('This flight has no route or known airfield to fly from.'); return; }
+      const near = (a, pt) => a && pt && Math.abs(a.lat - pt.lat) < .03 && Math.abs(a.lng - pt.lng) < .04;
+      const wps = isPlan ? src.points.filter(x => x.code).map(x => ({ code: x.code, lat: +x.lat, lng: +x.lng })) : [dep, arr].filter(Boolean).filter((a, i, l) => l.findIndex(b => b.code === a.code) === i).map(a => ({ code: a.code, lat: a.lat, lng: a.lng }));
+      let wind = null;
+      if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
+      else if (ui.sim.wind === 'live') {
+        try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0]; if (s && Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id }; } catch { }
+      }
+      const title = isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
+      const subtitle = isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
+      Sim.open({
+        id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind,
+        country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
+        fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
+        runwayHdg: rwyHdg(dep), land: true
+      });
+    } catch (x) { toast(x.message); }
+  }
+  const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
+  function simPage() {
+    const list = simmable(), plans = navStore().logs || [];
+    const card = (f, i) => `<article class="tile sim-pick">
+        <div class="sim-thumb">${f.points?.length > 1 ? trackSVG([f], 320, 180) : `<div class="mini-empty"><b>${esc(upper(f.departure))}</b>A circuit from this airfield</div>`}</div>
+        <div class="sim-pick-body"><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc([fmtDate(f.date, { day: 'numeric', month: 'short', year: 'numeric' }), f.lesson || f.aircraft, hm(f.minutes) + ' h'].filter(Boolean).join(' · '))}</small></div>
+        <div class="sim-pick-actions"><button class="btn btn-line btn-sm" data-simr="${i}">Replay</button><button class="btn btn-blue btn-sm" data-simf="${i}">Fly it</button></div>
+      </article>`;
+    shell('sim', { title: 'Simulator', sub: 'Fly your logged routes again over real 3D terrain. Watch a replay, or take the controls yourself.' },
+      `<section class="tile dark sim-hero">${contours('a')}
+        <div><span class="kicker">Mini flight simulator</span><h2 class="display">Your routes, flown again.</h2><p>Every route you log or plan can be replayed or flown: take off, follow the gates, and land. Works with a keyboard, a gamepad, or your phone’s touch and tilt.</p></div>
+        <form class="sim-opts" data-simopts>
+          <fieldset><legend>Start</legend><div class="segmented">${[['ground', 'On the runway'], ['air', 'In the air']].map(([v, l]) => `<label><input type="radio" name="start" value="${v}" ${ui.sim.start === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+        </form>
+      </section>
+      <p class="footnote" style="margin:10px 2px 18px">A game-like practice toy for fun and route familiarisation. It isn’t an approved training device, and its flight model is simplified.</p>
+      ${list.length ? `<h2 class="section-h">Logged flights</h2><div class="sim-grid">${list.slice(0, 24).map(card).join('')}</div>` : `<div class="tile empty center"><h3>Log a flight to fly it again.</h3><p>Flights with a plotted route or a GPS track replay best. A flight from a known airfield gives you a circuit.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
+      ${plans.length ? `<h2 class="section-h">Nav plans</h2><div class="sim-grid">${plans.map((s, i) => `<article class="tile sim-pick"><div class="sim-thumb">${trackSVG([{ id: 'p' + i, points: s.points, departure: s.points[0]?.code, arrival: s.points[s.points.length - 1]?.code, routeKind: 'route' }], 320, 180)}</div><div class="sim-pick-body"><b>${esc(s.name || 'Plan')}</b><small>${esc(s.points.map(x => x.code).filter(Boolean).join(' → ') || s.points.length + ' points')}${s.inp?.alt ? ` · ${esc(s.inp.alt)} ft` : ''}</small></div><div class="sim-pick-actions"><button class="btn btn-line btn-sm" data-simpr="${i}">Replay</button><button class="btn btn-blue btn-sm" data-simpf="${i}">Fly it</button></div></article>`).join('')}</div>` : ''}`);
+    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; };
+    $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
+    $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
+    $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));
+    $$('[data-simpf]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpf], 'fly'));
+  }
+
   /* ================= more (mobile) ================= */
   function morePage() {
-    shell('more', { title: 'More' }, `<div class="more-grid">${[['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+    shell('more', { title: 'More' }, `<div class="more-grid">${[['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
   }
 
   /* ================= voice debrief ================= */
@@ -1352,7 +1410,7 @@
         <p class="form-error" role="alert"></p>
       </div>
       <footer class="sheet-foot">
-        ${editing ? '<button type="button" class="btn btn-danger" data-delete>Delete flight</button>' : `<span class="hint">${preview ? 'Example desk: not saved.' : ''}</span>`}
+        ${editing ? `<div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn btn-danger" data-delete>Delete flight</button>${f.points?.length || upper(f.departure) ? '<button type="button" class="btn btn-line" data-simthis>Fly it again</button>' : ''}</div>` : `<span class="hint">${preview ? 'Example desk: not saved.' : ''}</span>`}
         <div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" type="submit">${editing ? 'Save changes' : 'Save flight'} ${spark}</button></div>
       </footer>
     </form>`;
@@ -1361,6 +1419,7 @@
     sheet.onclick = e => { if (e.target === sheet) sheet.close(); };
     sheet.showModal();
     wireDebrief(form);
+    const simB = sheet.querySelector('[data-simthis]'); if (simB) simB.onclick = () => { sheet.close(); openSim(f, 'replay'); };
     const cc = countryCodeOf(p);
     let afList = [];
     if (window.BoploMap && cc) BoploMap.airfields(cc).then(list => { afList = list; const dl = sheet.querySelector('#af-list'); if (dl) dl.innerHTML = list.slice(0, 6000).map(a => `<option value="${esc(a.code)}">${esc(a.name)}${a.city ? ' · ' + esc(a.city) : ''}</option>`).join(''); });
@@ -1423,9 +1482,9 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
-  addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
+  addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
   /* ---------------- example desk ---------------- */
   function demo() {

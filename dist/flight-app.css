@@ -693,3 +693,24 @@ details.more .fields{padding:0 16px 16px}
 @media (max-width:900px){.nav-inputs{order:2}}
 #sheet .table-wrap{display:block!important}
 @media (max-width:640px){.plog table{font-size:13px}.plog th,.plog td{padding-left:7px!important;padding-right:7px!important}}
+
+/* ---------- simulator page ---------- */
+.sim-hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:end;padding:clamp(22px,3vw,36px)}
+.sim-hero h2{font-size:clamp(30px,3.6vw,50px);margin:8px 0 10px;color:#fff}
+.sim-hero p{color:rgba(222,233,255,.78);max-width:36em}
+.sim-opts{display:grid;gap:12px}
+.sim-opts fieldset{border:0;padding:0;margin:0;display:grid;gap:6px}
+.sim-opts legend{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ice);margin-bottom:6px}
+.section-h{font-size:18px;font-weight:620;margin:22px 2px 12px}
+.sim-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.sim-pick{display:grid;gap:12px;padding:12px 12px 14px}
+.sim-thumb{border-radius:14px;overflow:hidden;background:var(--night);aspect-ratio:16/9;display:grid}
+.sim-thumb svg{width:100%;height:100%;display:block}
+.sim-thumb .mini-empty{height:100%}
+.sim-pick-body{display:grid;gap:3px;padding:0 4px}
+.sim-pick-body small{color:var(--ink-3);font-size:13px}
+.sim-pick-actions{display:flex;gap:8px;padding:0 4px}
+.sim-pick-actions .btn{flex:1}
+@media (max-width:900px){.sim-hero{grid-template-columns:1fr}}
+.sim-opts .segmented span{background:transparent;border-color:rgba(158,216,255,.28);color:rgba(222,233,255,.82)}
+.sim-opts .segmented input:checked+span{background:var(--electric);border-color:var(--electric);color:#fff;box-shadow:0 6px 20px rgba(10,98,255,.4)}

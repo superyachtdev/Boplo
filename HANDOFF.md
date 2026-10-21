@@ -58,6 +58,16 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Instructor share:** Progress → "Share with your instructor". `POST /flight/share` returns a 48-hex token (only its SHA-256 is stored as `shareHash`); `DELETE` revokes. Public read-only `dist/share.html?t=` calls `GET /flight/shared` (first name, next lesson, prep, questions, syllabus, totals, last 12 flights with debriefs). `share.html?t=example` shows a sample.
 - **Radio practice (#radio):** UK/ICAO or FAA scenarios using the student's own registration spelled phonetically. Speech recognition or typing; checks each required element, shows a model call; best scores in profile `radio`. Labelled as practice.
 
+## Mini flight simulator (2026-10-21, Claude)
+
+- `dist/flight-sim.js` + `dist/flight-sim.css`, lazy-loaded by the app (`openSim` in flight-app.js) from the **Simulator** page (#sim), "Fly it again" in a flight's sheet and on the overview track tile, and "Fly this route" in the nav log.
+- **Replay:** an autopilot flies the logged track (or plotted route / nav plan) at 1–32×: take-off roll, Vy-style climb, cruise, coordinated turns, flapped 3° approach, flare and landing, with a scrubber.
+- **Fly it:** the student flies with keyboard (arrows/WASD pitch and roll, R/F or +/− and 1–0 power, V flaps, P autopilot, G gates, C camera, Space pause, M sound), a gamepad, or on phones a touch stick, power slider and optional tilt steering. Scored on time inside the route gates and 250 ft of the planned height; landing rated by touchdown rate. Best score per route in localStorage.
+- **Scenery:** MapLibre GL 4.7.1 with 3D terrain from AWS Terrain Tiles (Terrarium), Sentinel-2 cloudless **2017** satellite imagery by EOX (CC BY 4.0: later years are non-commercial, keep it pinned), OpenFreeMap labels/roads/runways/buildings, sky and haze. Attribution is in the map's info button.
+- **Aircraft:** low-poly painted trainer drawn in a WebGL2 overlay sharing the map camera geometry, with sun lighting, a projected ground shadow, prop disc and nav lights.
+- **Gotchas:** in MapLibre 4 `queryTerrainElevation` is relative to the camera centre, so the sim reads `map.terrain.getElevationForLngLatZoom` for absolute height; unloaded DEM tiles read 0 m and are ignored. Route projection prefers continuity so closed circuits don't jump from end to start.
+- Labelled as a practice toy, not an approved training device. Heights are estimated (logs have no altitude). EOX tiles are free but rate-limited; heavy traffic may need EOX's commercial service or another imagery provider.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
