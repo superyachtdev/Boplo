@@ -10,9 +10,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
-  <link rel="stylesheet" href="/flight-app.css?v=11">
+  <link rel="stylesheet" href="/flight-app.css?v=12">
   <script src="/flight-rules.js?v=1" defer></script>
-  <script src="/flight-app.js?v=12" defer></script>
+  <script src="/flight-map.js?v=1" defer></script>
+  <script src="/flight-app.js?v=13" defer></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -31,6 +32,7 @@
   </svg>
   <div id="app"><main class="boot" aria-busy="true"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><p>Opening your flight desk…</p></main></div>
   <dialog id="sheet" aria-labelledby="sheet-title"></dialog>
+  <dialog id="plot" aria-label="Plot your route"></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

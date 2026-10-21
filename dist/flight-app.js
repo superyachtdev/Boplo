@@ -204,6 +204,9 @@
     };
     const bindLic = () => { const l = lic(); if (l) l.onchange = sync; };
     const relicence = () => { const l = lic(); if (!l) { sync(); return; } const keep = R.licence(regime, l.value) ? l.value : R.licencesFor(regime)[0].id; l.outerHTML = licenceSelect(regime, keep); bindLic(); sync(); };
+    const fillHome = cc => { const dl = form.querySelector('#home-af'); if (!dl || !window.BoploMap || !cc) return; BoploMap.airfields(cc).then(list => { dl.innerHTML = list.slice(0, 6000).map(x => `<option value="${esc(x.code)} · ${esc(x.name)}"></option>`).join(''); }); };
+    fillHome(c ? c.value : countryCodeOf(p));
+    if (c) c.addEventListener('change', () => fillHome(c.value));
     if (c) c.onchange = () => { regime = R.regimeFor(c.value); if (r) r.value = regime; if (a) a.value = R.authorityFor(c.value) || ''; relicence(); };
     if (r) r.onchange = () => { regime = r.value; if (a) a.value = regime === 'icao' ? '' : regime === 'easa' ? (R.authorityFor(c?.value) || 'EASA') : R.regimes[regime].label; relicence(); };
     bindLic();
@@ -221,7 +224,7 @@
         countrySelect(countryCodeOf(p)) +
         regimeSelect(regimeOf(p)) +
         input('Licensing authority', 'authority', p.authority && !R.legacyRegime(p.authority) ? p.authority : (R.authorityFor(countryCodeOf(p)) || ''), 'text', 'required maxlength="100" placeholder="e.g. your national aviation authority"', false, 'Filled in from your country. Change it if yours is different.') +
-        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="e.g. EGHP · Popham"', true) +
+        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true) + '<datalist id="home-af"></datalist>' +
         input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)],
       ['What are you working toward?', 'Your target is your own planning date. Your school decides the training sequence and when you’re ready.',
         licenceSelect(regimeOf(p), licenceOf(p)) +
@@ -452,17 +455,34 @@
   function mapPage() {
     const list = sorted().filter(f => f.points?.length);
     const sel = list.some(f => f.id === ui.mapSel) ? ui.mapSel : null;
-    shell('map', { title: 'Map', sub: 'The routes in your record. Dashed lines join start and end points; solid lines are recorded tracks.' },
-      list.length ? `<div class="grid">
-        <section class="span-8"><div class="mapbox" data-mapbox>${trackSVG(list, 800, 560, sel)}<div class="map-legend"><span><i></i>Recorded track</span><span><i class="dash"></i>Start to end</span></div></div>
-          <p class="map-note">${state.mapsKey ? 'Satellite view loads when available.' : 'Satellite imagery appears here once maps are connected for your account.'} For reviewing records only, not for navigation.</p></section>
+    shell('map', { title: 'Map', sub: 'Your routes on a live chart with the real airfields in your country. Tap an airfield for its runways and frequencies.' },
+      `<div class="grid">
+        <section class="span-8"><div class="mapbox" data-mapbox>${trackSVG(list, 800, 560, sel)}<div class="map-legend"><span><i></i>Recorded track</span><span><i class="dash"></i>Plotted or start to end</span></div></div>
+          <p class="map-note"><span data-afcount></span> For reviewing your records only, not for navigation.</p></section>
         <section class="tile span-4"><div class="tile-head"><h2>Flights with routes</h2>${sel ? '<button class="link" data-all>Show all</button>' : ''}</div>
+          ${list.length ? '' : `<div class="empty"><p>No routes yet. When you log a flight, choose <b>Plot on the map</b> or pick airfields for From and To.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
           <div class="track-list">${list.map(f => `<button class="track-item" data-sel="${esc(f.id)}" aria-pressed="${sel === f.id}"><span><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc(fmtDate(f.date))} · ${esc(f.lesson || roleLong(f.role))}</small></span><span class="ftime">${hm(f.minutes)}</span></button>`).join('')}</div>
-        </section></div>`
-        : `<div class="tile empty center"><h3>No routes yet.</h3><p>When you log a flight, open “Route on the map” and paste the coordinates of your start and end points, or a full track.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`);
-    $$('[data-sel]').forEach(b => b.onclick = () => { ui.mapSel = ui.mapSel === b.dataset.sel ? null : b.dataset.sel; mapPage(); });
-    const all = $('[data-all]'); if (all) all.onclick = () => { ui.mapSel = null; mapPage(); };
-    if (state.mapsKey && list.length) googleMap(list, sel);
+        </section></div>`);
+    $$('[data-sel]').forEach(b => b.onclick = () => {
+      ui.mapSel = ui.mapSel === b.dataset.sel ? null : b.dataset.sel;
+      if (chart && $('[data-mapbox]')?.classList.contains('live')) { chart.select(ui.mapSel); $$('[data-sel]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.sel === ui.mapSel))); }
+      else mapPage();
+    });
+    const all = $('[data-all]'); if (all) all.onclick = () => { ui.mapSel = null; if (chart) { chart.select(null); $$('[data-sel]').forEach(x => x.setAttribute('aria-pressed', 'false')); } else mapPage(); };
+    chartMap(list, sel);
+  }
+
+  let chart = null;
+  async function chartMap(list, sel) {
+    const box = $('[data-mapbox]'); if (!box || !window.BoploMap) return;
+    const holder = document.createElement('div'); holder.className = 'gmap'; box.prepend(holder);
+    try {
+      chart?.destroy?.();
+      chart = await BoploMap.mountOverview(holder, { country: countryCodeOf(state.profile), home: upper(state.profile.airport).split(/[\s·]/)[0], flights: list, selected: sel, onCount: n => { const c = $('[data-afcount]'); if (c) c.textContent = n ? `${n.toLocaleString('en-GB')} airfields in ${R.nameFor(countryCodeOf(state.profile))}` : ''; } });
+      if (!holder.isConnected) { chart.destroy(); return; }
+      const svg = box.querySelector(':scope > svg'); if (svg) svg.style.display = 'none';
+      box.classList.add('live');
+    } catch { holder.remove(); }
   }
 
   let mapsReady;
@@ -585,7 +605,7 @@
             <div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>
             ${input('Target date', 'target', p.target, 'date', '', true)}
             ${input('Hours goal', 'goalHours', p.goalHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric"', true)}
-            ${input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100"', true)}
+            ${input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true)}<datalist id="home-af"></datalist>
             ${input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)}
           </div>
         </section>
@@ -623,8 +643,9 @@
         <div class="group"><h3>The flight</h3><div class="fields">
           ${input('Date', 'date', f.date || todayISO(), 'date', `required max="${todayISO()}"`)}
           ${duration('Flight time', 'minutes', f.minutes ?? '', true)}
-          ${input('From', 'departure', f.departure || p.airport || '', 'text', 'required maxlength="100" placeholder="e.g. EGHP"')}
-          ${input('To', 'arrival', f.arrival || '', 'text', 'required maxlength="100" placeholder="e.g. EGHP"')}
+          ${input('From', 'departure', f.departure || upper(p.airport).split(/[\s·]/)[0] || '', 'text', 'required maxlength="100" placeholder="ICAO code, e.g. EGHP" list="af-list" autocomplete="off"')}
+          ${input('To', 'arrival', f.arrival || '', 'text', 'required maxlength="100" placeholder="ICAO code" list="af-list" autocomplete="off"')}
+          <datalist id="af-list"></datalist>
           ${input('Aircraft', 'aircraft', f.aircraft ?? p.aircraft ?? '', 'text', 'maxlength="100"', true)}
           ${input('Registration', 'registration', f.registration ?? p.registration ?? '', 'text', 'maxlength="100"', true)}
         </div></div>
@@ -639,10 +660,11 @@
           <label class="field full"><span>Lesson or exercise <i>(optional)</i></span><input name="lesson" value="${esc(f.lesson || (editing ? '' : p.nextLesson || ''))}" maxlength="100"></label>
           ${input('Debrief notes', 'notes', f.notes || '', 'textarea', 'placeholder="What went well, what to work on next time"', true)}
         </div></div>
-        <details class="more" ${coords ? 'open' : ''}><summary>Route on the map <span class="hint" style="margin-left:auto;margin-right:12px">optional</span></summary>
+        <details class="more" ${coords ? 'open' : ''}><summary>Route on the map <span class="hint" style="margin-left:auto;margin-right:12px" data-route-hint>${coords ? `${(f.points || []).length} points` : 'optional'}</span></summary>
+          <div class="plot-cta"><button type="button" class="btn btn-ink btn-has-spark" data-plot>${ico('map')} Plot on the map ${spark}</button><span class="hint">Or leave it: picking known airfields for From and To draws a start-to-end line for you.</span></div>
           <div class="fields">
             <label class="field full"><span>Coordinates</span><textarea name="coordinates" placeholder="51.1939,-1.2347&#10;50.7800,-1.8425" spellcheck="false">${esc(coords)}</textarea><small>One latitude,longitude pair per line. Two points draw a dashed start-to-end line; many points draw your track.</small></label>
-            ${select('These points are', 'routeKind', [['endpoints', 'Start and end points'], ['track', 'A recorded track']], f.routeKind || 'endpoints')}
+            ${select('These points are', 'routeKind', [['route', 'A route I plotted'], ['endpoints', 'Start and end points'], ['track', 'A recorded track']], f.routeKind || 'endpoints')}
           </div>
         </details>
         <p class="form-error" role="alert"></p>
@@ -656,6 +678,28 @@
     sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close());
     sheet.onclick = e => { if (e.target === sheet) sheet.close(); };
     sheet.showModal();
+    const cc = countryCodeOf(p);
+    let afList = [];
+    if (window.BoploMap && cc) BoploMap.airfields(cc).then(list => { afList = list; const dl = sheet.querySelector('#af-list'); if (dl) dl.innerHTML = list.slice(0, 6000).map(a => `<option value="${esc(a.code)}">${esc(a.name)}${a.city ? ' · ' + esc(a.city) : ''}</option>`).join(''); });
+    const plotBtn = sheet.querySelector('[data-plot]');
+    if (plotBtn) plotBtn.onclick = () => {
+      if (!window.BoploMap) return;
+      const dlg = document.getElementById('plot'), ta = form.querySelector('[name=coordinates]');
+      const cur = ta.value.trim() ? ta.value.trim().split(/\n+/).map(l => l.split(/[,\s]+/).map(Number)).filter(x => x.length === 2 && x.every(Number.isFinite)).map(([lat, lng]) => ({ lat, lng })) : [];
+      dlg.showModal();
+      BoploMap.mountPlotter(dlg, {
+        country: cc, home: upper(p.airport).split(/[\s·]/)[0], points: cur, from: form.departure.value, to: form.arrival.value,
+        onCancel: () => dlg.close(),
+        onDone: ({ points, from, to }) => {
+          dlg.close();
+          ta.value = points.map(x => `${x.lat},${x.lng}`).join('\n');
+          if (points.length > 1) form.routeKind.value = 'route';
+          if (from) form.departure.value = from;
+          if (to) form.arrival.value = to;
+          const h = sheet.querySelector('[data-route-hint]'); if (h) h.textContent = points.length ? `${points.length} points` : 'optional';
+        }
+      });
+    };
     form.onsubmit = async e => {
       e.preventDefault(); err.textContent = '';
       const btn = form.querySelector('[type=submit]');
@@ -671,7 +715,12 @@
           if (parts.length !== 2 || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error(`Check route line ${i + 1}: use latitude,longitude.`);
           return { lat, lng };
         }) : [];
-        const data = { date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: v.routeKind };
+        let kind = v.routeKind;
+        if (!points.length && afList.length && window.BoploMap) {
+          const a = BoploMap.findAirfield(afList, v.departure), b = BoploMap.findAirfield(afList, v.arrival);
+          if (a && b && a.code !== b.code) { points.push({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }); kind = 'endpoints'; }
+        }
+        const data = { date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
         btn.disabled = true;
         const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];

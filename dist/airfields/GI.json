@@ -1,0 +1,1 @@
+{"v":1,"country":"GI","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["LXGB","Gibraltar Airport",36.15168,-5.34978,"L",12,"Gibraltar","GIB",[["09/27",1829,"asphalt"]],[["TWR","TWR",131.2]]]]}

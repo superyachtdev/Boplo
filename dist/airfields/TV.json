@@ -1,0 +1,1 @@
+{"v":1,"country":"TV","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["NGFU","Funafuti International Airport",-8.52388,179.19698,"M",9,"Funafuti","FUN",[["03/21",1536,"asphalt"]],[]]]}

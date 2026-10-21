@@ -22,7 +22,7 @@ export function validateFlight(input) {
  if(input.points!=null&&!Array.isArray(input.points))fail(400,'Route coordinates must be a list.');
  if(input.points?.length>2000)fail(400,'Use at most 2,000 track points.');
  for(const p of input.points||[])f.points.push({lat:number(p.lat,-90,90,'latitude'),lng:number(p.lng,-180,180,'longitude')});
- f.routeKind=input.routeKind==='track'?'track':'endpoints';
+ f.routeKind=['track','route'].includes(input.routeKind)?input.routeKind:'endpoints';
  return f;
 }
 export async function onRequest({request,env}) {

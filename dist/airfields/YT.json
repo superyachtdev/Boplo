@@ -1,0 +1,1 @@
+{"v":1,"country":"YT","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["FMCZ","Dzaoudzi Pamandzi International Airport",-12.80932,45.28182,"L",23,"Dzaoudzi","DZA",[["16/34",1929,"asphalt"]],[["AFIS","AFIS",119.2]]]]}

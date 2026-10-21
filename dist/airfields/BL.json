@@ -1,0 +1,1 @@
+{"v":1,"country":"BL","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["TFFJ","St. Jean Airport",17.9044,-62.84333,"M",49,"Gustavia","SBH",[["10/28",646,"concrete"]],[["AFIS","St. Barths Information",118.45]]]]}

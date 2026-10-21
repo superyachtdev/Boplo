@@ -1,0 +1,1 @@
+{"v":1,"country":"SM","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["LIKD","Torraccia Airfield",43.9489,12.51141,"S",787,"Torraccia","",[["16/34",650,"other"],["H1",20,"asphalt"]],[]]]}

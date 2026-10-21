@@ -1,0 +1,1 @@
+{"v":1,"country":"FO","built":"2026-10-21","source":"OurAirports (public domain), ourairports.com","fields":["code","name","lat","lng","type","elevationFt","city","iata","runways[ident,lengthM,surface]","freqs[type,desc,mhz]"],"rows":[["EKVG","Vágar Airport",62.06326,-7.27578,"L",280,"Vágar","FAE",[["12/30",1800,"asphalt"]],[["AFIS","AFIS",124.85]]]]}
