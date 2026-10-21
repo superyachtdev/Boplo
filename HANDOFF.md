@@ -81,6 +81,7 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Plans:** Advanced = active, trialing (with card) or past_due. Free: 15 flights (server-enforced, 402), 1 saved nav plan, replays only. Advanced-only: CSV import, instructor share, debrief tidy (server-enforced), plus currency, study, radio and simulator fly mode (client-gated). Export/print stays free. Any 402 opens the upgrade sheet.
 - **Landing:** pricing lists match the plans; "Start 7-day free trial" stores `boplo-intent` so the desk opens Plan & billing after sign-in.
 - **Legal:** `dist/terms.html`, `privacy.html`, `refunds.html` (14-day money-back guarantee, EU/UK withdrawal right and model form, Google Maps/Earth terms for the 3D tiles). Seller is named as BOPLO (sole trader; owner asked for no address or tax ID on the pages). Sign-in screen and checkout link to them; landing footer has a Legal column. Drafts: get a lawyer to review before taking real money.
+- **Promotion codes:** "Have a code?" in checkout → `POST /flight/billing/promo` validates a Stripe promotion code (dashboard: Products → Coupons → Promotion codes) and shows the discounted first payment; `subscribe` passes it as `discounts[0][promotion_code]`. Promotion-code metadata `skip_trial=true` charges immediately instead of starting the trial. A 100%-off code activates without a card.
 - `_headers` Referrer-Policy changed from `no-referrer` to `strict-origin-when-cross-origin` (needed for referrer-restricted Google keys and Stripe).
 
 ## Open items

@@ -775,3 +775,10 @@ details.more .fields{padding:0 16px 16px}
 .me-row small .plan-badge{margin:0 6px 0 0;vertical-align:0}
 .me-actions a,.me-actions button{flex:1 1 auto;white-space:nowrap;padding:0 8px}
 @media (max-width:900px){.plan-card.adv{order:-1}}
+.pay-promo{margin-top:-6px}
+.pay-promo .link{font-size:13.5px;color:var(--electric);text-decoration:underline;text-underline-offset:2px}
+.promo-row{display:flex;gap:8px}
+.promo-row input{flex:1;min-width:0;height:40px;border-radius:var(--r-ui);border:1px solid var(--hair-l);padding:0 12px;font:inherit;font-size:14.5px;text-transform:uppercase;letter-spacing:.04em;background:#fff}
+.pay-promo small{display:block;font-size:12.5px;margin-top:6px;color:var(--ink-3)}
+.pay-promo small.ok{color:var(--ok)}.pay-promo small.bad{color:var(--danger)}
+.pay-summary s{color:var(--ink-3);font-weight:450;margin-left:4px}

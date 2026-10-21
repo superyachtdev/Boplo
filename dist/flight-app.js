@@ -1437,57 +1437,85 @@
   /* checkout: Boplo's own sheet, with Stripe's Payment Element for the card or wallet */
   const loadStripe = () => window.Stripe ? Promise.resolve(window.Stripe) : (window.__stripeLib = window.__stripeLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = () => res(window.Stripe); s.onerror = () => { window.__stripeLib = null; rej(new Error('The payment form couldn’t load. Check your connection or ad blocker.')); }; document.head.append(s); }));
   async function checkoutSheet(interval) {
-    const b = B(), pr = b.prices[interval];
+    const b = B(), pr = b.prices[interval], per = interval === 'yearly' ? 'a year' : 'a month', every = interval === 'yearly' ? 'every year' : 'every month';
+    let promo = null, stripeJs = null, elements = null, started = null, addr = null, step = b.tax ? 'address' : 'pay';
+    const trialNow = () => b.trialAvailable && !promo?.skipTrial;
+    const firstAmt = () => promo ? promo.firstAmount : pr.amount;
     sheet.innerHTML = `<form class="checkout" data-pay novalidate>
-      <div class="sheet-head"><h2 class="display" id="sheet-title">${b.trialAvailable ? 'Start your free trial' : 'Upgrade to Advanced'}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-head"><h2 class="display" id="sheet-title" data-title></h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
       <div class="sheet-body">
-        <div class="pay-summary"><div><b>Boplo Flight Advanced</b><small>${interval === 'yearly' ? 'Yearly' : 'Monthly'}</small></div>
-          <div class="r"><b>${b.trialAvailable ? `${b.trialDays} days free` : money2(pr.amount, pr.currency)}</b><small>${b.trialAvailable ? `then ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'a year' : 'a month'}` : (interval === 'yearly' ? 'per year' : 'per month')}${b.tax ? ' + tax' : ''}</small></div></div>
+        <div class="pay-summary" data-sum></div>
+        <div class="pay-promo" data-promo><button type="button" class="link" data-promo-open>Have a code?</button></div>
         ${b.tax ? '<div data-addr class="pay-el"></div>' : ''}
         <div data-el class="pay-el"><div class="pay-loading">Loading the secure payment form…</div></div>
-        <label class="pay-agree"><input type="checkbox" name="agree" required> <span>I agree to the <a href="/terms.html" target="_blank">Terms</a> and understand ${b.trialAvailable ? `that after ${b.trialDays} days I’ll be charged ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'every year' : 'every month'} until I cancel` : `that I’ll be charged ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'every year' : 'every month'} until I cancel`}. I can cancel any time in Plan & billing. <a href="/refunds.html" target="_blank">Refund policy</a>.</span></label>
+        <label class="pay-agree"><input type="checkbox" name="agree" required> <span data-agree></span></label>
         <p class="form-error" role="alert"></p>
       </div>
-      <footer class="sheet-foot"><span class="hint pay-lock">${ico('lock')}Secured by Stripe</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" data-go disabled>${b.trialAvailable ? 'Start free trial' : `Pay ${money2(pr.amount, pr.currency)}`} ${spark}</button></div></footer>
+      <footer class="sheet-foot"><span class="hint pay-lock">${ico('lock')}Secured by Stripe</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" data-go disabled><span data-golabel></span> ${spark}</button></div></footer>
     </form>`;
     sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
     sheet.showModal();
-    const form = sheet.querySelector('[data-pay]'), err = sheet.querySelector('.form-error'), go = sheet.querySelector('[data-go]');
+    const form = sheet.querySelector('[data-pay]'), err = sheet.querySelector('.form-error'), go = sheet.querySelector('[data-go]'), q = s2 => sheet.querySelector(s2);
+    const paint = () => {
+      const t = trialNow(), f = firstAmt();
+      q('[data-title]').textContent = t ? 'Start your free trial' : 'Upgrade to Advanced';
+      q('[data-sum]').innerHTML = `<div><b>Boplo Flight Advanced</b><small>${interval === 'yearly' ? 'Yearly' : 'Monthly'}${promo ? ` · code ${esc(promo.code)}: ${esc(promo.label)}` : ''}</small></div>
+        <div class="r"><b>${t ? `${b.trialDays} days free` : money2(f, pr.currency)}${!t && promo && f !== pr.amount ? ` <s>${money2(pr.amount, pr.currency)}</s>` : ''}</b><small>${t ? `then ${money2(f, pr.currency)}${promo && f !== pr.amount ? ` (then ${money2(pr.amount, pr.currency)})` : ''} ${per}` : (promo && f !== pr.amount ? `today, then ${money2(pr.amount, pr.currency)} ${per}` : per)}${b.tax ? ' + tax' : ''}</small></div>`;
+      q('[data-agree]').innerHTML = `I agree to the <a href="/terms.html" target="_blank">Terms</a> and understand that ${t ? `after ${b.trialDays} days I’ll be charged ${money2(f, pr.currency)}` : `I’ll be charged ${money2(f, pr.currency)} today`}${promo && f !== pr.amount ? `, then ${money2(pr.amount, pr.currency)} ${every}` : ` ${every}`} until I cancel. I can cancel any time in Plan &amp; billing. <a href="/refunds.html" target="_blank">Refund policy</a>.`;
+      q('[data-golabel]').textContent = step === 'address' ? 'Continue to payment' : t ? 'Start free trial' : `Pay ${money2(f, pr.currency)}`;
+    };
+    paint();
     const appearance = { theme: 'stripe', variables: { colorPrimary: '#0A62FF', colorText: '#050B1F', colorTextSecondary: '#3E4C6E', colorDanger: '#D93A4A', fontFamily: 'Archivo, system-ui, sans-serif', borderRadius: '12px', spacingUnit: '4px' }, rules: { '.Input': { border: '1px solid rgba(5,11,31,.14)', boxShadow: 'none' }, '.Input:focus': { borderColor: '#0A62FF', boxShadow: '0 0 0 3px rgba(10,98,255,.15)' }, '.Label': { fontWeight: '550' } } };
-    let stripeJs, elements, started = null;
+    const fonts = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;550;620&display=swap' }];
+    // (re)start the subscription on the server and mount the payment form for it
+    const begin = async () => {
+      go.disabled = true; q('[data-el]').innerHTML = '<div class="pay-loading">Loading the secure payment form…</div>';
+      const out = await api('billing/subscribe', 'POST', { interval, address: addr || undefined, promo: promo?.code });
+      if (out.active) { sheet.close(); await finishCheckout(); return; }
+      started = out;
+      elements = stripeJs.elements({ clientSecret: out.clientSecret, appearance, fonts });
+      const pe = elements.create('payment', { layout: { type: 'tabs' }, business: { name: 'Boplo' }, terms: { card: 'never' } });
+      q('[data-el]').innerHTML = ''; pe.mount(q('[data-el]'));
+      pe.on('ready', () => { go.disabled = false; });
+    };
+    // promotion codes
+    q('[data-promo-open]').onclick = () => {
+      q('[data-promo]').innerHTML = `<div class="promo-row"><input name="promo" placeholder="Enter your code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" aria-label="Promotion code"><button type="button" class="btn btn-line btn-sm" data-apply>Apply</button></div><small data-pmsg></small>`;
+      const inp = q('[name=promo]'), msg = q('[data-pmsg]'); inp.focus();
+      const apply = async () => {
+        const code = inp.value.trim(); if (!code) return; msg.textContent = 'Checking…'; msg.className = '';
+        try {
+          promo = await api('billing/promo', 'POST', { code, interval });
+          msg.textContent = `${promo.code} applied: ${promo.label}${promo.skipTrial ? ', charged today' : ''}.`; msg.className = 'ok';
+          paint(); if (step === 'pay' && stripeJs) await begin();
+        } catch (x) { promo = null; msg.textContent = x.message; msg.className = 'bad'; paint(); }
+      };
+      q('[data-apply]').onclick = apply; inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); apply(); } };
+    };
     try {
       const S = await loadStripe(); stripeJs = S(b.publishableKey);
-      const begin = async address => {
-        const out = await api('billing/subscribe', 'POST', { interval, address });
-        elements = stripeJs.elements({ clientSecret: out.clientSecret, appearance, fonts: [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;550;620&display=swap' }] });
-        const pe = elements.create('payment', { layout: { type: 'tabs' }, business: { name: 'Boplo' }, terms: { card: 'never' } });
-        sheet.querySelector('[data-el]').innerHTML = ''; pe.mount(sheet.querySelector('[data-el]'));
-        pe.on('ready', () => { go.disabled = false; });
-        started = out; return out;
-      };
       if (b.tax) {
         // billing address first, so the right tax can be worked out before the subscription starts
-        const ae = stripeJs.elements({ appearance, fonts: [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;550;620&display=swap' }] }).create('address', { mode: 'billing', fields: { phone: 'never' } });
-        ae.mount(sheet.querySelector('[data-addr]'));
-        sheet.querySelector('[data-el]').innerHTML = '<div class="pay-loading">Enter your billing address, then continue to payment.</div>';
-        go.disabled = false; go.firstChild.textContent = 'Continue to payment ';
-        go.dataset.step = 'address';
+        const ae = stripeJs.elements({ appearance, fonts }).create('address', { mode: 'billing', fields: { phone: 'never' } });
+        ae.mount(q('[data-addr]'));
+        q('[data-el]').innerHTML = '<div class="pay-loading">Enter your billing address, then continue to payment.</div>';
+        go.disabled = false;
         form.onsubmit = async e => {
-          e.preventDefault(); if (go.dataset.step !== 'address') return pay();
+          e.preventDefault(); if (step === 'pay') return pay();
           const v = await ae.getValue(); if (!v.complete) { err.textContent = 'Complete your billing address.'; return; }
-          err.textContent = ''; go.disabled = true;
-          try { await begin({ country: v.value.address.country, postal_code: v.value.address.postal_code, line1: v.value.address.line1, city: v.value.address.city, state: v.value.address.state }); go.dataset.step = 'pay'; go.firstChild.textContent = (b.trialAvailable ? 'Start free trial ' : `Pay ${money2(pr.amount, pr.currency)} `); }
-          catch (x) { err.textContent = x.message; go.disabled = false; }
+          err.textContent = ''; const a2 = v.value.address; addr = { country: a2.country, postal_code: a2.postal_code, line1: a2.line1, city: a2.city, state: a2.state };
+          try { step = 'pay'; paint(); await begin(); } catch (x) { step = 'address'; paint(); err.textContent = x.message; go.disabled = false; }
         };
-      } else { await begin(); form.onsubmit = e => { e.preventDefault(); pay(); }; }
-    } catch (x) { err.textContent = x.message; sheet.querySelector('[data-el]').innerHTML = ''; }
+      } else { form.onsubmit = e => { e.preventDefault(); pay(); }; await begin(); }
+    } catch (x) { err.textContent = x.message; q('[data-el]').innerHTML = ''; }
     async function pay() {
       err.textContent = '';
       if (!form.agree.checked) { err.textContent = 'Tick the box to agree to the terms.'; return; }
-      go.disabled = true; go.firstChild.textContent = 'Confirming… ';
+      if (!started) return;
+      go.disabled = true; q('[data-golabel]').textContent = 'Confirming…';
       const confirmParams = { return_url: `${location.origin}/flight-app.html#plan` };
       const r = started.mode === 'setup' ? await stripeJs.confirmSetup({ elements, confirmParams, redirect: 'if_required' }) : await stripeJs.confirmPayment({ elements, confirmParams, redirect: 'if_required' });
-      if (r.error) { err.textContent = r.error.message || 'The payment didn’t go through.'; go.disabled = false; go.firstChild.textContent = b.trialAvailable ? 'Start free trial ' : `Pay ${money2(pr.amount, pr.currency)} `; return; }
+      if (r.error) { err.textContent = r.error.message || 'The payment didn’t go through.'; go.disabled = false; paint(); return; }
       await finishCheckout();
     }
   }

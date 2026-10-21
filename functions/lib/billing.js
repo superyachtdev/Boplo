@@ -98,6 +98,29 @@ export function publicBilling(env, row) {
   };
 }
 
+// promotion codes, created in the Stripe dashboard (Products → Coupons → Promotion codes).
+// Add metadata skip_trial=true to a promotion code to charge straight away instead of starting the trial.
+export async function findPromo(env, code, fetcher = fetch) {
+  const c = String(code || '').trim(); if (!/^[A-Za-z0-9_-]{2,40}$/.test(c)) throw Object.assign(new Error('That code isn’t valid.'), { status: 400 });
+  const r = await stripe(env, 'GET', 'promotion_codes', { code: c, active: true, limit: 1, expand: ['data.coupon'] }, fetcher);
+  const pc = r.data?.[0];
+  if (!pc || !pc.coupon?.valid || (pc.expires_at && pc.expires_at * 1000 < Date.now()) || (pc.max_redemptions && pc.times_redeemed >= pc.max_redemptions)) throw Object.assign(new Error('That code isn’t valid or has expired.'), { status: 400 });
+  return pc;
+}
+export function promoSummary(pc, key) {
+  const plan = PLANS[key], c = pc.coupon;
+  if (c.currency && c.amount_off && c.currency !== plan.currency) return null;
+  const first = c.percent_off ? Math.round(plan.amount * (1 - c.percent_off / 100)) : Math.max(0, plan.amount - (c.amount_off || 0));
+  const off = c.percent_off ? `${c.percent_off}% off` : `$${(c.amount_off / 100).toFixed(2)} off`;
+  const dur = c.duration === 'forever' ? 'every payment' : c.duration === 'repeating' ? `for ${c.duration_in_months} months` : 'your first payment';
+  return { code: pc.code, id: pc.id, label: `${off} ${dur}`, firstAmount: first, skipTrial: pc.metadata?.skip_trial === 'true' };
+}
+export async function checkPromo(env, input, fetcher = fetch) {
+  const key = input?.interval === 'monthly' ? 'monthly' : 'yearly', pc = await findPromo(env, input?.code, fetcher), sum = promoSummary(pc, key);
+  if (!sum) throw Object.assign(new Error('That code doesn’t apply to this plan.'), { status: 400 });
+  return sum;
+}
+
 // start a subscription that the browser confirms with Stripe's Payment Element
 export async function subscribe(env, user, input, origin, fetcher = fetch) {
   const key = input?.interval === 'monthly' ? 'monthly' : 'yearly';
@@ -115,15 +138,18 @@ export async function subscribe(env, user, input, origin, fetcher = fetch) {
     if (!/^[A-Z]{2}$/.test(String(a.country || ''))) throw Object.assign(new Error('Enter your billing country.'), { status: 400 });
     await stripe(env, 'POST', `customers/${row.customer_id}`, { address: { country: a.country, postal_code: a.postal_code || undefined, line1: a.line1 || undefined, city: a.city || undefined, state: a.state || undefined }, expand: ['tax'] }, fetcher);
   }
-  const days = Number(env.BILLING_TRIAL_DAYS ?? 7), useTrial = days > 0 && !row.trial_used;
+  const promo = input?.promo ? await findPromo(env, input.promo, fetcher) : null;
+  const days = Number(env.BILLING_TRIAL_DAYS ?? 7), useTrial = days > 0 && !row.trial_used && promo?.metadata?.skip_trial !== 'true';
   const sub = await stripe(env, 'POST', 'subscriptions', {
     customer: row.customer_id, items: [{ price: price.id }], payment_behavior: 'default_incomplete',
     payment_settings: { save_default_payment_method: 'on_subscription' },
     trial_period_days: useTrial ? days : undefined, trial_settings: useTrial ? { end_behavior: { missing_payment_method: 'cancel' } } : undefined,
     automatic_tax: tax ? { enabled: true } : undefined, metadata: { boplo_user: user.id },
+    discounts: promo ? [{ promotion_code: promo.id }] : undefined,
     expand: ['latest_invoice.payment_intent', 'pending_setup_intent']
   }, fetcher);
   const secret = sub.pending_setup_intent?.client_secret || sub.latest_invoice?.payment_intent?.client_secret;
+  if (!secret && sub.status === 'active') { const r2 = await syncCustomer(env, row.customer_id, fetcher); return { active: true, plan: planOf(r2) }; } // fully discounted, nothing to collect
   if (!secret) throw Object.assign(new Error('Checkout couldn’t start. Please try again.'), { status: 502 });
   // stays free until the browser confirms the card or payment and we sync
   row = await saveRow(env, user.id, { subscription_id: sub.id, status: 'incomplete', price_key: key });

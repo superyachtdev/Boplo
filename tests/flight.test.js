@@ -152,3 +152,26 @@ test('checkout creates prices once, starts a trial and stays free until confirme
  const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('items[0][price]'),'price_1');assert.equal(sub.b.get('trial_period_days'),'7');assert.equal(sub.b.get('payment_behavior'),'default_incomplete');assert.deepEqual(sub.b.getAll('expand[]'),['latest_invoice.payment_intent','pending_setup_intent']);
  const row=db.prepare("SELECT * FROM flight_billing WHERE user_id='u1'").get();assert.equal(row.customer_id,'cus_1');assert.equal(row.status,'incomplete');
 });
+test('promotion codes discount the first payment and can skip the trial',async()=>{
+ const {promoSummary,subscribe,checkPromo}=await import('../functions/lib/billing.js');
+ assert.equal(promoSummary({code:'OWNER',id:'promo_1',coupon:{amount_off:9899,currency:'usd',duration:'once'},metadata:{skip_trial:'true'}},'yearly').firstAmount,100);
+ assert.equal(promoSummary({code:'HALF',id:'promo_2',coupon:{percent_off:50,duration:'forever'},metadata:{}},'monthly').firstAmount,600);
+ assert.equal(promoSummary({code:'EUR',id:'p',coupon:{amount_off:500,currency:'eur',duration:'once'},metadata:{}},'yearly'),null);
+ const db=new DatabaseSync(':memory:');
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run('o','o@example.com');
+ const env={STRIPE_SECRET_KEY:'sk_test_x',DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async run(){return db.prepare(sql).run(...args);}};}}};
+ const calls=[];
+ const fake=async(url,init)=>{const u=new URL(url),body=new URLSearchParams(init.body||'');calls.push({m:init.method,p:u.pathname,q:u.searchParams,b:body});const r=o=>new Response(JSON.stringify(o),{status:200});
+  if(u.pathname==='/v1/promotion_codes')return r({data:u.searchParams.get('code')==='OWNER'?[{id:'promo_1',code:'OWNER',coupon:{valid:true,amount_off:9899,currency:'usd',duration:'once'},metadata:{skip_trial:'true'}}]:[]});
+  if(u.pathname==='/v1/customers')return r({id:'cus_o'});
+  if(u.pathname==='/v1/prices'&&init.method==='GET')return r({data:[{id:'price_y',currency:'usd'}]});
+  if(u.pathname==='/v1/subscriptions'&&init.method==='GET')return r({data:[]});
+  if(u.pathname==='/v1/subscriptions')return r({id:'sub_o',status:'incomplete',latest_invoice:{amount_due:100,currency:'usd',payment_intent:{client_secret:'pi_secret'}}});
+  return new Response('{}',{status:404});};
+ await assert.rejects(checkPromo(env,{code:'NOPE',interval:'yearly'},fake),/isn’t valid/);
+ const ok=await checkPromo(env,{code:'OWNER',interval:'yearly'},fake);assert.equal(ok.firstAmount,100);assert.equal(ok.skipTrial,true);
+ const out=await subscribe(env,{id:'o',email:'o@example.com'},{interval:'yearly',promo:'OWNER'},'https://boplo.app',fake);
+ assert.equal(out.mode,'payment');assert.equal(out.trial,false);
+ const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('discounts[0][promotion_code]'),'promo_1');assert.equal(sub.b.get('trial_period_days'),null);
+});
