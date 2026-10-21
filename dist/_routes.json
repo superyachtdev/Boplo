@@ -1,1 +1,1 @@
-{"version":1,"include":["/api/*","/auth/*","/darts/*"],"exclude":[]}
+{"version":1,"include":["/api/*","/auth/*","/darts/*","/flight/*","/move/*"],"exclude":[]}

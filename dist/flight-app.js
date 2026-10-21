@@ -41,7 +41,9 @@
       body: data === undefined ? undefined : JSON.stringify(data),
       signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
     });
-    const out = await res.json().catch(() => ({ error: 'The server sent an unexpected response.' }));
+    const isJSON = (res.headers.get('Content-Type') || '').includes('application/json');
+    const out = isJSON ? await res.json().catch(() => ({})) : {};
+    if (!isJSON) throw Object.assign(new Error('The flight desk service isn’t reachable right now. Try again in a minute.'), { status: res.status === 401 ? 401 : 503 });
     if (!res.ok) throw Object.assign(new Error(out.error || 'Something went wrong. Try again.'), { status: res.status });
     return out;
   }
@@ -687,7 +689,7 @@
   /* ---------------- start ---------------- */
   async function start() {
     if (preview) { demo(); render(); return; }
-    try { state = await api('workspace'); render(); }
+    try { const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.'); state = ws; render(); }
     catch (e) { if (e.status === 401) auth(); else failure(e); }
   }
   start();
