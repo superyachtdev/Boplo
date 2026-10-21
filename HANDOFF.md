@@ -33,6 +33,13 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - Profile stores `countryCode`, `regime`, `authority` (display text), `licence`. Older profiles (free-text country, old authority values) are mapped automatically.
 - Minimums are shown as guidance with the source, never as eligibility. Re-verify figures and bump `checked` when rules change. CASA RPL (25 h) currently links to a secondary summary; swap in a CASA primary source.
 
+## Chart map and airfields (2026-10-21, Claude)
+
+- `dist/flight-map.js`: MapLibre GL 4.7.1 (from unpkg) + OpenFreeMap vector tiles (free, no key) in a custom Boplo night-chart style. Used on the Map page and in the route plotter opened from the flight form ("Plot on the map").
+- Airfields: `dist/airfields/<ISO2>.json` built from OurAirports (public domain) by `scripts/build-airfields.mjs` (clone ourairports-data, run the script, commit). 49k airfields, with runways and main frequencies. Cards say "check the official AIP".
+- Flight form: From/To autocomplete real codes; if both are known airfields and no route is plotted, a start-to-end line is saved automatically. New routeKind `route` = plotted.
+- Falls back to the SVG track view if the map library or tiles can't load.
+
 ## Open items
 
 - Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).
