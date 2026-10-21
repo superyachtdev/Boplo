@@ -1,11 +1,11 @@
 /* Boplo Flight — mini simulator.
-   Replays a logged route over real 3D terrain, or lets the student fly it themselves.
-   Map: MapLibre GL + OpenFreeMap vector tiles, terrain from the AWS Terrain Tiles open dataset (Terrarium).
-   Aircraft, route gates and shadow are drawn in a WebGL2 overlay that shares the map camera's geometry.
+   Replays a logged route over real 3D scenery, or lets the student fly it themselves.
+   Engine: CesiumJS. Scenery: Google Photorealistic 3D Tiles when a Maps key with the Map Tiles API is configured,
+   otherwise Sentinel-2 cloudless imagery (EOX) draped on AWS Terrain Tiles elevation.
    It is a game-like practice toy, not a training device: the flight model is deliberately simple. */
 window.BoploSim = (() => {
   'use strict';
-  const LIB = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl';
+  const CES = 'https://cdn.jsdelivr.net/npm/cesium@1.144.0/Build/Cesium/';
   const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
   // Sentinel-2 cloudless 2017 by EOX: CC BY 4.0 (later years are non-commercial, so this layer is pinned)
   const IMG = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2017_3857/default/g/{z}/{y}/{x}.jpg';
@@ -19,21 +19,47 @@ window.BoploSim = (() => {
   const mmss = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; };
   const store = { get(k, d) { try { const v = localStorage.getItem('boplo-sim-' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('boplo-sim-' + k, JSON.stringify(v)); } catch { } } };
 
-  let libReady = null;
-  function loadLib() {
-    if (window.maplibregl) return Promise.resolve(window.maplibregl);
-    if (window.BoploMap?.loadLib) return window.BoploMap.loadLib();
-    if (libReady) return libReady;
-    libReady = new Promise((res, rej) => {
-      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = LIB + '.css'; document.head.append(css);
-      const s = document.createElement('script'); s.src = LIB + '.js'; s.async = true;
-      s.onload = () => window.maplibregl ? res(window.maplibregl) : rej(new Error('Map library unavailable.'));
-      s.onerror = () => { libReady = null; rej(new Error('The map library could not load.')); };
+  let cesReady = null;
+  function loadCesium() {
+    if (window.Cesium?.CesiumWidget) return Promise.resolve(window.Cesium);
+    if (cesReady) return cesReady;
+    window.CESIUM_BASE_URL = CES;
+    cesReady = new Promise((res, rej) => {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = CES + 'Widgets/widgets.css'; document.head.append(css);
+      const s = document.createElement('script'); s.src = CES + 'Cesium.js'; s.async = true;
+      s.onload = () => window.Cesium ? res(window.Cesium) : rej(new Error('The 3D engine couldn’t load.'));
+      s.onerror = () => { cesReady = null; rej(new Error('The 3D engine couldn’t load. Check your connection and try again.')); };
       document.head.append(s);
     });
-    return libReady;
+    return cesReady;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=2'; l.dataset.simcss = '1'; document.head.append(l); }
+  // free terrain: AWS Terrain Tiles (Terrarium PNGs) fed to Cesium as a heightmap provider
+  function terrariumTerrain(C) {
+    const N = 65, MAXZ = 14, cache = new Map(), cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const tile = (z, x, y) => {
+      const k = z + '/' + x + '/' + y; if (cache.has(k)) return cache.get(k);
+      const p = fetch(DEM.replace('{z}', z).replace('{x}', x).replace('{y}', y)).then(r => { if (!r.ok) throw new Error('dem'); return r.blob(); }).then(b => createImageBitmap(b)).then(bmp => {
+        ctx.drawImage(bmp, 0, 0); const d = ctx.getImageData(0, 0, 256, 256).data, h = new Float32Array(65536);
+        for (let i = 0; i < 65536; i++) h[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
+        return h;
+      });
+      cache.set(k, p); p.catch(() => cache.delete(k)); if (cache.size > 300) cache.delete(cache.keys().next().value); return p;
+    };
+    return new C.CustomHeightmapTerrainProvider({ width: N, height: N, tilingScheme: new C.WebMercatorTilingScheme(), credit: 'Terrain: AWS Terrain Tiles', callback: (x, y, level) => {
+      let z = level, tx = x, ty = y, sub = 1, ox = 0, oy = 0;
+      if (z > MAXZ) { const d = z - MAXZ; sub = 2 ** d; tx = x >> d; ty = y >> d; ox = x - tx * sub; oy = y - ty * sub; z = MAXZ; }
+      return tile(z, tx, ty).then(h => {
+        const out = new Float32Array(N * N);
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const u = clamp((ox + i / (N - 1)) / sub * 256 - .5, 0, 255), v = clamp((oy + j / (N - 1)) / sub * 256 - .5, 0, 255), x0 = Math.floor(u), y0 = Math.floor(v), x1 = Math.min(255, x0 + 1), y1 = Math.min(255, y0 + 1), fx = u - x0, fy = v - y0;
+          out[j * N + i] = (h[y0 * 256 + x0] * (1 - fx) + h[y0 * 256 + x1] * fx) * (1 - fy) + (h[y1 * 256 + x0] * (1 - fx) + h[y1 * 256 + x1] * fx) * fy;
+        }
+        return out;
+      }).catch(() => new Float32Array(N * N));
+    } });
+  }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=3'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -86,202 +112,105 @@ window.BoploSim = (() => {
     return { P, S, len, at, project, reset: () => { hint = 0; lastS = null; }, seed: v => { lastS = v; hint = 0; for (let i = 0; i < S.length - 1; i++) if (S[i] <= v) hint = i; } };
   }
 
-  /* ---------------- matrices (column-major) ---------------- */
-  const M4 = {
-    persp(fy, as, n, f) { const t = 1 / Math.tan(fy / 2), nf = 1 / (n - f); return new Float32Array([t / as, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) * nf, -1, 0, 0, 2 * f * n * nf, 0]); },
-    look(e, t, up) {
-      const n = a => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }, sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-      const cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], dt = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-      const z = n(sub(e, t)), x = n(cr(up, z)), y = cr(z, x);
-      return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dt(x, e), -dt(y, e), -dt(z, e), 1]);
-    },
-    mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
-    ry(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
-    rx(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
-    rz(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]); },
-    sc(k, ty = 0) { return new Float32Array([k, 0, 0, 0, 0, k, 0, 0, 0, 0, k, 0, 0, ty, 0, 1]); }
-  };
-
-  /* ---------------- WebGL overlay: aircraft, shadow, gates ---------------- */
-  const SUN = (() => { const v = [-.45, .78, -.42], l = Math.hypot(...v); return v.map(x => x / l); })();
-  function overlay(canvas) {
-    const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: false, stencil: true });
-    if (!gl) return null;
-    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
-    const prog = (vs, fs, attrs) => { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); attrs.forEach((a, i) => gl.bindAttribLocation(p, i, a)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; };
-    const uni = (p, names) => Object.fromEntries(names.map(n => [n, gl.getUniformLocation(p, n)]));
-
-    // painted aircraft: per-vertex colour, w = material (1 paint, 2 glass, 0 matte)
-    const aProg = prog(`#version 300 es
-      in vec3 aPos; in vec3 aNor; in vec4 aCol; uniform mat4 uVP; uniform mat4 uM; out vec3 vW; out vec3 vN; out vec4 vC;
-      void main(){ vec4 w=uM*vec4(aPos,1.); vW=w.xyz; vN=mat3(uM)*aNor; vC=aCol; gl_Position=uVP*w; }`, `#version 300 es
-      precision highp float; in vec3 vW; in vec3 vN; in vec4 vC; uniform vec3 uCam; uniform vec3 uSun; out vec4 o;
-      void main(){
-        vec3 n=normalize(vN), v=normalize(uCam-vW); if(dot(n,v)<0.) n=-n;
-        vec3 sky=vec3(.62,.76,.95), gnd=vec3(.36,.38,.30);
-        float nl=max(dot(n,uSun),0.), hemi=n.y*.5+.5;
-        vec3 amb=mix(gnd,sky,hemi)*.42;
-        vec3 h=normalize(uSun+v); float fres=pow(1.-max(dot(n,v),0.),5.);
-        vec3 col;
-        if(vC.w>1.5){ // glass: dark tint, sky reflection
-          vec3 r=reflect(-v,n); float up=clamp(r.y*.5+.5,0.,1.);
-          col=vC.rgb*(amb+nl*.4)+mix(gnd*.5,sky*1.05,up)*(.35+.65*fres)+vec3(1.,.97,.9)*pow(max(dot(n,h),0.),180.)*2.5*nl;
-        } else {
-          float spec=vC.w>.5?pow(max(dot(n,h),0.),70.)*.9:pow(max(dot(n,h),0.),12.)*.05;
-          col=vC.rgb*(amb+vec3(1.,.97,.9)*nl*1.05)+vec3(1.,.97,.9)*spec*nl+sky*fres*(vC.w>.5?.22:.03);
-        }
-        col=col/(col+vec3(.85))*1.75; // gentle tone map
-        o=vec4(pow(col,vec3(.95)),1.);
-      }`, ['aPos', 'aNor', 'aCol']);
-    const aU = uni(aProg, ['uVP', 'uM', 'uCam', 'uSun']);
-    // shadow: the same mesh flattened onto the ground along the sun direction
-    const sProg = prog(`#version 300 es
-      in vec3 aPos; uniform mat4 uVP; uniform mat4 uM; uniform vec3 uSun; uniform float uG;
-      void main(){ vec4 w=uM*vec4(aPos,1.); float h=w.y-uG; w.xyz-=uSun*(h/uSun.y); w.y=uG; gl_Position=uVP*w; }`, `#version 300 es
-      precision highp float; uniform float uA; out vec4 o; void main(){ o=vec4(0.02,0.03,0.05,uA); }`, ['aPos']);
-    const sU = uni(sProg, ['uVP', 'uM', 'uSun', 'uG', 'uA']);
-
-    const aVao = gl.createVertexArray(); gl.bindVertexArray(aVao);
-    {
-      const out = []; let C = [1, 1, 1, 1];
-      const WHITE = [.93, .94, .96, 1], BLUE = [.04, .30, .95, 1], ICE = [.62, .85, 1, 1], GLASS = [.06, .09, .14, 2], DARK = [.10, .11, .13, 0], GREY = [.55, .58, .62, 0], RUBBER = [.05, .05, .06, 0];
-      const tri = (a, b, c) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]; let n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]; const l = Math.hypot(...n) || 1; n = n.map(x => x / l); for (const p of [a, b, c]) out.push(...p, ...n, ...C); };
-      const quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
-      const hexa = (b, t) => { quad(b[0], b[1], b[2], b[3]); quad(t[3], t[2], t[1], t[0]); for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]); } };
-      // fuselage with rounded (octagonal) sections: [z, centreY, width, height]
-      const S = [[1.06, .02, .13, .13], [.9, .03, .27, .27], [.6, .06, .33, .36], [.3, .08, .34, .38], [.0, .08, .32, .36], [-.4, .07, .25, .27], [-.85, .08, .16, .18], [-1.3, .1, .09, .11], [-1.55, .12, .045, .07]];
-      const ring = ([z, y, w, h], k = 1) => { const a = w / 2 * k, b = h / 2 * k, c = .62; return [[-a * c, y - b, z], [a * c, y - b, z], [a, y - b * c, z], [a, y + b * c, z], [a * c, y + b, z], [-a * c, y + b, z], [-a, y + b * c, z], [-a, y - b * c, z]]; };
-      C = WHITE;
-      for (let i = 0; i < S.length - 1; i++) { const A = ring(S[i]), B = ring(S[i + 1]); for (let k = 0; k < 8; k++) { const j = (k + 1) % 8; quad(A[k], A[j], B[j], B[k]); } }
-      { const A = ring(S[S.length - 1]); for (let k = 1; k < 7; k++) tri(A[0], A[k + 1], A[k]); }
-      // blue cheatline along both sides
-      C = BLUE;
-      for (let i = 1; i < S.length - 2; i++) for (const s of [-1, 1]) {
-        const [z0, y0, w0] = S[i], [z1, y1, w1] = S[i + 1], o0 = w0 / 2 + .006, o1 = w1 / 2 + .006, t = .035;
-        quad([s * o0, y0 - t, z0], [s * o1, y1 - t, z1], [s * o1, y1 + t, z1], [s * o0, y0 + t, z0]);
+  /* ---------------- aircraft model: a low-wing trainer, built as a glTF binary in code ----------------
+     glTF axes: +Y up, +Z forward, +X to the left wing. Units are metres. */
+  function aircraftGLB() {
+    const S = 3.3; // model units to metres (10.8 m wingspan)
+    const parts = { paint: [], matte: [], glass: [], blades: [], disc: [] };
+    const WHITE = [.95, .96, .97, 1], BLUE = [.03, .28, .92, 1], NAVY = [.03, .07, .2, 1], GREY = [.42, .45, .5, 1], DARK = [.07, .075, .085, 1], RUBBER = [.035, .035, .04, 1], GLASS = [.1, .14, .2, 1];
+    function mesh(bucket) { const m = { pos: [], col: [], idx: [] }; parts[bucket].push(m); return m; }
+    // loft: rings of equal length joined into a smooth surface; closed rings by default
+    function loft(bucket, rings, colors, { closed = true, capStart = false, capEnd = false } = {}) {
+      const m = mesh(bucket), n = rings[0].length, base = m.pos.length / 3;
+      rings.forEach((r, i) => r.forEach(p => { m.pos.push(p[0] * S, p[1] * S, p[2] * S); m.col.push(...(Array.isArray(colors[0]) ? colors[i] : colors)); }));
+      const seg = closed ? n : n - 1;
+      for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < seg; j++) {
+        const a = base + i * n + j, b = base + i * n + (j + 1) % n, c = base + (i + 1) * n + (j + 1) % n, d = base + (i + 1) * n + j;
+        m.idx.push(a, b, c, a, c, d);
       }
-      // canopy glasshouse and windscreen
-      C = GLASS;
-      hexa([[-.155, .2, .66], [.155, .2, .66], [.165, .22, -.18], [-.165, .22, -.18]], [[-.11, .315, .38], [.11, .315, .38], [.12, .33, -.05], [-.12, .33, -.05]]);
-      C = WHITE; hexa([[-.12, .33, .38], [.12, .33, .38], [.12, .33, -.05], [-.12, .33, -.05]], [[-.1, .345, .34], [.1, .345, .34], [.1, .35, -.02], [-.1, .35, -.02]]);
-      // low wing with dihedral and a little taper, blue tips
-      for (const s of [-1, 1]) {
-        C = WHITE; hexa([[s * .14, -.13, .52], [s * 1.5, -.045, .44], [s * 1.5, -.045, .07], [s * .14, -.13, .0]], [[s * .14, -.075, .5], [s * 1.5, -.02, .43], [s * 1.5, -.02, .08], [s * .14, -.075, .02]]);
-        C = BLUE; hexa([[s * 1.5, -.045, .44], [s * 1.64, -.035, .4], [s * 1.64, -.035, .12], [s * 1.5, -.045, .07]], [[s * 1.5, -.02, .43], [s * 1.64, -.012, .39], [s * 1.64, -.012, .13], [s * 1.5, -.02, .08]]);
-        C = GREY; hexa([[s * .9, -.07, .08], [s * 1.45, -.045, .08], [s * 1.45, -.045, .03], [s * .9, -.07, .03]], [[s * .9, -.055, .08], [s * 1.45, -.03, .08], [s * 1.45, -.03, .03], [s * .9, -.055, .03]]);
-      }
-      // stabilator and swept fin with a blue top
-      C = WHITE; for (const s of [-1, 1]) hexa([[s * .04, .09, -1.2], [s * .62, .11, -1.3], [s * .62, .11, -1.48], [s * .04, .09, -1.52]], [[s * .04, .125, -1.2], [s * .62, .13, -1.3], [s * .62, .13, -1.48], [s * .04, .125, -1.52]]);
-      hexa([[-.022, .14, -.95], [.022, .14, -.95], [.022, .14, -1.55], [-.022, .14, -1.55]], [[-.016, .5, -1.33], [.016, .5, -1.33], [.016, .5, -1.6], [-.016, .5, -1.6]]);
-      C = BLUE; hexa([[-.016, .5, -1.33], [.016, .5, -1.33], [.016, .5, -1.6], [-.016, .5, -1.6]], [[-.014, .64, -1.43], [.014, .64, -1.43], [.014, .64, -1.63], [-.014, .64, -1.63]]);
-      // gear legs, wheel fairings
-      for (const [x, z] of [[-.44, .06], [.44, .06], [0, .84]]) {
-        C = GREY; hexa([[x - .014, -.44, z - .014], [x + .014, -.44, z - .014], [x + .014, -.44, z + .014], [x - .014, -.44, z + .014]], [[x - .014, -.12, z - .014], [x + .014, -.12, z - .014], [x + .014, -.12, z + .014], [x - .014, -.12, z + .014]]);
-        C = RUBBER; hexa([[x - .028, -.545, z - .075], [x + .028, -.545, z - .075], [x + .028, -.545, z + .075], [x - .028, -.545, z + .075]], [[x - .028, -.4, z - .075], [x + .028, -.4, z - .075], [x + .028, -.4, z + .075], [x - .028, -.4, z + .075]]);
-        C = WHITE; hexa([[x - .05, -.5, z - .14], [x + .05, -.5, z - .14], [x + .05, -.5, z + .14], [x - .05, -.5, z + .14]], [[x - .04, -.4, z - .12], [x + .04, -.4, z - .12], [x + .04, -.4, z + .1], [x - .04, -.4, z + .1]]);
-      }
-      // spinner
-      C = BLUE; tri([0, .02, 1.24], [-.065, -.045, 1.06], [.065, -.045, 1.06]); tri([0, .02, 1.24], [.065, -.045, 1.06], [.065, .085, 1.06]); tri([0, .02, 1.24], [.065, .085, 1.06], [-.065, .085, 1.06]); tri([0, .02, 1.24], [-.065, .085, 1.06], [-.065, -.045, 1.06]);
-      // cowling intake
-      C = DARK; hexa([[-.05, -.06, 1.055], [.05, -.06, 1.055], [.05, -.02, 1.055], [-.05, -.02, 1.055]], [[-.05, -.06, 1.06], [.05, -.06, 1.06], [.05, -.02, 1.06], [-.05, -.02, 1.06]]);
-      const d = new Float32Array(out), b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 40, 0);
-      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 40, 12);
-      gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 40, 24);
-      aVao.count = d.length / 10;
+      const cap = (ri, flip) => { const r = rings[ri], cx = r.reduce((s, p) => s + p[0], 0) / n, cy = r.reduce((s, p) => s + p[1], 0) / n, cz = r.reduce((s, p) => s + p[2], 0) / n, k = m.pos.length / 3; m.pos.push(cx * S, cy * S, cz * S); m.col.push(...(Array.isArray(colors[0]) ? colors[ri] : colors)); for (let j = 0; j < n; j++) { const a = base + ri * n + j, b = base + ri * n + (j + 1) % n; flip ? m.idx.push(k, b, a) : m.idx.push(k, a, b); } };
+      if (capStart) cap(0, false); if (capEnd) cap(rings.length - 1, true);
+      return m;
     }
-    // flat coloured triangles: gates, propeller disc
-    const cProg = prog(`#version 300 es
-      in vec3 aPos; in vec4 aCol; uniform mat4 uVP; out vec4 vC; void main(){ vC=aCol; gl_Position=uVP*vec4(aPos,1.); }`, `#version 300 es
-      precision highp float; in vec4 vC; out vec4 o; void main(){ o=vC; }`, ['aPos', 'aCol']);
-    const cU = uni(cProg, ['uVP']);
-    const cVao = gl.createVertexArray(); gl.bindVertexArray(cVao);
-    const cBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, cBuf);
-    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 28, 0); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 12);
-    // nav lights
-    const nProg = prog(`#version 300 es
-      in vec3 aPos; uniform mat4 uVP; uniform float uSize; void main(){ vec4 p=uVP*vec4(aPos,1.); gl_Position=p; gl_PointSize=clamp(uSize/p.w,2.,64.); }`, `#version 300 es
-      precision highp float; uniform vec3 uColor; uniform float uA; out vec4 o; void main(){ float d=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,d); o=vec4(uColor*(a*a*1.4+.3),a*uA); }`, ['aPos']);
-    const nU = uni(nProg, ['uVP', 'uSize', 'uColor', 'uA']);
-    const nVao = gl.createVertexArray(); gl.bindVertexArray(nVao);
-    const nBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, nBuf); gl.bufferData(gl.ARRAY_BUFFER, 9 * 4, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-    gl.bindVertexArray(null);
+    const sup = (e, a) => Math.sign(a) * Math.pow(Math.abs(a), 2 / e);
+    const ring = (z, cy, w, h, n = 24, e = 2.6, cx = 0) => Array.from({ length: n }, (_, i) => { const a = i / n * Math.PI * 2; return [cx + w / 2 * sup(e, Math.cos(a)), cy + h / 2 * sup(e, Math.sin(a)), z]; });
+    // aerofoil section (NACA 4-digit style), chord runs backwards from the leading edge
+    const foil = (t, camber = .02, n = 10) => { const up = [], lo = []; for (let i = 0; i <= n; i++) { const s = (1 - Math.cos(i / n * Math.PI)) / 2, yt = 5 * t * (.2969 * Math.sqrt(s) - .126 * s - .3516 * s * s + .2843 * s ** 3 - .1036 * s ** 4), yc = camber * (s < .4 ? (2 * .4 * s - s * s) / .16 : (1 - .8 + 2 * .4 * s - s * s) / .36); up.push([s, yc + yt]); lo.push([s, yc - yt]); } return [...up.reverse(), ...lo.slice(1, -1)]; };
+    const wingSec = (fp, span, zLE, chord, y, twist = 0) => fp.map(([s, v]) => [span, y + v * chord, zLE - s * chord]);
+    const finSec = (fp, h, zLE, chord) => fp.map(([s, v]) => [v * chord, h, zLE - s * chord]);
 
-    const xf = (M, p) => [M[0] * p[0] + M[4] * p[1] + M[8] * p[2] + M[12], M[1] * p[0] + M[5] * p[1] + M[9] * p[2] + M[13], M[2] * p[0] + M[6] * p[1] + M[10] * p[2] + M[14]];
-    function draw({ VP, eye, M, groundY, shadowA, tris, showPlane, prop, t }) {
-      const w = canvas.width, h = canvas.height;
-      gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clearStencil(0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
-      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.disable(gl.CULL_FACE);
-      if (showPlane && shadowA > .01) {
-        // each pixel darkened once, so overlapping parts don't stack
-        gl.disable(gl.DEPTH_TEST); gl.enable(gl.STENCIL_TEST); gl.stencilFunc(gl.EQUAL, 0, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
-        gl.useProgram(sProg); gl.bindVertexArray(aVao);
-        gl.uniformMatrix4fv(sU.uVP, false, VP); gl.uniformMatrix4fv(sU.uM, false, M); gl.uniform3f(sU.uSun, ...SUN); gl.uniform1f(sU.uG, groundY); gl.uniform1f(sU.uA, shadowA);
-        gl.drawArrays(gl.TRIANGLES, 0, aVao.count);
-        gl.disable(gl.STENCIL_TEST);
-      }
-      if (showPlane) {
-        gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
-        gl.useProgram(aProg); gl.bindVertexArray(aVao);
-        gl.uniformMatrix4fv(aU.uVP, false, VP); gl.uniformMatrix4fv(aU.uM, false, M); gl.uniform3f(aU.uCam, ...eye); gl.uniform3f(aU.uSun, ...SUN);
-        gl.drawArrays(gl.TRIANGLES, 0, aVao.count);
-      }
-      const all = tris.slice();
-      if (showPlane && prop) {
-        const seg = 28, r = .4, c = xf(M, [0, .02, 1.13]);
-        for (let i = 0; i < seg; i++) { const a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2; const p0 = xf(M, [Math.cos(a0) * r, .02 + Math.sin(a0) * r, 1.13]), p1 = xf(M, [Math.cos(a1) * r, .02 + Math.sin(a1) * r, 1.13]); const al = prop * (.08 + .07 * Math.max(0, Math.cos(a0 * 2 - t * 9))); all.push(...c, .12, .13, .16, al * 1.4, ...p0, .12, .13, .16, al, ...p1, .12, .13, .16, al); }
-      }
-      if (all.length) {
-        gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.useProgram(cProg); gl.bindVertexArray(cVao); gl.uniformMatrix4fv(cU.uVP, false, VP);
-        gl.bindBuffer(gl.ARRAY_BUFFER, cBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(all), gl.STREAM_DRAW);
-        gl.drawArrays(gl.TRIANGLES, 0, all.length / 7);
-      }
-      if (showPlane) {
-        gl.disable(gl.DEPTH_TEST);
-        const pts = [xf(M, [-1.65, -.025, .26]), xf(M, [1.65, -.025, .26]), xf(M, [0, .65, -1.62])].flat();
-        gl.useProgram(nProg); gl.bindVertexArray(nVao); gl.bindBuffer(gl.ARRAY_BUFFER, nBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(pts));
-        gl.uniformMatrix4fv(nU.uVP, false, VP);
-        const k = h / 900 * 60;
-        gl.uniform1f(nU.uSize, k); gl.uniform1f(nU.uA, .9);
-        gl.uniform3f(nU.uColor, 1, .2, .25); gl.drawArrays(gl.POINTS, 0, 1);
-        gl.uniform3f(nU.uColor, .25, 1, .5); gl.drawArrays(gl.POINTS, 1, 1);
-        if ((t % 1.3) < .06) { gl.uniform1f(nU.uSize, k * 2.4); gl.uniform3f(nU.uColor, 1, 1, 1); gl.drawArrays(gl.POINTS, 2, 1); }
-      }
-      gl.depthMask(true); gl.bindVertexArray(null);
+    // fuselage: [z, centre y, width, height]
+    const F = [[1.07, .0, .16, .15], [1.04, .01, .24, .23], [.95, .02, .3, .3], [.75, .04, .34, .36], [.5, .06, .36, .4], [.25, .08, .36, .42], [0, .08, .34, .4], [-.3, .07, .28, .32], [-.65, .07, .21, .24], [-1, .08, .15, .17], [-1.3, .1, .1, .12], [-1.52, .12, .05, .07], [-1.58, .125, .02, .03]];
+    loft('paint', F.map(f => ring(...f)), WHITE, { capEnd: true });
+    // cheatline and belly stripe: thin bands just outside the skin on both sides
+    for (const side of [1, -1]) {
+      const band = F.slice(2, 11).map(([z, cy, w, h]) => { const r = [], k = 1.012; for (let i = -2; i <= 2; i++) { const a = (side > 0 ? 0 : Math.PI) + i * .055; r.push([w / 2 * k * sup(2.6, Math.cos(a)), cy - .02 + h / 2 * k * sup(2.6, Math.sin(a)), z]); } return r; });
+      loft('paint', band, BLUE, { closed: false });
+      const thin = F.slice(2, 11).map(([z, cy, w, h]) => { const r = [], k = 1.014; for (let i = -1; i <= 1; i++) { const a = (side > 0 ? 0 : Math.PI) + .15 + i * .018 * side; r.push([w / 2 * k * sup(2.6, Math.cos(a)), cy - .02 + h / 2 * k * sup(2.6, Math.sin(a)), z]); } return r; });
+      loft('paint', thin, NAVY, { closed: false });
     }
-    return { draw, gl };
-  }
+    // canopy: a glasshouse sitting on the cabin
+    loft('glass', [[.66, .21, .2, .04], [.5, .24, .3, .16], [.3, .27, .33, .2], [.05, .27, .33, .19], [-.15, .25, .28, .12], [-.3, .22, .2, .04]].map(f => ring(...f, 24, 2.2)), GLASS, { capStart: true, capEnd: true });
+    // spinner and cowling lip
+    loft('paint', [[1.06, .02, .15, .15], [1.12, .02, .13, .13], [1.18, .02, .09, .09], [1.22, .02, .045, .045], [1.245, .02, .008, .008]].map(f => ring(...f, 16, 2)), BLUE, { capEnd: true });
+    loft('matte', [[1.072, -.04, .1, .035], [1.06, -.04, .1, .035]].map(f => ring(...f, 12, 3)), DARK, { capStart: true });
+    // wings: rectangular inner panel, tapered outer panel, 7° dihedral, blue tips
+    const wf = foil(.15, .02), dih = Math.tan(7 * Math.PI / 180);
+    for (const side of [1, -1]) {
+      const secs = [[.12, .52, .62], [.5, .52, .62], [1, .5, .58], [1.42, .46, .5], [1.58, .44, .46], [1.62, .42, .4]];
+      const rings = secs.map(([x, zLE, c]) => wingSec(wf, side * x, zLE, c, -.13 + (x - .12) * dih));
+      loft('paint', side > 0 ? rings : rings.map(r => r.slice().reverse()), secs.map(([x]) => x > 1.4 ? BLUE : WHITE), { capEnd: true });
+      // flap and aileron hinge lines (thin dark strips on top)
+      loft('matte', [[.2, .66], [.95, .66], [1, .64], [1.5, .64]].map(([x, s]) => [[side * x, -.13 + (x - .12) * dih + .045, .52 - s * .62 + .008], [side * x, -.13 + (x - .12) * dih + .048, .52 - s * .62 - .008]]), GREY, { closed: false });
+    }
+    // stabilator and fin
+    const tf = foil(.1, 0);
+    for (const side of [1, -1]) { const r = [[.03, -1.2, .34], [.62, -1.24, .26], [.66, -1.25, .22]].map(([x, zLE, c]) => wingSec(tf, side * x, zLE, c, .12)); loft('paint', side > 0 ? r : r.map(q => q.slice().reverse()), WHITE, { capEnd: true }); }
+    const fin = [[.12, -.92, .62], [.3, -1.1, .48], [.5, -1.27, .36], [.62, -1.36, .28], [.66, -1.4, .24]].map(([h, zLE, c]) => finSec(tf, h, zLE, c));
+    loft('paint', fin, [WHITE, WHITE, BLUE, BLUE, BLUE], { capEnd: true });
+    // landing gear: legs, wheel fairings, tyres
+    for (const [x, z] of [[.44, .08], [-.44, .08], [0, .86]]) {
+      loft('matte', [ring(z, -.13, .026, .026, 8, 2), ring(z, -.43, .026, .026, 8, 2)].map(r => r.map(([px, py, pz]) => [px + x, py, pz])), GREY);
+      loft('paint', [[z + .17, -.47, .02, .02], [z + .12, -.47, .09, .12], [z, -.475, .11, .15], [z - .1, -.47, .1, .13], [z - .18, -.46, .03, .04]].map(f => ring(...f, 16, 2.2, x)), WHITE, { capStart: true, capEnd: true });
+      const tyre = []; for (let i = 0; i <= 10; i++) { const a = i / 10 * Math.PI * 2; tyre.push([x + .035, -.475 + Math.sin(a) * .075, z + Math.cos(a) * .075]); }
+      loft('matte', [tyre, tyre.map(p => [p[0] - .07, p[1], p[2]])], RUBBER, { closed: false });
+    }
+    // propeller: two blades (spun by the simulator) and a translucent disc for when it's turning fast
+    for (const sgn of [1, -1]) { const b = []; for (const [r, c, tw] of [[.03, .05, .35], [.12, .055, .28], [.22, .045, .18], [.3, .03, .1]]) { b.push([[sgn * r, -c / 2, Math.sin(tw * sgn) * c / 2], [sgn * r, c / 2, -Math.sin(tw * sgn) * c / 2], [sgn * r, c / 2, -Math.sin(tw * sgn) * c / 2 - .008], [sgn * r, -c / 2, Math.sin(tw * sgn) * c / 2 - .008]]); } loft('blades', b, DARK, { capEnd: true }); }
+    { const r = []; for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; r.push([Math.cos(a) * .31, Math.sin(a) * .31, 0]); } const m = mesh('disc'); r.forEach(p => { m.pos.push(p[0] * S, p[1] * S, 0); m.col.push(.3, .32, .36, 1); }); m.pos.push(0, 0, 0); m.col.push(.3, .32, .36, 1); for (let i = 0; i < 40; i++) m.idx.push(40, i, (i + 1) % 40); }
 
-  /* ---------------- map style ---------------- */
-  function simStyle() {
-    const nameF = ['coalesce', ['get', 'name:en'], ['get', 'name:latin'], ['get', 'name']];
-    return {
-      version: 8,
-      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-      sources: {
-        sat: { type: 'raster', tiles: [IMG], tileSize: 256, maxzoom: 14, attribution: '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2017, CC BY 4.0)' },
-        omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
-        dem: { type: 'raster-dem', tiles: [DEM], tileSize: 256, maxzoom: 14, encoding: 'terrarium', attribution: 'Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a>' }
-      },
-      sky: { 'sky-color': '#5E93D8', 'horizon-color': '#DCE8F4', 'fog-color': '#C7D6E6', 'fog-ground-blend': .62, 'horizon-fog-blend': .82, 'sky-horizon-blend': .72, 'atmosphere-blend': .9 },
-      terrain: { source: 'dem', exaggeration: 1 },
-      layers: [
-        { id: 'bg', type: 'background', paint: { 'background-color': '#5D6B4E' } },
-        { id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-saturation': -.08, 'raster-contrast': .08, 'raster-brightness-min': .03, 'raster-fade-duration': 0 } },
-        { id: 'hills', type: 'hillshade', source: 'dem', paint: { 'hillshade-shadow-color': 'rgba(20,24,40,0.55)', 'hillshade-highlight-color': 'rgba(255,248,230,0.18)', 'hillshade-accent-color': 'rgba(20,24,40,0.15)', 'hillshade-exaggeration': .42, 'hillshade-illumination-direction': 300, 'hillshade-illumination-anchor': 'map' } },
-        { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': 'rgba(20,48,78,0.35)' } },
-        { id: 'roads-major', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 9, filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]], paint: { 'line-color': 'rgba(235,228,214,0.45)', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 16, 6] } },
-        { id: 'roads-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13, filter: ['in', ['get', 'class'], ['literal', ['secondary', 'tertiary']]], paint: { 'line-color': 'rgba(225,220,205,0.28)', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.6, 17, 4] } },
-        { id: 'aeroway-area', type: 'fill', source: 'omt', 'source-layer': 'aeroway', minzoom: 11, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': 'rgba(120,150,95,0.25)' } },
-        { id: 'runways', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 10, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], paint: { 'line-color': 'rgba(70,72,76,0.92)', 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 10, 1.5, 18, 120] } },
-        { id: 'runway-cl', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 14, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'runway']], paint: { 'line-color': 'rgba(255,255,255,0.85)', 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 14, .5, 18, 3], 'line-dasharray': [6, 6] } },
-        { id: 'taxiways', type: 'line', source: 'omt', 'source-layer': 'aeroway', minzoom: 13, filter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'class'], 'taxiway']], paint: { 'line-color': 'rgba(80,82,86,0.85)', 'line-width': ['interpolate', ['exponential', 2], ['zoom'], 13, 1, 18, 40] } },
-        { id: 'buildings', type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 14, paint: { 'fill-extrusion-color': '#B9B2A6', 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 7], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': .9, 'fill-extrusion-vertical-gradient': true } },
-        { id: 'places-town', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 9.5, filter: ['in', ['get', 'class'], ['literal', ['town', 'village']]], layout: { 'text-field': nameF, 'text-font': ['Noto Sans Regular'], 'text-size': 12.5 }, paint: { 'text-color': 'rgba(255,255,255,0.9)', 'text-halo-color': 'rgba(10,20,40,0.7)', 'text-halo-width': 1.4 } },
-        { id: 'places-city', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 5, filter: ['==', ['get', 'class'], 'city'], layout: { 'text-field': nameF, 'text-font': ['Noto Sans Regular'], 'text-size': 15 }, paint: { 'text-color': '#FFFFFF', 'text-halo-color': 'rgba(10,20,40,0.75)', 'text-halo-width': 1.6 } }
-      ]
-    };
+    // merge each bucket and compute smooth normals
+    const merge = list => { const pos = [], col = [], idx = []; for (const m of list) { const o = pos.length / 3; pos.push(...m.pos); col.push(...m.col); m.idx.forEach(i => idx.push(i + o)); } const nor = new Float32Array(pos.length); for (let i = 0; i < idx.length; i += 3) { const [a, b, c] = [idx[i] * 3, idx[i + 1] * 3, idx[i + 2] * 3]; const u = [pos[b] - pos[a], pos[b + 1] - pos[a + 1], pos[b + 2] - pos[a + 2]], v = [pos[c] - pos[a], pos[c + 1] - pos[a + 1], pos[c + 2] - pos[a + 2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; for (const k of [a, b, c]) { nor[k] += n[0]; nor[k + 1] += n[1]; nor[k + 2] += n[2]; } } for (let i = 0; i < nor.length; i += 3) { const l = Math.hypot(nor[i], nor[i + 1], nor[i + 2]) || 1; nor[i] /= l; nor[i + 1] /= l; nor[i + 2] /= l; } return { pos: new Float32Array(pos), nor, col: new Float32Array(col), idx: new Uint32Array(idx) }; };
+    const prims = [
+      ['paint', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .05, roughnessFactor: .32 }, doubleSided: true }],
+      ['matte', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .2, roughnessFactor: .7 }, doubleSided: true }],
+      ['glass', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .85, roughnessFactor: .06 }, doubleSided: true }],
+      ['blades', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .3, roughnessFactor: .5 }, doubleSided: true }],
+      ['disc', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .14], metallicFactor: 0, roughnessFactor: 1 }, alphaMode: 'BLEND', doubleSided: true }]
+    ].map(([k, mat]) => ({ name: k, geo: merge(parts[k]), mat }));
+
+    // write the GLB
+    const chunks = [], views = [], accessors = []; let off = 0;
+    const addView = (arr, target) => { const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength), pad = (4 - bytes.length % 4) % 4; views.push({ buffer: 0, byteOffset: off, byteLength: bytes.length, target }); chunks.push(bytes); if (pad) chunks.push(new Uint8Array(pad)); off += bytes.length + pad; return views.length - 1; };
+    const meshes = prims.map(p => {
+      const { pos, nor, col, idx } = p.geo, min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < pos.length; i += 3) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], pos[i + k]); max[k] = Math.max(max[k], pos[i + k]); }
+      const acc = (view, type, comp, count, extra = {}) => { accessors.push({ bufferView: view, componentType: comp, count, type, ...extra }); return accessors.length - 1; };
+      const aP = acc(addView(pos, 34962), 'VEC3', 5126, pos.length / 3, { min, max }), aN = acc(addView(nor, 34962), 'VEC3', 5126, nor.length / 3), aC = acc(addView(col, 34962), 'VEC4', 5126, col.length / 4), aI = acc(addView(idx, 34963), 'SCALAR', 5125, idx.length);
+      return { name: p.name, primitives: [{ attributes: { POSITION: aP, NORMAL: aN, COLOR_0: aC }, indices: aI, material: prims.indexOf(p) }] };
+    });
+    const hub = [0, .02 * S, 1.13 * S];
+    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, scene: 0, scenes: [{ nodes: [0, 1, 2, 3, 4] }],
+      nodes: [{ mesh: 0, name: 'paint' }, { mesh: 1, name: 'matte' }, { mesh: 2, name: 'glass' }, { mesh: 3, name: 'blades', translation: hub }, { mesh: 4, name: 'disc', translation: hub }],
+      meshes, materials: prims.map(p => ({ name: p.name, ...p.mat })), accessors, bufferViews: views, buffers: [{ byteLength: off }] };
+    let jsonBytes = new TextEncoder().encode(JSON.stringify(json)); const jpad = (4 - jsonBytes.length % 4) % 4;
+    if (jpad) { const t = new Uint8Array(jsonBytes.length + jpad); t.set(jsonBytes); t.fill(32, jsonBytes.length); jsonBytes = t; }
+    const total = 12 + 8 + jsonBytes.length + 8 + off, out = new Uint8Array(total), dv = new DataView(out.buffer);
+    dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+    dv.setUint32(12, jsonBytes.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jsonBytes, 20);
+    let p = 20 + jsonBytes.length; dv.setUint32(p, off, true); dv.setUint32(p + 4, 0x004E4942, true); p += 8;
+    for (const c of chunks) { out.set(c, p); p += c.length; }
+    return { glb: out, S, hub, wheelDrop: .55 * S, tips: { left: [1.63 * S, .055 * S, .2 * S], right: [-1.63 * S, .055 * S, .2 * S], tail: [0, .66 * S, -1.55 * S] } };
   }
 
   /* ---------------- audio ---------------- */
@@ -318,7 +247,7 @@ window.BoploSim = (() => {
   function hudHTML(o) {
     const ticks = []; for (let d = -180; d <= 540; d += 5) { const x = (d + 180) * 4, big = d % 30 === 0, lab = big ? ({ 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[norm360(d)] || String(norm360(d) / 10).padStart(2, '0')) : ''; ticks.push(`<line x1="${x}" x2="${x}" y1="${big ? 0 : 5}" y2="${big ? 12 : 10}"/>${lab ? `<text x="${x}" y="26">${lab}</text>` : ''}`); }
     const ladder = []; for (let p = -30; p <= 30; p += 5) if (p) ladder.push(`<line x1="${p % 10 ? -8 : -15}" x2="${p % 10 ? 8 : 15}" y1="${-p * 2.2}" y2="${-p * 2.2}"/>${p % 10 ? '' : `<text x="20" y="${-p * 2.2 + 3}">${Math.abs(p)}</text>`}`);
-    return `<div class="sim-map" data-map></div><canvas class="sim-gl" data-gl></canvas><div class="sim-vig" aria-hidden="true"></div>
+    return `<div class="sim-map" data-map></div><div class="sim-credits" data-credits></div><div class="sim-vig" aria-hidden="true"></div>
       <header class="sim-top">
         <div class="sim-chip sim-route"><b>${esc(o.title)}</b><small data-sub>${esc(o.subtitle || '')}</small></div>
         <div class="sim-chip sim-next" data-nextbox><span data-nextl>Next</span><b data-wp>—</b><small data-wpd></small></div>
@@ -367,13 +296,14 @@ window.BoploSim = (() => {
     dlg.innerHTML = `<div class="sim">${hudHTML(O)}</div>`;
     dlg.showModal();
     const root = dlg.querySelector('.sim'), $ = s => root.querySelector(s), $$ = s => [...root.querySelectorAll(s)];
-    let alive = true, raf = 0, map = null, ov = null;
+    let alive = true, raf = 0, viewer = null;
+    const coarse = matchMedia('(pointer: coarse)').matches;
     const audio = engineAudio();
     const cleanups = [];
     const on = (t, ev, fn, o) => { t.addEventListener(ev, fn, o); cleanups.push(() => t.removeEventListener(ev, fn, o)); };
     function destroy() {
       if (!alive) return; alive = false; cancelAnimationFrame(raf); cleanups.forEach(f => f()); audio.stop();
-      try { map?.remove(); } catch { } if (dlg.open) dlg.close(); dlg.remove(); O.onClose && O.onClose();
+      try { viewer?.destroy(); } catch { } if (dlg.open) dlg.close(); dlg.remove(); O.onClose && O.onClose();
     }
     on(dlg, 'cancel', e => { e.preventDefault(); destroy(); });
     on(dlg, 'close', () => { if (alive) destroy(); });
@@ -396,53 +326,147 @@ window.BoploSim = (() => {
     const circuit = span < 6000 || synthetic;
     const L = path.len;
 
-    /* ---- map ---- */
-    let ml;
-    try { ml = await loadLib(); } catch (e) { fail(e.message); wireX(); return { close: destroy }; }
+    /* ---- 3D scenery (CesiumJS) ---- */
+    let C;
+    try { C = await loadCesium(); } catch (e) { fail(e.message); wireX(); return { close: destroy }; }
     if (!alive) return { close: destroy };
     const startLL = F.ll(P[0][0], P[0][1]);
     try {
-      map = new ml.Map({ container: $('[data-map]'), style: simStyle(), center: startLL, zoom: 14, pitch: 70, bearing: path.at(60)[2] * R2D, interactive: false, attributionControl: { compact: true }, maxPitch: 85, fadeDuration: 0, pixelRatio: Math.min(devicePixelRatio || 1, 1.75) });
-    } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
-    try { map.transform.fov = 52; } catch { }
-    const plannedLine = { type: 'Feature', geometry: { type: 'LineString', coordinates: P.map(p => F.ll(p[0], p[1])) } };
-    const flown = { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } };
-    await new Promise(res => { if (map.loaded()) res(); map.once('load', res); setTimeout(res, 9000); });
-    const attrib = root.querySelector('.maplibregl-ctrl-attrib'); if (attrib) { attrib.classList.add('maplibregl-compact'); attrib.classList.remove('maplibregl-compact-show'); attrib.removeAttribute('open'); }
-    if (!alive) return { close: destroy };
-    try {
-      map.addSource('plan', { type: 'geojson', data: plannedLine });
-      map.addLayer({ id: 'plan-glow', type: 'line', source: 'plan', paint: { 'line-color': '#0A62FF', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 4, 16, 16], 'line-blur': 5, 'line-opacity': .22 } });
-      map.addLayer({ id: 'plan', type: 'line', source: 'plan', paint: { 'line-color': '#FFFFFF', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 16, 2.4], 'line-dasharray': [3, 3], 'line-opacity': .55 } });
-      map.addSource('flown', { type: 'geojson', data: flown });
-      map.addLayer({ id: 'flown', type: 'line', source: 'flown', paint: { 'line-color': '#FFD24A', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.2, 16, 3.5], 'line-opacity': .55 } });
-      const wps = (O.waypoints || []).filter(w => w.code);
-      if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
-        if (!alive || !map.getStyle()) return;
-        const near = list.filter(a => a.type !== 'S' && a.type !== 'H').map(a => ({ a, d: Math.hypot(...F.to(a.lat, a.lng)) })).filter(x => x.d < Math.max(60000, L + 40000)).map(x => x.a);
-        map.addSource('afs', { type: 'geojson', data: { type: 'FeatureCollection', features: near.map(a => ({ type: 'Feature', properties: { code: a.code, name: a.name, big: a.type === 'L' || a.type === 'M' ? 1 : 0 }, geometry: { type: 'Point', coordinates: [a.lng, a.lat] } })) } });
-        map.addLayer({ id: 'afs', type: 'symbol', source: 'afs', minzoom: 8, layout: { 'text-field': ['get', 'code'], 'text-font': ['Noto Sans Regular'], 'text-size': 13, 'text-offset': [0, -1.2], 'icon-allow-overlap': true }, paint: { 'text-color': '#9ED8FF', 'text-halo-color': '#020611', 'text-halo-width': 1.8 } });
-        map.addLayer({ id: 'afs-dot', type: 'circle', source: 'afs', minzoom: 8, paint: { 'circle-radius': 4, 'circle-color': '#020611', 'circle-stroke-color': '#9ED8FF', 'circle-stroke-width': 1.6 } });
+      viewer = new C.CesiumWidget($('[data-map]'), {
+        baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !coarse, useDefaultRenderLoop: false,
+        useBrowserRecommendedResolution: true, msaaSamples: coarse ? 1 : 4, creditContainer: $('[data-credits]'), requestRenderMode: false
       });
-      if (wps.length) {
-        map.addSource('wps', { type: 'geojson', data: { type: 'FeatureCollection', features: wps.map(w => ({ type: 'Feature', properties: { code: w.code }, geometry: { type: 'Point', coordinates: [w.lng, w.lat] } })) } });
-        map.addLayer({ id: 'wps', type: 'symbol', source: 'wps', layout: { 'text-field': ['get', 'code'], 'text-font': ['Noto Sans Regular'], 'text-size': 15, 'text-offset': [0, -1.4], 'text-allow-overlap': true }, paint: { 'text-color': '#FFFFFF', 'text-halo-color': '#0A62FF', 'text-halo-width': 2.2 } });
-      }
+    } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
+    const scene = viewer.scene, camera = scene.camera;
+    scene.screenSpaceCameraController.enableInputs = false;
+    scene.postProcessStages.fxaa.enabled = true;
+    scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
+    camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
+    // a fixed mid-morning sun at the departure airfield, for good shadows and colour
+    { const d = new Date(); d.setUTCHours(0, 0, 0, 0); viewer.clock.currentTime = C.JulianDate.fromDate(new Date(d.getTime() + (10.6 - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false; }
+    if (scene.shadowMap) { scene.shadowMap.size = 2048; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = true; scene.shadowMap.darkness = .4; }
+    // keep the scene rendering while things load
+    let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
+    const LLH = (x, z, h) => { const [lng, lat] = F.ll(x, z); return C.Cartesian3.fromDegrees(lng, lat, h); };
+    const carto = (x, z) => { const [lng, lat] = F.ll(x, z); return C.Cartographic.fromDegrees(lng, lat); };
+    // look at the departure while scenery loads
+    camera.setView({ destination: LLH(P[0][0] - Math.sin(path.at(80)[2]) * 400, P[0][1] - Math.cos(path.at(80)[2]) * 400, (O.fromElevFt || 0) * FT + 250), orientation: { heading: path.at(80)[2], pitch: C.Math.toRadians(-22), roll: 0 } });
+
+    let tileset = null, scenery = 'globe';
+    if (O.googleKey) {
+      try {
+        tileset = await C.createGooglePhotorealistic3DTileset({ key: O.googleKey, onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: coarse ? 22 : 14, dynamicScreenSpaceError: true, dynamicScreenSpaceErrorFactor: 18, foveatedScreenSpaceError: true, cacheBytes: 640 * 1024 * 1024, skipLevelOfDetail: true, shadows: C.ShadowMode.RECEIVE_ONLY });
+        scene.primitives.add(tileset); scene.globe.show = false; scenery = 'google';
+      } catch (e) { tileset = null; console.warn('Google 3D tiles unavailable', e); }
+    }
+    if (!tileset) {
+      scene.terrainProvider = terrariumTerrain(C);
+      scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless 2017 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2017), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
+      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = coarse ? 3 : 2; g.tileCacheSize = 400; g.preloadSiblings = true; g.enableLighting = false;
+    }
+    root.classList.toggle('is-google', scenery === 'google');
+
+    // aircraft
+    const AC = aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
+    cleanups.push(() => URL.revokeObjectURL(glbUrl));
+    let model = null, bladeNode = null, discNode = null;
+    try {
+      model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
+      scene.primitives.add(model);
+      model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); });
+    } catch (e) { console.warn('aircraft model', e); }
+    const lights = scene.primitives.add(new C.PointPrimitiveCollection());
+    const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
+    const lines = scene.primitives.add(new C.PolylineCollection());
+    const flownLine = lines.add({ positions: [], width: 2.5, material: C.Material.fromType('Color', { color: new C.Color(1, .82, .29, .65) }) });
+    const gatePool = Array.from({ length: 20 }, () => lines.add({ positions: [], width: 3, show: false, material: C.Material.fromType('Color', { color: new C.Color(1, 1, 1, .5) }) }));
+    // dashed route line draped on the ground or the 3D city
+    let routeGround = null;
+    try {
+      routeGround = scene.groundPrimitives.add(new C.GroundPolylinePrimitive({ geometryInstances: new C.GeometryInstance({ geometry: new C.GroundPolylineGeometry({ positions: P.map(p => LLH(p[0], p[1], 0)), width: 3.5 }) }), appearance: new C.PolylineMaterialAppearance({ material: C.Material.fromType('PolylineDash', { color: new C.Color(1, 1, 1, .7), gapColor: C.Color.TRANSPARENT, dashLength: 22 }) }), asynchronous: true }));
     } catch { }
-    // let terrain at the start load, then read the ground height there
-    await new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; res(); } }; map.once('idle', fin); setTimeout(fin, 7000); });
+    const labels = scene.primitives.add(new C.LabelCollection());
+    const exclude = [model, lights, lines, labels, routeGround].filter(Boolean);
+
+    // ground height under a point: rendered 3D tiles, or the terrain globe
+    const gcache = new Map();
+    const rawGround = (x, z) => { try { const c = carto(x, z); const h = tileset ? scene.sampleHeight(c, exclude, .6) : scene.globe.getHeight(c); return Number.isFinite(h) ? h : null; } catch { return null; } };
+    const elevAt = (x, z, fresh) => { const k = Math.round(x / 20) + ',' + Math.round(z / 20), now = performance.now(), c = gcache.get(k); if (c && !fresh && now - c.t < 1500 && c.e != null) return c.e; const e = rawGround(x, z); gcache.set(k, { e, t: now }); if (gcache.size > 600) gcache.delete(gcache.keys().next().value); return e ?? c?.e ?? null; };
+    // wait for the scenery at the start, then read the ground height there (most detailed)
+    const mostDetailed = async pts => {
+      try {
+        if (tileset) { const r = await Promise.race([scene.sampleHeightMostDetailed(pts.map(p => carto(...p)), exclude), new Promise(res => setTimeout(() => res(null), 15000))]); return r ? r.map(c => Number.isFinite(c?.height) ? c.height : null) : pts.map(() => null); }
+        const r = await Promise.race([C.sampleTerrain(scene.terrainProvider, 13, pts.map(p => carto(...p))), new Promise(res => setTimeout(() => res(null), 12000))]);
+        return r ? r.map(c => Number.isFinite(c?.height) ? c.height : null) : pts.map(() => null);
+      } catch { return pts.map(() => null); }
+    };
+    const last = P[P.length - 1], sameEnd = Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
+    const [h0, h1] = await mostDetailed(sameEnd ? [P[0], P[0]] : [P[0], last]);
     if (!alive) return { close: destroy };
-    // a terrain tile that hasn't loaded yet reads as 0 m: treat that as unknown once we know the real ground is higher
-    let goodGround = null;
-    // MapLibre 4's queryTerrainElevation is relative to the camera centre, so read the terrain model directly (metres above sea level)
-    const absElev = ll => { const t = map.terrain; if (!t) return null; try { return t.getElevationForLngLatZoom(ml.LngLat.convert(ll), map.transform.tileZoom); } catch { const e = map.queryTerrainElevation(ll); return Number.isFinite(e) ? e + (map.transform.elevation || 0) : null; } };
-    const elevAt = (x, z) => { try { const e = absElev(F.ll(x, z)); if (!Number.isFinite(e)) return null; if (Math.abs(e) < .01 && goodGround != null && Math.abs(goodGround) > 12) return null; return e; } catch { return null; } };
-    // wait (briefly) for real terrain under the start point
-    for (let i = 0; i < 30 && alive; i++) { const e = absElev(F.ll(P[0][0], P[0][1])); if (Number.isFinite(e) && Math.abs(e) > .01) break; if (O.fromElevFt != null && O.fromElevFt < 15) break; await new Promise(r => setTimeout(r, 200)); }
-    const g0 = elevAt(P[0][0], P[0][1]) ?? (O.fromElevFt != null ? O.fromElevFt * FT : 0); goodGround = g0;
-    const last = P[P.length - 1];
-    const g1 = Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500 ? g0 : (elevAt(last[0], last[1]) ?? (O.toElevFt != null ? O.toElevFt * FT : g0));
-    const cruise = O.cruiseFt ? O.cruiseFt * FT : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT);
+    // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
+    let geoN = 0;
+    if (tileset && h0 != null && O.fromElevFt != null) { const n = h0 - O.fromElevFt * FT; if (Math.abs(n) < 110) geoN = n; }
+    const g0 = h0 ?? ((O.fromElevFt || 0) * FT + geoN);
+    const g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
+    // labels: route waypoints and nearby airfields
+    const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
+    if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
+      if (!alive) return;
+      list.filter(a => a.type !== 'S' && a.type !== 'H' && Number.isFinite(a.elev)).map(a => ({ a, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < Math.max(70000, L + 40000)).slice(0, 220)
+        .forEach(({ a, xz }) => labels.add({ ...labelStyle, text: a.code, position: LLH(xz[0], xz[1], a.elev * FT + geoN + 45), fillColor: C.Color.fromCssColorString('#CFE8FF'), font: '600 13px Archivo, system-ui, sans-serif' }));
+    });
+
+    function placeAircraft() {
+      if (!model) return;
+      const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop);
+      const hpr = new C.HeadingPitchRoll(C.Math.toRadians(st.hdg - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
+      C.Transforms.headingPitchRollToFixedFrame(pos, hpr, C.Ellipsoid.WGS84, undefined, model.modelMatrix);
+      model.show = !st.crashed;
+      // nav lights: model frame after axis conversion is x forward, y left, z up
+      const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
+      navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
+      // propeller: spin the blades, fade in the disc at high rpm
+      const rpm = st.thr > .02 || st.v > 3 ? 600 + st.thr * 1900 : 0;
+      propA = (propA + rpm / 60 * 2 * Math.PI * realDt * (rpm > 1200 ? .07 : 1)) % (Math.PI * 2);
+      if (bladeNode) bladeNode.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(new C.Cartesian3(...AC.hub)), C.Matrix4.fromRotationTranslation(C.Matrix3.fromRotationZ(propA)), new C.Matrix4());
+      if (discNode) discNode.show = rpm > 1200;
+    }
+    let propA = 0, realDt = .016, gateT = 0;
+    function updateGates() {
+      const W = circuit ? 70 : 110, Hh = circuit ? 40 : 60, pr = path.project(st.x, st.z), near = showGates && camI !== 2 ? gates.filter(g => g.s > pr.s + 15).slice(0, 5) : [];
+      gatePool.forEach(p => p.show = false);
+      near.forEach((g, i) => {
+        const d = Math.hypot(g.x - st.x, g.z - st.z), a = (i === 0 ? .85 : .45) * clamp(1 - d / (circuit ? 2400 : 6000), 0, 1) * clamp(d / 50, 0, 1);
+        if (a < .03) return;
+        const r = [Math.cos(g.h), -Math.sin(g.h)], pt = (u, v) => LLH(g.x + r[0] * u, g.z + r[1] * u, g.y + v);
+        const c = W * .22, k = Hh * .3, col = i === 0 ? new C.Color(1, .84, .3, a) : new C.Color(1, 1, 1, a);
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy], j) => {
+          const p = gatePool[i * 4 + j]; if (!p) return;
+          p.positions = [pt(sx * W / 2 - sx * c, sy * Hh / 2), pt(sx * W / 2, sy * Hh / 2), pt(sx * W / 2, sy * Hh / 2 - sy * k)];
+          p.material.uniforms.color = col; p.show = true;
+        });
+      });
+    }
+    function frameDraw(dt) {
+      realDt = dt;
+      const w = root.clientWidth, h = root.clientHeight, as = w / Math.max(h, 1), fov = camera.frustum.fov;
+      const hfov = as >= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) * as);
+      const [, kB, kH, depBase] = CAMS[camI];
+      const B0 = clamp(5.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 70), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
+      camH += wrap180(st.hdg - camH) * Math.min(1, dt * (camI === 2 ? 1.2 : 2.6));
+      camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
+      camD += (depBase - camD) * Math.min(1, dt * 3);
+      const dep = clamp(camD - camPitchLag * .55 + (st.ground ? 2 : 0), 2, 60);
+      const ch = camH * D2R, f = [Math.sin(ch), Math.cos(ch)], ex = -f[0] * B, ez = -f[1] * B;
+      let ey = Hc + AC.wheelDrop;
+      const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 3);
+      camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
+      placeAircraft();
+      gateT += dt; if (gateT > .2) { gateT = 0; updateGates(); }
+      viewer.resize(); viewer.render();
+    }
+    const flownPts = [];
+    const cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT);
     const ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = circuit ? 0.06 : 330 * FT / NM;
     const groundStart = O.start !== 'air', landEnd = O.land !== false;
     const prof = s => { const up = groundStart ? g0 + Math.max(0, s - ROLL) * CG : cruise, dn = landEnd ? g1 + Math.max(0, L - TDZ - s) * DG : cruise; return Math.min(cruise, up, dn); };
@@ -460,6 +484,7 @@ window.BoploSim = (() => {
       st.airT = airborne ? 10 : 0; st.flaps = 0; flapT = 0; st.landedOnce = false; st.touch = null;
       if (airborne) { st.ground = false; st.alt = Math.max(prof(s), (elevAt(x, z) ?? g0) + 150); st.v = (circuit ? 85 : 95) * KT; st.thr = .72; st.pitch = 0; }
       else { st.ground = true; st.alt = elevAt(x, z) ?? g0; st.v = 0; st.thr = 0; st.pitch = 0; }
+      const gh = elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0); st.gnd = gh ?? (airborne ? st.alt - 300 : st.alt);
       path.reset(); path.seed(s);
     }
     const replay = O.mode === 'replay';
@@ -506,7 +531,6 @@ window.BoploSim = (() => {
       else { tilt.roll = e.gamma / 28; tilt.pitch = (e.beta - tilt.b0) / 22; }
     });
     $('[data-flapb]').onclick = () => { flapT = flapT ? 0 : 1; $('[data-flapb]').classList.toggle('on', !!flapT); };
-    const coarse = matchMedia('(pointer: coarse)').matches;
     $('[data-touch]').hidden = replay || !coarse;
     root.classList.toggle('is-replay', replay); root.classList.toggle('is-touch', coarse && !replay);
 
@@ -566,7 +590,7 @@ window.BoploSim = (() => {
       st.thr += clamp(thrTarget - st.thr, -dt * .8, dt * .8);
       st.flaps += clamp(flapT - st.flaps, -dt * .25, dt * .25);
       let vk = st.v / KT;
-      const ge = elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; goodGround = ge; }
+      const ge = elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; }
       if (!st.ground) st.airT = (st.airT || 0) + dt;
       if (st.ground) {
         st.bank += (0 - st.bank) * Math.min(1, dt * 6);
@@ -595,6 +619,7 @@ window.BoploSim = (() => {
       // what the pilot sees: flight path plus angle of attack, which grows as the aircraft slows
       const aoa = st.ground ? 0 : clamp(1.5 + 6 * ((62 / Math.max(st.v / KT, 38)) ** 2 - 1) - st.flaps * 1.5, -1, 13);
       st.att = (st.ground ? st.pitch : st.pitch + aoa);
+      if (!st.gk && !st.ground) st.agl = Math.max(st.agl, 300); // scenery under us not loaded yet
       if (!st.ground && st.agl <= .3 && (st.airT || 0) < 2.5) { st.alt = st.gnd + .3; st.agl = .3; st.vs = Math.max(st.vs, 0); }
       else if (!st.ground && st.agl <= .3) {
         const fpm = st.vs / FT * 60;
@@ -607,61 +632,7 @@ window.BoploSim = (() => {
     const score = { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: st.alt, dist: 0, n: 0 };
     let lastFlown = 0, lastX = st.x, lastZ = st.z;
 
-    /* ---- overlay ---- */
-    const glc = $('[data-gl]');
-    try { ov = overlay(glc); } catch { ov = null; }
-    const resize = () => { const r = root.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2); glc.width = Math.round(r.width * d); glc.height = Math.round(r.height * d); map?.resize(); };
-    resize(); on(window, 'resize', resize);
     let camH = st.hdg, camD = 8.5, camPitchLag = 0;
-
-    function gateTris(eye, fwd) {
-      const out = [], W = circuit ? 70 : 110, H = circuit ? 40 : 60, T = circuit ? 1.6 : 2.4;
-      const pr = path.project(st.x, st.z), near = gates.filter(g => g.s > pr.s + 15).slice(0, 5);
-      near.forEach((g, i) => {
-        const cx = g.x - st.x, cz = g.z - st.z, cy = g.y - st.alt, d = Math.hypot(cx, cz);
-        const fade = clamp(1 - d / (circuit ? 2400 : 6000), 0, 1) * clamp(d / 60, 0, 1), passed = false;
-        const a = (i === 0 ? .7 : .38) * fade; if (a < .02) return;
-        const r = [Math.cos(g.h), 0, -Math.sin(g.h)], up = [0, 1, 0];
-        const P = (u, v) => [cx + r[0] * u, cy + v, cz + r[2] * u];
-        const col = i === 0 ? [1, .84, .3] : [1, 1, 1];
-        const bar = (u0, v0, u1, v1) => { const p = [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)]; for (const ix of [0, 1, 2, 0, 2, 3]) out.push(...p[ix], ...col, a); };
-        // corner glow
-        // corner brackets only, so the view stays open
-        const c = W * .22, k = H * .3;
-        bar(-W / 2, -H / 2, -W / 2 + c, -H / 2 + T * 1.6); bar(W / 2 - c, -H / 2, W / 2, -H / 2 + T * 1.6); bar(-W / 2, H / 2 - T * 1.6, -W / 2 + c, H / 2); bar(W / 2 - c, H / 2 - T * 1.6, W / 2, H / 2);
-        bar(-W / 2, -H / 2, -W / 2 + T * 1.6, -H / 2 + k); bar(-W / 2, H / 2 - k, -W / 2 + T * 1.6, H / 2); bar(W / 2 - T * 1.6, -H / 2, W / 2, -H / 2 + k); bar(W / 2 - T * 1.6, H / 2 - k, W / 2, H / 2);
-      });
-      return out;
-    }
-    function frameDraw(dt) {
-      const w = root.clientWidth, h = root.clientHeight, as = w / Math.max(h, 1);
-      const fov = map.transform?._fov || FOV, hfov = 2 * Math.atan(Math.tan(fov / 2) * as);
-      const [, kB, kH, depBase] = CAMS[camI];
-      const B0 = clamp(5.6 / Math.tan((as < 1 ? .34 : .24) * hfov), 18, 70), B = B0 * kB, Hc = (B0 * .22 + 2) * kH;
-      camH += wrap180(st.hdg - camH) * Math.min(1, dt * (camI === 2 ? 1.2 : 2.6));
-      camPitchLag += (st.pitch - camPitchLag) * Math.min(1, dt * 3);
-      camD += (depBase - camD) * Math.min(1, dt * 3);
-      const dep = clamp(camD - camPitchLag * .55 + (st.ground ? 2 : 0), 3, 60) * D2R;
-      const ch = camH * D2R, f = [Math.sin(ch), Math.cos(ch)];
-      const ex = -f[0] * B, ez = -f[1] * B; // eye relative to the aircraft
-      let ey = Hc;
-      const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 4);
-      // map camera
-      const camAlt = st.alt + ey, tgtGround = gEye ?? st.gnd, t = Math.max(12, (camAlt - tgtGround)) / Math.tan(dep);
-      const cx = st.x + ex + f[0] * t, cz = st.z + ez + f[1] * t;
-      try {
-        const opt = map.calculateCameraOptionsFromTo(ml.LngLat.convert(F.ll(st.x + ex, st.z + ez)), camAlt, ml.LngLat.convert(F.ll(cx, cz)), tgtGround);
-        map.jumpTo({ center: opt.center, zoom: clamp(opt.zoom, 2, 21.5), pitch: clamp(opt.pitch, 0, 85), bearing: opt.bearing });
-      } catch { }
-      // overlay camera (same geometry, aircraft at the origin)
-      if (ov) {
-        const eye = [ex, ey, ez], tgt = [ex + f[0] * Math.cos(dep) * 100, ey - Math.sin(dep) * 100, ez + f[1] * Math.cos(dep) * 100];
-        const V = M4.look(eye, tgt, [0, 1, 0]), Pm = M4.persp(fov, as, .5, 20000), VP = M4.mul(Pm, V);
-        const S = 3.4, M = M4.mul(M4.mul(M4.mul(M4.ry(st.hdg * D2R), M4.rx(-(st.att ?? st.pitch) * D2R)), M4.rz(-st.bank * D2R)), M4.sc(S)); M[13] += .54 * S;
-        const agl = st.alt - st.gnd, tris = showGates && camI !== 2 ? gateTris(eye, f) : [];
-        ov.draw({ VP, eye, M, groundY: st.gnd - st.alt + .05, shadowA: clamp(.5 * (1 - agl / 220), 0, .5), tris, showPlane: !st.crashed, prop: st.thr > .02 || st.v > 3 ? 1 : 0, t: st.t });
-      }
-    }
 
     /* ---- HUD ---- */
     const H = { ias: $('[data-ias]'), alt: $('[data-alt]'), vs: $('[data-vs]'), hdg: $('[data-hdg]'), tape: $('[data-tape]'), hor: $('[data-hor]'), bp: $('[data-bankptr]'), thr: $('[data-thr]'), flaps: $('[data-flaps]'), wp: $('[data-wp]'), wpd: $('[data-wpd]'), warn: $('[data-warn]'), needle: $('[data-needle]'), xte: $('[data-xte]'), bug: $('[data-bugi]'), time: $('[data-time]'), scrub: $('[data-scrub]') };
@@ -671,7 +642,7 @@ window.BoploSim = (() => {
     function hud() {
       const vk = st.v / KT, pr = path.project(st.x, st.z);
       H.ias.textContent = Math.round(st.ground && vk < 5 ? 0 : vk);
-      H.alt.textContent = Math.max(0, Math.round(st.alt / FT / 10) * 10).toLocaleString('en-GB');
+      H.alt.textContent = Math.max(0, Math.round((st.alt - geoN) / FT / 10) * 10).toLocaleString('en-GB');
       const fpm = Math.round(st.vs / FT * 60 / 50) * 50; H.vs.textContent = `${fpm > 0 ? '↑' : fpm < 0 ? '↓' : ''}${Math.abs(fpm)} fpm`;
       H.hdg.textContent = pad3(st.hdg) + '°';
       H.tape.setAttribute('transform', `translate(${120 - (st.hdg + 180) * 4} 0)`);
@@ -720,7 +691,7 @@ window.BoploSim = (() => {
     if (replay) { $('[data-ap]').hidden = true; $('[data-replaybar]').hidden = false; }
     const rateBtns = () => $$('[data-rate]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rate === rate)));
     $$('[data-rate]').forEach(b => b.onclick = () => { rate = +b.dataset.rate; store.set('rate', rate); rateBtns(); }); rateBtns();
-    H.scrub.oninput = () => { const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flown.geometry.coordinates = []; };
+    H.scrub.oninput = () => { const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flownPts.length = 0; flownLine.positions = []; };
     $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd} kt` : 'Calm'].filter(Boolean).join(' · ');
 
     /* ---- ready card ---- */
@@ -729,7 +700,7 @@ window.BoploSim = (() => {
       : `<li><b>↑ ↓</b> or <b>W S</b>: nose down / nose up (pull back to climb)</li><li><b>← →</b> or <b>A D</b>: bank left / right</li><li><b>R F</b> or <b>+ −</b>: more or less power · <b>1–0</b> set power</li><li><b>V</b> flaps (use them to slow down for landing) · <b>G</b> route gates</li><li><b>P</b> autopilot · <b>C</b> camera · <b>Space</b> pause · <b>M</b> sound</li><li>A gamepad works too.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
-      <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round(cruise / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
+      <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round((cruise - geoN) / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
       ${replay ? '' : `<ul class="sim-help">${ctrlHelp}</ul><label class="sim-check"><input type="checkbox" data-inv ${invert ? 'checked' : ''}> Invert pitch (push to climb)</label>`}
       ${synthetic ? '<p class="sim-note">This flight has no recorded track, so you’ll fly a standard circuit from the departure airfield.</p>' : ''}
       <p class="sim-note">A practice toy for fun and route familiarisation, not a training device. Heights are estimated, not logged.</p>
@@ -749,19 +720,19 @@ window.BoploSim = (() => {
       if (!replay && kind !== 'crash' && (!best || tube > best)) store.set(bestKey, tube);
       card(`<span class="sim-kicker">${kind === 'crash' ? 'Flight over' : replay ? 'Replay finished' : 'Route complete'}</span><h2>${kind === 'crash' ? 'Crashed' : ld ? ld[0] : 'Well flown'}</h2>
         ${kind === 'crash' ? `<p>${esc(st.crash)}</p>` : ld ? `<p>Touchdown at ${Math.abs(Math.round(touch.fpm / 10) * 10)} fpm with ${Math.abs(Math.round(touch.bank))}° of bank.</p>` : ''}
-        <div class="sim-facts"><div><span>Time</span><b>${mmss(t)}</b></div><div><span>Flown</span><b>${(score.dist / NM).toFixed(1)} NM</b></div><div><span>Highest</span><b>${Math.round(score.maxAlt / FT / 10) * 10} ft</b></div>
+        <div class="sim-facts"><div><span>Time</span><b>${mmss(t)}</b></div><div><span>Flown</span><b>${(score.dist / NM).toFixed(1)} NM</b></div><div><span>Highest</span><b>${Math.round((score.maxAlt - geoN) / FT / 10) * 10} ft</b></div>
         ${replay ? '' : `<div><span>On the route</span><b>${tube}%</b></div><div><span>Average off track</span><b>${xte < .1 ? Math.round(xte * NM) + ' m' : xte.toFixed(2) + ' NM'}</b></div><div><span>Your best</span><b>${best != null ? Math.max(best, kind === 'crash' ? 0 : tube) + '%' : (kind === 'crash' ? '—' : tube + '%')}</b></div>`}</div>
         ${replay ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
         <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button><button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button></div>`);
       wireX();
-      $('[data-again]').onclick = () => { ended = false; Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flown.geometry.coordinates = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
+      $('[data-again]').onclick = () => { ended = false; Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
     }
 
     /* ---- loop ---- */
     let prev = performance.now(), hudT = 0;
     function loop(now) {
       if (!alive) return;
-      raf = requestAnimationFrame(loop);
+      raf = requestAnimationFrame(loop); pumping = false;
       const real = Math.min(.1, (now - prev) / 1000); prev = now;
       if (!paused && !ended) {
         let simT = real * rate;
@@ -778,7 +749,7 @@ window.BoploSim = (() => {
           if (!landEnd && pr.s > L - 40) { finish('done'); break; }
           if (!st.ground && pr.s >= L - 5 && pr.d > 500) { finish('done'); break; }
         }
-        if (now - lastFlown > 700) { lastFlown = now; flown.geometry.coordinates.push(F.ll(st.x, st.z)); if (flown.geometry.coordinates.length > 4000) flown.geometry.coordinates.shift(); try { map.getSource('flown')?.setData(flown); } catch { } }
+        if (now - lastFlown > 700) { lastFlown = now; flownPts.push(LLH(st.x, st.z, st.alt + 1.5)); if (flownPts.length > 3000) flownPts.shift(); if (flownPts.length > 1) flownLine.positions = flownPts; }
         audio.update(st.thr, st.v / KT, st.stall && !st.ground, true);
       }
       frameDraw(real);
