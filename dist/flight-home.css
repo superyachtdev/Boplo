@@ -92,8 +92,8 @@ h1,h2,h3,p{margin:0}
 .wp.passed b{color:var(--mist)}
 .craft{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;opacity:0;transition:opacity .5s}
 .craft.show{opacity:1}
-.craft svg{position:absolute;width:34px;height:34px;left:-17px;top:-17px;fill:#fff;filter:drop-shadow(0 0 6px #9ED8FF) drop-shadow(0 0 18px #2F7BFF) drop-shadow(0 0 40px rgba(10,98,255,.8))}
-.craft::before{content:"";position:absolute;width:120px;height:120px;left:-60px;top:-60px;border-radius:50%;background:radial-gradient(closest-side,rgba(47,123,255,.35),transparent)}
+.craft svg{display:none}
+.craft::before{content:"";position:absolute;width:160px;height:160px;left:-80px;top:-80px;border-radius:50%;background:radial-gradient(closest-side,rgba(47,123,255,.22),transparent)}
 
 .hero-copy{position:absolute;left:clamp(20px,5vw,72px);bottom:clamp(96px,15vh,150px);width:min(620px,calc(100% - 40px));transition:opacity .5s var(--ease),transform .7s var(--ease)}
 .hero-copy.away{opacity:0;transform:translateY(-24px);pointer-events:none}
@@ -296,8 +296,8 @@ h1,h2,h3,p{margin:0}
 /* short windows: keep the headline clear of the nav */
 @media (max-height:820px){
   .hero-copy .pill,.scroll-hint{display:none}
-  .lede{margin:20px 0 26px}
-  .hero-copy{bottom:128px}
+  .lede{margin:16px 0 22px}
+  .hero-copy{bottom:clamp(92px,13vh,120px)}
 }
 @media (max-height:620px) and (min-width:641px){
   .lede{display:none}
