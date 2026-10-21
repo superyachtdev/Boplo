@@ -94,11 +94,12 @@ export async function debrief(env,input,fetcher=fetch){
  for(const model of models){
   res=await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(25000),body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:.2}})});
   if(res.ok)break;
-  last=`${model}: ${res.status}`;
+  let why='';try{why=(await res.clone().json())?.error?.status||'';}catch{}
+  last=`${model}: ${res.status}${why?' '+why:''}`;
   if(res.status===401||res.status===403)fail(503,'Debrief tidying needs a valid Gemini API key in Cloudflare (GEMINI_API_KEY).');
   if(res.status===429)fail(503,'Debrief tidying is busy. Try again in a minute.');
  }
- if(!res.ok){console.error('Debrief model failed',last);fail(503,'Debrief tidying is unavailable right now. Your notes are still saved as you wrote them.');}
+ if(!res.ok){console.error('Debrief model failed',last);fail(503,`Debrief tidying is unavailable right now (${last}). Your notes are still saved as you wrote them.`);}
  const data=await res.json(),out=data.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
  let v;try{v=JSON.parse(out);}catch{fail(503,'The debrief could not be tidied. Try again.');}
  const list=k=>(Array.isArray(v?.[k])?v[k]:[]).map(x=>String(x).trim().slice(0,240)).filter(Boolean).slice(0,8);
