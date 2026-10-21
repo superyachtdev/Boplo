@@ -756,6 +756,7 @@ window.BoploSim = (() => {
       hudT += real; if (hudT > .05) { hudT = 0; hud(); }
     }
     raf = requestAnimationFrame(loop);
+    if (store.get('debug', false)) window.__boploSim = { viewer, st, C, tileset, model, path };
     return { close: destroy };
   }
 
