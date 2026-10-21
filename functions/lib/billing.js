@@ -48,8 +48,25 @@ export async function ensurePrice(env, key, fetcher = fetch) {
   return stripe(env, 'POST', 'prices', { product: product.id, unit_amount: plan.amount, currency: plan.currency, recurring: { interval: plan.interval }, lookup_key: plan.lookup, transfer_lookup_key: true, tax_behavior: 'exclusive', nickname: plan.label }, fetcher);
 }
 
+// the billing table is created on first use too, so checkout works even if migration 0010 wasn't run on this database
+let schemaReady = null;
+export function ensureSchema(env) {
+  if (!schemaReady) schemaReady = (async () => {
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS flight_billing (user_id TEXT PRIMARY KEY REFERENCES darts_users(id) ON DELETE CASCADE, customer_id TEXT UNIQUE, subscription_id TEXT, status TEXT NOT NULL DEFAULT 'none', price_key TEXT, current_period_end INTEGER, cancel_at_period_end INTEGER NOT NULL DEFAULT 0, trial_end INTEGER, trial_used INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)").run();
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS flight_billing_customer ON flight_billing(customer_id)').run();
+  })().catch(e => { schemaReady = null; throw e; });
+  return schemaReady;
+}
 export async function billingRow(env, userId) {
+  await ensureSchema(env);
   return env.DB.prepare('SELECT * FROM flight_billing WHERE user_id=?').bind(userId).first();
+}
+// what's configured, without revealing any secret
+export async function health(env, fetcher = fetch) {
+  const out = { table: false, secretKey: env.STRIPE_SECRET_KEY ? (String(env.STRIPE_SECRET_KEY).startsWith('sk_live') ? 'live' : String(env.STRIPE_SECRET_KEY).startsWith('sk_test') ? 'test' : 'other') : 'missing', publishableKey: env.STRIPE_PUBLISHABLE_KEY ? (String(env.STRIPE_PUBLISHABLE_KEY).startsWith('pk_live') ? 'live' : 'test') : 'missing', webhookSecret: !!env.STRIPE_FLIGHT_WEBHOOK_SECRET, tax: env.STRIPE_TAX === 'on', stripe: null };
+  try { await ensureSchema(env); await env.DB.prepare('SELECT COUNT(*) n FROM flight_billing').first(); out.table = true; } catch (e) { out.tableError = String(e.message || e).slice(0, 160); }
+  try { const r = await stripe(env, 'GET', 'prices', { lookup_keys: [PLANS.yearly.lookup, PLANS.monthly.lookup], limit: 2 }, fetcher); out.stripe = 'ok'; out.prices = (r.data || []).map(p => p.lookup_key); } catch (e) { out.stripe = String(e.message || e).slice(0, 160); }
+  return out;
 }
 async function saveRow(env, userId, patch) {
   const prev = (await billingRow(env, userId)) || {};
@@ -72,6 +89,7 @@ async function hasCard(env, customerId, fetcher) {
 // copy the customer's best subscription from Stripe into D1
 const RANK = { active: 5, trialing: 5, past_due: 4, unpaid: 3, incomplete: 2, canceled: 1, incomplete_expired: 0 };
 export async function syncCustomer(env, customerId, fetcher = fetch) {
+  await ensureSchema(env);
   const row = await env.DB.prepare('SELECT * FROM flight_billing WHERE customer_id=?').bind(customerId).first();
   if (!row) return null;
   const subs = await stripe(env, 'GET', 'subscriptions', { customer: customerId, status: 'all', limit: 10 }, fetcher);
