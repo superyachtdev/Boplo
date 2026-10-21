@@ -99,10 +99,10 @@ window.BoploMap = (() => {
     const homeAf = findAirfield(list, home);
     const start = center || (homeAf ? [homeAf.lng, homeAf.lat] : list.length ? [list[0].lng, list[0].lat] : [0, 30]);
     const map = new ml.Map({ container: el, style: style(), center: start, zoom: center || homeAf ? zoom : list.length ? 5 : 1.5, attributionControl: false, interactive, dragRotate: false, pitchWithRotate: false, cooperativeGestures: false });
-    map.addControl(new ml.AttributionControl({ compact: true, customAttribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> · <a href="https://ourairports.com" target="_blank" rel="noopener">OurAirports</a>' }), 'bottom-right');
+    map.addControl(new ml.AttributionControl({ compact: true, customAttribution: 'Airfields: <a href="https://ourairports.com" target="_blank" rel="noopener">OurAirports</a>' }), 'bottom-right');
     if (interactive) map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right');
     map.touchZoomRotate?.disableRotation?.();
-    await new Promise((res, rej) => { map.once('load', res); map.once('error', e => { if (!map.loaded()) rej(new Error('Map tiles unavailable.')); }); setTimeout(res, 12000); });
+    await new Promise((res, rej) => { if (map.isStyleLoaded()) return res(); map.once('style.load', res); map.once('load', res); setTimeout(() => map.isStyleLoaded() ? res() : rej(new Error('Map tiles unavailable.')), 10000); });
     map.addSource('airfields', { type: 'geojson', data: airfieldGeo(list, homeAf?.code) });
     addAirfieldLayers(map);
     addTrackLayers(map);

@@ -478,7 +478,7 @@
     const holder = document.createElement('div'); holder.className = 'gmap'; box.prepend(holder);
     try {
       chart?.destroy?.();
-      chart = await BoploMap.mountOverview(holder, { country: countryCodeOf(state.profile), home: upper(state.profile.airport).split(/[\s·]/)[0], flights: list, selected: sel, onCount: n => { const c = $('[data-afcount]'); if (c) c.textContent = n ? `${n.toLocaleString('en-GB')} airfields in ${R.nameFor(countryCodeOf(state.profile))}` : ''; } });
+      chart = await BoploMap.mountOverview(holder, { country: countryCodeOf(state.profile), home: upper(state.profile.airport).split(/[\s·]/)[0], flights: list, selected: sel, onCount: n => { const c = $('[data-afcount]'); if (c) c.textContent = n ? `${n.toLocaleString('en-GB')} airfields in ${R.nameFor(countryCodeOf(state.profile))}.` : ''; } });
       if (!holder.isConnected) { chart.destroy(); return; }
       const svg = box.querySelector(':scope > svg'); if (svg) svg.style.display = 'none';
       box.classList.add('live');
