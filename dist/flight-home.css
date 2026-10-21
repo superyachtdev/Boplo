@@ -100,7 +100,7 @@ h1,h2,h3,p{margin:0}
 .pill{display:inline-flex;align-items:center;gap:10px;padding:5px 14px 5px 5px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--hair-d);font-size:13.5px;color:rgba(230,240,255,.82);margin-bottom:26px}
 .pill em{font-style:normal}
 .pill span{background:var(--electric);color:#fff;padding:3px 10px;border-radius:999px;font-weight:600;font-size:12.5px}
-.hero-copy h1{font-size:clamp(46px,7.4vw,108px);line-height:.9;letter-spacing:-.045em;font-weight:620;font-style:italic;font-variation-settings:'wdth' 112;color:#fff;margin-left:-.04em;text-wrap:balance}
+.hero-copy h1{font-size:clamp(40px,min(6.4vw,10.5vh),100px);line-height:.92;letter-spacing:-.04em;font-weight:620;font-style:italic;font-variation-settings:'wdth' 106;color:#fff;margin-left:-.04em;text-wrap:balance}
 .lede{margin:26px 0 32px;max-width:30em;font-size:clamp(16px,1.35vw,19px);line-height:1.5;color:rgba(222,233,255,.74)}
 .scroll-hint{display:flex;align-items:center;gap:12px;margin-top:34px;font-size:13.5px;color:var(--mist)}
 .scroll-hint span{width:22px;height:34px;border:1.5px solid rgba(158,216,255,.4);border-radius:12px;position:relative}
@@ -292,6 +292,16 @@ h1,h2,h3,p{margin:0}
 .footer-cols a{font-size:15px;color:rgba(242,246,255,.86)}
 .footer-cols a:hover{color:var(--ice)}
 .footer-legal{padding-top:26px;font-size:13px;color:var(--mist);max-width:60em}
+
+/* short windows: keep the headline clear of the nav */
+@media (max-height:820px){
+  .hero-copy .pill,.scroll-hint{display:none}
+  .lede{margin:20px 0 26px}
+  .hero-copy{bottom:128px}
+}
+@media (max-height:620px) and (min-width:641px){
+  .lede{display:none}
+}
 
 /* ---------- static fallback (no WebGL / reduced motion) ---------- */
 .static .flight{height:auto}
