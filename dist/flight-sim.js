@@ -419,8 +419,10 @@ window.BoploSim = (() => {
     // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
     let geoN = 0;
     if (tileset && h0 != null && O.fromElevFt != null) { const n = h0 - O.fromElevFt * FT; if (Math.abs(n) < 110) geoN = n; }
-    const g0 = h0 ?? ((O.fromElevFt || 0) * FT + geoN);
-    const g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
+    let g0 = h0 ?? ((O.fromElevFt || 0) * FT + geoN);
+    let g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
+    // if the detailed start height wasn't ready in time, fix the datum from the first real ground reading at the start
+    let datumFixed = !(tileset && h0 == null);
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
@@ -475,19 +477,25 @@ window.BoploSim = (() => {
       const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 3);
       camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
       placeAircraft();
-      if (!coarse) { const want = st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
+      { const want = shadowsOK && st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
       gateT += dt; if (gateT > .2) { gateT = 0; updateGates(); }
       viewer.resize(); viewer.render();
     }
     const flownPts = [];
-    const cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT);
+    let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
     const ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = circuit ? 0.06 : 330 * FT / NM;
     const groundStart = O.start !== 'air', landEnd = O.land !== false;
     const prof = s => { const up = groundStart ? g0 + Math.max(0, s - ROLL) * CG : cruise, dn = landEnd ? g1 + Math.max(0, L - TDZ - s) * DG : cruise; return Math.min(cruise, up, dn); };
 
     // route gates every few hundred metres where the route is airborne
     const gates = [];
-    for (let s = circuit ? 250 : 400; s < L - 60; s += circuit ? 200 : 450) { const a = prof(s); if (a - Math.min(g0, g1) > 25) { const [x, z, h] = path.at(s); gates.push({ x, z, y: a, h, s }); } }
+    const planGates = () => { gates.length = 0; for (let s = circuit ? 250 : 400; s < L - 60; s += circuit ? 200 : 450) { const a = prof(s); if (a - Math.min(g0, g1) > 25) { const [x, z, h] = path.at(s); gates.push({ x, z, y: a, h, s }); } } }; planGates();
+    function fixDatum(groundHere) {
+      if (datumFixed) return; datumFixed = true;
+      const shift = groundHere - g0; if (Math.abs(shift) < 2 || Math.abs(shift) > 150) return;
+      if (O.fromElevFt != null) geoN = groundHere - O.fromElevFt * FT;
+      g0 += shift; g1 += shift; planCruise(); planGates(); if (!st.ground) st.alt += shift;
+    }
 
     /* ---- aircraft state ---- */
     let flapT = 0, flareNow = false;
@@ -604,7 +612,7 @@ window.BoploSim = (() => {
       st.thr += clamp(thrTarget - st.thr, -dt * .8, dt * .8);
       st.flaps += clamp(flapT - st.flaps, -dt * .25, dt * .25);
       let vk = st.v / KT;
-      const ge = elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; }
+      const ge = elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; if (!datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(ge); }
       if (!st.ground) st.airT = (st.airT || 0) + dt;
       if (st.ground) {
         st.bank += (0 - st.bank) * Math.min(1, dt * 6);
@@ -744,9 +752,16 @@ window.BoploSim = (() => {
 
     /* ---- loop ---- */
     let prev = performance.now(), hudT = 0;
+    // adaptive quality: hold a smooth frame rate by trading scenery detail, render resolution and shadows
+    const QUAL = [{ sse: coarse ? 22 : 14, res: 1, sh: true }, { sse: 20, res: .9, sh: true }, { sse: 26, res: .8, sh: false }, { sse: 34, res: .7, sh: false }, { sse: 44, res: .6, sh: false }];
+    let qi = coarse ? 1 : 0, fpsN = 0, fpsT = performance.now(), calm = 0;
+    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = q.sse / 7; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
+    let shadowsOK = !coarse; applyQ();
     function loop(now) {
       if (!alive) return;
       raf = requestAnimationFrame(loop); pumping = false;
+      fpsN++; if (now - fpsT > 2000) { const fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now;
+        if (!document.hidden && !paused) { if (fps < 28 && qi < QUAL.length - 1) { qi++; applyQ(); calm = 0; } else if (fps > 52 && qi > 0 && ++calm > 3) { qi--; applyQ(); calm = 0; } } }
       const real = Math.min(.1, (now - prev) / 1000); prev = now;
       if (!paused && !ended) {
         let simT = real * rate;
