@@ -74,6 +74,7 @@
 
     <h2>Features that use other services</h2>
     <ul>
+      <li><b>Ask Boplo</b>: when you ask a question, we send it, your recent messages in that chat, and a short summary of your desk (licence and authority, hours, next lesson and preparation, syllabus progress and your last few flights with debrief notes) to Anthropic’s Claude API to write the answer. Anthropic doesn’t use this data to train its models. Your chat history is kept in your browser, not on our servers; we only count how many questions you ask each day.</li>
       <li><b>Voice debrief</b>: speech-to-text runs in your browser. Your browser’s provider (for example Google in Chrome or Apple in Safari) may process the audio. If you choose <i>Tidy up</i>, the text of your debrief is sent to Google’s Gemini API to organise it.</li>
       <li><b>Weather</b>: when you look up weather, our server asks NOAA’s Aviation Weather Center for the airport or area you chose.</li>
       <li><b>Maps and simulator</b>: your browser loads map, terrain and 3D scenery from Google Maps Platform, OpenFreeMap, EOX, Amazon Web Services and code from public CDNs (jsDelivr, unpkg). These providers receive your IP address and the area being viewed. Using the 3D scenery also means agreeing to the <a href="https://maps.google.com/help/terms_maps/" target="_blank" rel="noopener">Google Maps/Google Earth Additional Terms of Service</a> and the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a>.</li>
@@ -86,7 +87,8 @@
       <tr><th>Provider</th><th>What for</th></tr>
       <tr><td>Cloudflare</td><td>Hosting, database and security</td></tr>
       <tr><td>Stripe</td><td>Payments, subscriptions, invoices and tax</td></tr>
-      <tr><td>Google</td><td>Sign in with Google, the Gemini API (debrief tidy-up only) and Map Tiles (3D scenery)</td></tr>
+      <tr><td>Anthropic</td><td>The Claude API, which writes Ask Boplo’s answers</td></tr>
+      <tr><td>Google</td><td>Sign in with Google, the Gemini API (debrief tidy-up, and Ask Boplo if Claude is unavailable) and Map Tiles (3D scenery)</td></tr>
       <tr><td>Resend</td><td>Sending sign-in and account emails</td></tr>
     </table>
     <p>Some providers are outside the European Economic Area, mainly in the United States. Where that happens, transfers are protected by the EU–US Data Privacy Framework or the European Commission’s standard contractual clauses. We may also disclose data where the law requires it.</p>

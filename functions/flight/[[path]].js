@@ -1,3 +1,4 @@
+import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { health, checkPromo, planOf, effectivePlan, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
@@ -28,7 +29,7 @@ export function validateFlight(input) {
  f.routeKind=['track','route'].includes(input.routeKind)?input.routeKind:'endpoints';
  return f;
 }
-export async function onRequest({request,env}) {
+export async function onRequest({request,env,waitUntil}) {
  try {
  const url=new URL(request.url),path=url.pathname.replace(/^\/flight\/?/,'');
  if(!['GET','POST','PUT','DELETE'].includes(request.method))return json({error:'Method not allowed.'},405);
@@ -71,6 +72,9 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
  // ---------- plan and billing ----------
  if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));
+ // ---------- Ask Boplo ----------
+ if(path==='ask/usage'&&request.method==='GET')return json({...(await askUsage(env,user.id,plan)),sources:sourceLinks()});
+ if(path==='ask'&&request.method==='POST'){const r=await ask(env,user,plan,await body());if(waitUntil)waitUntil(r.done);return r.response;}
  if(path==='billing/health'&&request.method==='GET')return json(await health(env));
  if(path==='billing/promo'&&request.method==='POST')return json(await checkPromo(env,await body()));
  if(path==='billing/subscribe'&&request.method==='POST')return json(await subscribe(env,user,await body(),url.origin));

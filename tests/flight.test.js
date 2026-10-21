@@ -175,3 +175,25 @@ test('promotion codes discount the first payment and can skip the trial',async()
  assert.equal(out.mode,'payment');assert.equal(out.trial,false);
  const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('discounts[0][promotion_code]'),'promo_1');assert.equal(sub.b.get('trial_period_days'),null);
 });
+test('ask boplo streams answers, caches the system prompt and enforces daily limits',async()=>{
+ const {ask,usage,cleanMessages}=await import('../functions/lib/ask.js');
+ const db=new DatabaseSync(':memory:');
+ const env={ANTHROPIC_API_KEY:'sk-ant-x',DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async run(){return db.prepare(sql).run(...args);}};}}};
+ let sent=null;
+ const fake=async(url,init)=>{sent={url,body:JSON.parse(init.body),headers:init.headers};const ev=o=>`event: x\ndata: ${JSON.stringify(o)}\n\n`;
+  const body=ev({type:'message_start'})+ev({type:'content_block_delta',delta:{type:'text_delta',text:'Lift comes '}})+ev({type:'content_block_delta',delta:{type:'text_delta',text:'from the wing. Sources: PHAK'}})+ev({type:'message_stop'});
+  return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(body));c.close();}}),{status:200});};
+ const user={id:'s1'};
+ const r=await ask(env,user,'free',{messages:[{role:'assistant',content:'hi'},{role:'user',content:'How does a wing make lift?'}],context:'Licence: PPL(A), UK CAA'},fake);
+ const text=await r.response.text();await r.done;
+ assert.match(text,/"t":"Lift comes "/);assert.match(text,/"done":true/);assert.match(text,/"left":2/);
+ assert.equal(sent.url,'https://api.anthropic.com/v1/messages');assert.equal(sent.body.model,'claude-haiku-5-5');assert.equal(sent.body.stream,true);
+ assert.equal(sent.body.system[0].cache_control.type,'ephemeral');assert.match(sent.body.system[1].text,/student_context/);
+ assert.equal(sent.body.messages.length,1);assert.equal(sent.body.messages[0].role,'user');assert.equal(sent.headers['anthropic-version'],'2023-06-01');
+ for(let i=0;i<2;i++){const x=await ask(env,user,'free',{messages:[{role:'user',content:'q'}]},fake);await x.response.text();await x.done;}
+ assert.equal((await usage(env,'s1','free')).left,0);
+ await assert.rejects(ask(env,user,'free',{messages:[{role:'user',content:'q'}]},fake),e=>e.status===402);
+ assert.equal((await usage(env,'s1','advanced')).left,37);
+ assert.throws(()=>cleanMessages({messages:[]}),/Ask a question/);
+ assert.equal(cleanMessages({messages:[{role:'user',content:'a'},{role:'user',content:'b'}]}).length,1);
+});

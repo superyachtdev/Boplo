@@ -55,6 +55,7 @@
 
   const PAGES = [
     ['overview', 'Overview', 'overview'],
+    ['ask', 'Ask Boplo', 'ask'],
     ['logbook', 'Logbook', 'logbook'],
     ['progress', 'Progress', 'progress'],
     ['study', 'Study', 'study'],
@@ -67,7 +68,7 @@
     ['map', 'Map', 'map'],
     ['analytics', 'Analytics', 'analytics']
   ];
-  const TABS = ['overview', 'logbook', 'study', 'progress', 'more'];
+  const TABS = ['overview', 'logbook', 'ask', 'progress', 'more'];
   const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare' };
   const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more', 'plan'].includes(k) ? k : 'overview'; };
 
@@ -1356,6 +1357,7 @@
   const longDate = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   ui.billInterval = ui.billInterval || 'yearly';
   const ADV_FEATURES = [
+    ['Ask Boplo, 40 a day', 'Your aviation study assistant, with answers from official sources and your own desk.'],
     ['Unlimited logbook', 'Every flight, debrief and track, with CSV import from other logbooks.'],
     ['Nav logs', 'Unlimited saved plans with headings, times and fuel for every leg.'],
     ['Currency and expiry', 'Medical, rating and recency rules worked out from your logbook.'],
@@ -1406,7 +1408,7 @@
         <div class="grid plan-grid">
           <section class="tile span-5 plan-card">
             <h2>Free</h2><p class="plan-price"><b>$0</b><span>forever</span></p>
-            <ul class="check-list"><li>Log up to ${b.limits.flights} flights</li><li>Licence goal, progress and milestones</li><li>Lesson preparation</li><li>Live weather at any airport</li><li>Chart map, analytics and cost planner</li><li>Nav log with ${b.limits.navPlans} saved plan</li><li>Simulator replays</li><li>Export and print your logbook any time</li></ul>
+            <ul class="check-list"><li>Log up to ${b.limits.flights} flights</li><li>Licence goal, progress and milestones</li><li>Lesson preparation</li><li>Live weather at any airport</li><li>Chart map, analytics and cost planner</li><li>Nav log with ${b.limits.navPlans} saved plan</li><li>Simulator replays</li><li>Ask Boplo: 3 questions a day</li><li>Export and print your logbook any time</li></ul>
             <p class="hint">${preview ? '' : 'You’re on Free.'}</p>
           </section>
           <section class="tile dark span-7 plan-card adv">${contours('b')}
@@ -1530,9 +1532,140 @@
     else toast('Payment received. Your plan will update in a moment.');
   }
 
+  /* ================= Ask Boplo ================= */
+  const askKey = () => 'boplo-ask-' + (state.user?.id || state.user?.email || 'me');
+  const askLoad = () => { if (preview) return ASK_SAMPLE.map(m => ({ ...m })); try { return JSON.parse(localStorage.getItem(askKey()) || '[]'); } catch { return []; } };
+  const askSave = list => { if (preview) return; try { localStorage.setItem(askKey(), JSON.stringify(list.slice(-40))); } catch { } };
+  const ASK_SAMPLE = [
+    { role: 'user', content: 'Why does the aircraft stall even when the airspeed looks fine?' },
+    { role: 'assistant', content: 'A wing stalls when it goes past its **critical angle of attack**, not at a particular airspeed. Airspeed is only a rough guide because the stall speed changes with load.\n\n- **In a turn or pull-up** the wing has to make more lift, so it needs a higher angle of attack. At 60° of bank the load factor is 2, and the stall speed rises by about 41%.\n- **Heavier aircraft** stall at a higher indicated speed.\n- **Flaps** lower the stall speed.\n\nSo you can stall at a "safe-looking" speed if you load the wing up, for example by pulling hard in a steep turn. The fix is always the same: reduce the angle of attack first.\n\nSources: PHAK (Aerodynamics of Flight), AFH (Maintaining Aircraft Control)' }
+  ];
+  function askContext() {
+    const p = state.profile || {}, fl = sorted(), mins = sum(fl, f => f.minutes) + (p.openingMinutes || 0);
+    const byRole = r => hrs(sum(fl.filter(f => f.role === r), f => f.minutes));
+    const lines = [
+      `First name: ${String(p.name || '').split(/\s+/)[0] || 'unknown'}`,
+      `Training: ${[p.licence, p.authority].filter(Boolean).join(' with ')} (licensing system: ${regimeOf(p)}, country: ${p.country || '—'})`,
+      p.airport ? `Home airfield: ${p.airport}` : '', p.aircraft ? `Aircraft: ${[p.aircraft, p.registration].filter(Boolean).join(' ')}` : '', p.school ? `School: ${p.school}` : '',
+      `Logged: ${fl.length} flights, ${hrs(mins)} h total (dual ${byRole('dual')} h, solo ${byRole('solo')} h, PIC ${byRole('pic')} h), ${sum(fl, f => f.landings)} landings${p.openingMinutes ? `, including ${hrs(p.openingMinutes)} h from before Boplo` : ''}`,
+      p.goalHours ? `Hours goal: ${p.goalHours}` : '', p.target ? `Target date: ${p.target}` : '',
+      p.nextLesson ? `Next lesson: ${p.nextLesson}${p.lessonDate ? ` on ${p.lessonDate}` : ''}` : '',
+      parseChecks(p.checklist).length ? `Preparation checklist: ${parseChecks(p.checklist).map(c => `${c.done ? '[done]' : '[to do]'} ${c.text}`).join('; ')}` : '',
+      p.questions ? `Questions for the instructor: ${String(p.questions).replace(/\n+/g, '; ')}` : '',
+      p.topics ? `Theory to revisit: ${p.topics}` : ''
+    ];
+    try { const { s, st } = syllabusState(p); const d = s.items.filter(i => st[i.id] === 'd').length, inp = s.items.filter(i => st[i.id] === 'p'); lines.push(`Syllabus (${s.title}): ${d} of ${s.items.length} done${inp.length ? `; in progress: ${inp.map(i => `${i.id} ${i.name}`).join(', ')}` : ''}`); } catch { }
+    try { const due = nextDue(); if (due) lines.push(`Next expiry: ${due.title} ${due.d < 0 ? 'expired' : `in ${due.d} days`}`); } catch { }
+    const recent = fl.slice(0, 5).map(f => `- ${f.date} ${upper(f.departure)}→${upper(f.arrival)}, ${roleName(f.role)}, ${hm(f.minutes)}${f.lesson ? `, ${f.lesson}` : ''}${f.notes ? `. Debrief: ${String(f.notes).replace(/\s+/g, ' ').slice(0, 220)}` : ''}`);
+    if (recent.length) lines.push('Recent flights:\n' + recent.join('\n'));
+    return lines.filter(Boolean).join('\n').slice(0, 3400);
+  }
+  // small, safe markdown: escape first, then a few inline and block rules
+  function md(text, sources = {}) {
+    const inline = s => esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<i>$2</i>')
+      .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, (m, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+    const out = []; let list = null;
+    const flush = () => { if (list) { out.push(`<${list.t}>${list.items.map(i => `<li>${inline(i)}</li>`).join('')}</${list.t}>`); list = null; } };
+    for (const raw of String(text).split('\n')) {
+      const line = raw.trimEnd();
+      const src = line.match(/^\s*\**sources?\**:\**\s*(.+)$/i);
+      if (src) {
+        flush();
+        const chips = src[1].split(/[,;]\s*(?![^()]*\))/).map(x => x.trim().replace(/\.$/, '')).filter(Boolean).map(x => { const key = Object.keys(sources).sort((a, b) => b.length - a.length).find(k => x.toUpperCase().startsWith(k.toUpperCase())); const s2 = key && sources[key]; return s2 ? `<a class="src" href="${esc(s2.url)}" target="_blank" rel="noopener" title="${esc(s2.title)}">${esc(x)}</a>` : `<span class="src">${esc(x)}</span>`; });
+        out.push(`<div class="srcs"><span>Sources</span>${chips.join('')}</div>`); continue;
+      }
+      const ul = line.match(/^\s*[-•*]\s+(.*)$/), ol = line.match(/^\s*\d+[.)]\s+(.*)$/), h = line.match(/^#{1,4}\s+(.*)$/);
+      if (ul || ol) { const t = ul ? 'ul' : 'ol'; if (!list || list.t !== t) { flush(); list = { t, items: [] }; } list.items.push((ul || ol)[1]); continue; }
+      flush();
+      if (h) out.push(`<p class="h">${inline(h[1])}</p>`);
+      else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+    }
+    flush(); return out.join('');
+  }
+  let askBusy = false, askSources = null, askUsageInfo = null;
+  async function askPage() {
+    const p = state.profile, first = String(p.name || '').split(/\s+/)[0];
+    let msgs = askLoad();
+    const sugg = [
+      p.nextLesson ? `Help me prepare for ${p.nextLesson}` : 'What should I prepare before my next lesson?',
+      'Quiz me on air law, one question at a time',
+      'Decode this METAR: EGLL 211650Z 27016KT 9999 FEW041 10/04 Q1006',
+      'Why does an aircraft stall?',
+      state.flights.some(f => f.notes) ? 'Look at my recent debriefs. What should I work on?' : 'How do I make a good radio call in the circuit?',
+      regimeOf(p) === 'faa' ? 'What are the VFR weather minimums in Class E airspace?' : 'What are the VMC minima in class G airspace?'
+    ];
+    shell('ask', { title: 'Ask Boplo', sub: 'Your aviation study assistant. It knows your desk and answers from official sources.', actions: '<button class="btn btn-line" data-newchat>New chat</button>' },
+      `<div class="ask">
+        <div class="ask-log" data-log aria-live="polite"></div>
+        <form class="ask-bar" data-askform>
+          <textarea name="q" rows="1" maxlength="2000" placeholder="${preview ? 'Sign in to ask your own questions' : 'Ask about theory, rules, weather, radio, or your training…'}" ${preview ? 'disabled' : ''} aria-label="Your question"></textarea>
+          ${SR ? `<button type="button" class="icon-btn ask-mic" data-askmic aria-label="Speak your question" ${preview ? 'disabled' : ''}><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg></button>` : ''}
+          <button class="btn btn-blue ask-send" data-send ${preview ? 'disabled' : ''} aria-label="Send">${ico('send')}</button>
+        </form>
+        <p class="ask-foot"><span data-left></span>Boplo can make mistakes. It’s a study aid, not a flight briefing or your instructor. Check anything important with them and official sources.</p>
+      </div>`);
+    const log = $('[data-log]'), form = $('[data-askform]'), ta = form.q;
+    const empty = () => `<section class="tile dark ask-hello">${contours('b')}<div class="ask-mark"><svg aria-hidden="true"><use href="#spark"/></svg></div><h2 class="display">${first ? `Hi ${esc(first)}.` : 'Hi.'} What are we studying today?</h2><p>Ask anything about flying theory, rules, weather, radio or your own training. Boplo cites official sources and knows your desk.</p><div class="ask-sugg">${sugg.map(x => `<button type="button" data-sugg>${esc(x)}</button>`).join('')}</div></section>`;
+    const bubble = (m, i) => m.role === 'user' ? `<div class="amsg mine"><div>${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
+      : `<div class="amsg bo" data-i="${i}"><span class="bo-av" aria-hidden="true"><svg><use href="#spark"/></svg></span><div class="bo-body">${m.error ? `<p class="form-error">${esc(m.error)}</p>` : md(m.content, askSources || {})}${m.content && !m.pending ? `<div class="bo-tools"><button type="button" class="link" data-copy="${i}">Copy</button></div>` : ''}${m.pending && !m.content ? '<span class="typing"><i></i><i></i><i></i></span>' : ''}</div></div>`;
+    const paint = (scroll = true) => {
+      log.innerHTML = msgs.length ? msgs.map(bubble).join('') : empty();
+      $$('[data-sugg]').forEach(b => b.onclick = () => { ta.value = b.textContent; send(); });
+      $$('[data-copy]').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(msgs[+b.dataset.copy].content); b.textContent = 'Copied'; } catch { } });
+      if (scroll) log.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    };
+    const left = () => { const u = askUsageInfo; $('[data-left]').textContent = preview ? 'Example conversation. ' : u ? (u.on === false ? 'Ask Boplo is offline right now. ' : `${u.left} of ${u.limit} questions left today. `) : ''; };
+    paint(false); left();
+    if (!preview && !askSources) api('ask/usage').then(r => { askSources = r.sources; askUsageInfo = r; left(); paint(false); }).catch(() => { });
+    else if (preview && !askSources) { askSources = { PHAK: { title: 'FAA Pilot’s Handbook of Aeronautical Knowledge', url: 'https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/phak' }, AFH: { title: 'FAA Airplane Flying Handbook', url: 'https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/airplane_handbook' } }; paint(false); }
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(180, ta.scrollHeight) + 'px'; };
+    ta.oninput = grow;
+    ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } };
+    form.onsubmit = e => { e.preventDefault(); send(); };
+    $('[data-newchat]').onclick = () => { if (askBusy) return; msgs = preview ? [] : []; askSave(msgs); paint(); ta.focus(); };
+    const mic = $('[data-askmic]'); let rec = null;
+    if (mic && SR) mic.onclick = () => { if (rec) { rec.stop(); return; } rec = new SR(); rec.lang = navigator.language || 'en-GB'; rec.interimResults = true; const base = ta.value ? ta.value.trim() + ' ' : ''; rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; ta.value = base + t; grow(); }; rec.onend = () => { rec = null; mic.classList.remove('live'); }; rec.start(); mic.classList.add('live'); };
+    async function send() {
+      if (preview || askBusy) return;
+      const q = ta.value.trim(); if (!q) return;
+      ta.value = ''; grow(); askBusy = true;
+      msgs.push({ role: 'user', content: q }); const bot = { role: 'assistant', content: '', pending: true }; msgs.push(bot); paint();
+      const history = msgs.filter(m => !m.pending && !m.error).map(m => ({ role: m.role, content: m.content }));
+      try {
+        const res = await fetch('/flight/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history, context: askContext() }) });
+        if (!res.ok || !(res.headers.get('Content-Type') || '').includes('event-stream')) {
+          const out = await res.json().catch(() => ({}));
+          if (res.status === 402) upgradeSheet(out.error || 'Ask Boplo has more questions on Advanced.');
+          throw new Error(out.error || 'Boplo couldn’t answer just now. Try again in a moment.');
+        }
+        const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '', last = 0;
+        for (;;) {
+          const { value, done } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+            if (!line.startsWith('data:')) continue;
+            let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+            if (ev.t) bot.content += ev.t;
+            if (ev.error) bot.error = ev.error;
+            if (ev.done && askUsageInfo) { askUsageInfo.left = ev.left ?? askUsageInfo.left; left(); }
+          }
+          if (performance.now() - last > 60) { last = performance.now(); const el = log.querySelector(`[data-i="${msgs.length - 1}"] .bo-body`); if (el) { el.innerHTML = md(bot.content, askSources || {}); log.lastElementChild?.scrollIntoView({ block: 'end' }); } }
+        }
+        if (!bot.content && !bot.error) bot.error = 'Boplo didn’t answer. Try asking again.';
+      } catch (x) { bot.error = x.message; }
+      bot.pending = false; if (bot.error && !bot.content) { msgs.pop(); msgs.push({ role: 'assistant', content: '', error: bot.error }); }
+      askBusy = false; askSave(msgs.filter(m => !m.error)); paint();
+      if (bot.error && !bot.content) ta.value = q;
+    }
+  }
+
   /* ================= more (mobile) ================= */
   function morePage() {
-    shell('more', { title: 'More' }, `<div class="more-grid">${[['plan', 'Plan & billing', 'Your plan, trial and payments'], ['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+    shell('more', { title: 'More' }, `<div class="more-grid">${[['study', 'Study', 'Practice questions and mock exams'], ['plan', 'Plan & billing', 'Your plan, trial and payments'], ['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
   }
 
   /* ================= voice debrief ================= */
@@ -1691,7 +1824,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 

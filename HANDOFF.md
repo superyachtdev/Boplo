@@ -84,6 +84,16 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Promotion codes:** "Have a code?" in checkout → `POST /flight/billing/promo` validates a Stripe promotion code (dashboard: Products → Coupons → Promotion codes) and shows the discounted first payment; `subscribe` passes it as `discounts[0][promotion_code]`. Promotion-code metadata `skip_trial=true` charges immediately instead of starting the trial. A 100%-off code activates without a card.
 - `_headers` Referrer-Policy changed from `no-referrer` to `strict-origin-when-cross-origin` (needed for referrer-restricted Google keys and Stripe).
 
+## Ask Boplo, the AI study assistant (2026-10-21, Claude)
+
+- `functions/lib/ask.js` + `POST /flight/ask` (server-sent events stream) and `GET /flight/ask/usage`. Chat page `#ask` in `flight-app.js` (`askPage`), also a mobile tab.
+- **Model:** Claude Haiku 5.5 (`claude-haiku-5-5`) via `ANTHROPIC_API_KEY`, streaming, `max_tokens` 900. The system prompt is cached (`cache_control: ephemeral`). Gemini 2.5 Flash-Lite fallback when `AI_PROVIDER=gemini` or there's no Anthropic key. Env options: `AI_MODEL`, `AI_DAILY_FREE` (3), `AI_DAILY_ADV` (40), `AI_OFF=1`.
+- **Grounding:** a curated, link-checked index of official sources (`SOURCES`: PHAK 25C and AFH 3C chapter lists, AIM, Aviation Weather Handbook, ACS, 14 CFR 61/91, EASA Aircrew and SERA, CAP 413, Skyway Code, UK CAA licensing, ICAO Annex 2, AWC). Answers end with "Sources:", which the UI turns into linked chips. There's no full-text retrieval yet; next step is chunking the FAA handbooks into D1 FTS5.
+- **Context:** the browser sends a compact summary of the student's desk (`askContext()`: licence, hours, next lesson and checklist, syllabus progress, next expiry, last 5 flights with debriefs), wrapped as data in `<student_context>`.
+- **Safety rules** in the system prompt: no go/no-go decisions, weather or NOTAM briefings or "you're legal to fly"; in-flight emergencies get fly the aircraft / checklist / ATC or 121.5; medical goes to an AME; stays on aviation; never invents citations.
+- **Limits:** daily count per user in `flight_ai_usage` (created on first use). Free gets 3 a day (then 402 → upgrade sheet), Advanced 40 (then 429).
+- Chat history lives in the browser's localStorage only. The privacy policy lists Anthropic as a processor.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
