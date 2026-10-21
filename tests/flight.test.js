@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {onRequest,validateFlight,validateProfile,weather,debrief,shared} from '../functions/flight/[[path]].js';
+import {verifySignature,planOf,publicBilling,FREE_LIMITS} from '../functions/lib/billing.js';
 const valid={date:'2026-01-12',departure:'EGHP',arrival:'EGHP',minutes:65,role:'dual',landings:4,points:[]};
 test('flight records reject invalid times, dates, roles and coordinates',()=>{
  for(const changes of [{minutes:-5},{minutes:1.5},{date:'2026-02-30'},{date:'2099-01-01'},{role:'approved'},{points:[{lat:95,lng:0}]},{landings:1.5}])assert.throws(()=>validateFlight({...valid,...changes}));
@@ -15,7 +16,7 @@ test('flight records reject invalid times, dates, roles and coordinates',()=>{
 });
 test('workspace persists profile and flights and prevents cross-account access',async()=>{
  const db=new DatabaseSync(':memory:');
- for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  const env={DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}}};
  for(const owner of ['alice','bob']){db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run(owner,owner+'@example.com');const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(owner)))].map(n=>n.toString(16).padStart(2,'0')).join('');db.prepare('INSERT INTO darts_sessions VALUES(?,?,?,?,?)').run(owner,owner,hash,Date.now()+60000,Date.now());}
  const call=(owner,path,method='GET',body,origin='https://boplo.app')=>onRequest({env,request:new Request('https://boplo.app/flight/'+path,{method,headers:{Cookie:'boplo_session='+owner,Origin:origin,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined})});
@@ -63,11 +64,12 @@ test('night landings, profile share hash and import',async()=>{
  assert.equal(validateProfile({shareHash:'evil'}).shareHash,undefined);
  assert.equal(validateProfile({},{shareHash:'abc'}).shareHash,'abc');
  const db=new DatabaseSync(':memory:');
- for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
  const env={DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}}};
  db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run('al','al@example.com');
  const h=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('al')))].map(n=>n.toString(16).padStart(2,'0')).join('');
  db.prepare('INSERT INTO darts_sessions VALUES(?,?,?,?,?)').run('al','al',h,Date.now()+60000,Date.now());
+ db.prepare("INSERT INTO flight_billing(user_id,customer_id,status,updated_at) VALUES('al','cus_test','active',0)").run();
  const call=(path,method='GET',b,cookie=true)=>onRequest({env,request:new Request('https://boplo.app/flight/'+path,{method,headers:{...(cookie?{Cookie:'boplo_session=al'}:{}),Origin:'https://boplo.app','Content-Type':'application/json'},body:b?JSON.stringify(b):undefined})});
  assert.equal((await call('profile','PUT',{name:'Alice Smith',country:'UK',authority:'UK CAA',licence:'PPL(A)',complete:true,notes:'private'})).status,200);
  const imp=await (await call('flights/import','POST',{flights:[valid,{...valid,role:'bad'},{...valid,minutes:30}]})).json();
@@ -86,4 +88,67 @@ test('weather looks up a station by code and falls back to nearby',async()=>{
  const a=await weather(new URL('https://x/flight/weather?ids=EGLL'),{},f);assert.equal(a.exact,true);assert.equal(a.stations[0].taf,'TAF EGLL');
  const b=await weather(new URL('https://x/flight/weather?ids=EGHP&lat=51.19&lng=-1.23'),{},f);assert.equal(b.exact,false);assert.equal(b.stations[0].id,'EGVO');
  const c=await weather(new URL('https://x/flight/weather?ids=EGHP'),{},f);assert.equal(c.stations.length,0);
+});
+
+test('free plan limits, paid features and billing state',async()=>{
+ const db=new DatabaseSync(':memory:');
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ const env={DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}},STRIPE_PUBLISHABLE_KEY:'pk_test_x'};
+ db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run('fr','fr@example.com');
+ const h=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('fr')))].map(n=>n.toString(16).padStart(2,'0')).join('');
+ db.prepare('INSERT INTO darts_sessions VALUES(?,?,?,?,?)').run('fr','fr',h,Date.now()+60000,Date.now());
+ const call=(path,method='GET',b)=>onRequest({env,request:new Request('https://boplo.app/flight/'+path,{method,headers:{Cookie:'boplo_session=fr',Origin:'https://boplo.app','Content-Type':'application/json'},body:b?JSON.stringify(b):undefined})});
+ for(let i=0;i<FREE_LIMITS.flights;i++)assert.equal((await call('flights','POST',valid)).status,201);
+ assert.equal((await call('flights','POST',valid)).status,402);
+ assert.equal((await call('flights/import','POST',{flights:[valid]})).status,402);
+ assert.equal((await call('share','POST',{})).status,402);
+ const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,true);assert.equal(ws.billing.ready,false);
+ // an abandoned trial checkout stays free; a paid subscription unlocks everything
+ db.prepare("INSERT INTO flight_billing(user_id,customer_id,status,updated_at) VALUES('fr','cus_1','incomplete',0)").run();
+ assert.equal(planOf(db.prepare("SELECT * FROM flight_billing WHERE user_id='fr'").get()),'free');
+ db.prepare("UPDATE flight_billing SET status='trialing' WHERE user_id='fr'").run();
+ assert.equal((await call('flights','POST',valid)).status,201);
+ assert.equal(publicBilling(env,{status:'canceled'}).plan,'free');
+ // your data: export and delete
+ const ex=await call('account/export');assert.equal(ex.status,200);const data=await ex.json();assert.equal(data.flights.length,FREE_LIMITS.flights+1);
+ assert.equal((await call('account/delete','POST',{confirm:'nope'})).status,400);
+ const del=await call('account/delete','POST',{confirm:'DELETE'});assert.equal(del.status,200);assert.match(del.headers.get('Set-Cookie'),/Max-Age=0/);
+ assert.equal(db.prepare("SELECT COUNT(*) n FROM flight_records WHERE user_id='fr'").get().n,0);
+ assert.equal((await call('workspace')).status,401);
+});
+test('stripe webhook signatures are verified',async()=>{
+ const secret='whsec_test',payload='{"type":"customer.subscription.updated"}',t=Math.floor(Date.now()/1000);
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const sig=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`${t}.${payload}`)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+ assert.equal(await verifySignature(payload,`t=${t},v1=${sig}`,secret),true);
+ assert.equal(await verifySignature(payload+' ',`t=${t},v1=${sig}`,secret),false);
+ assert.equal(await verifySignature(payload,`t=${t-1000},v1=${sig}`,secret),false);
+ assert.equal(await verifySignature(payload,`t=${t},v1=${sig}`,'whsec_other'),false);
+ const env={DB:{prepare(){return {bind(){return this;},async first(){return null;},async run(){}};}},STRIPE_FLIGHT_WEBHOOK_SECRET:secret};
+ const bad=await onRequest({env,request:new Request('https://boplo.app/flight/billing/webhook',{method:'POST',headers:{'Stripe-Signature':'t=1,v1=00'},body:payload})});
+ assert.equal(bad.status,400);
+ const good=await onRequest({env,request:new Request('https://boplo.app/flight/billing/webhook',{method:'POST',headers:{'Stripe-Signature':`t=${t},v1=${sig}`},body:payload})});
+ assert.equal(good.status,200);
+});
+test('checkout creates prices once, starts a trial and stays free until confirmed',async()=>{
+ const {subscribe}=await import('../functions/lib/billing.js');
+ const db=new DatabaseSync(':memory:');
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run('u1','u1@example.com');
+ const env={STRIPE_SECRET_KEY:'sk_test_x',DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async run(){return db.prepare(sql).run(...args);}};}}};
+ const calls=[];
+ const fake=async(url,init)=>{const u=new URL(url),body=new URLSearchParams(init.body||'');calls.push({m:init.method,p:u.pathname,q:u.searchParams,b:body});const r=o=>new Response(JSON.stringify(o),{status:200});
+  if(u.pathname==='/v1/customers')return r({id:'cus_1'});
+  if(u.pathname==='/v1/prices'&&init.method==='GET')return r({data:[]});
+  if(u.pathname==='/v1/products/search')return r({data:[]});
+  if(u.pathname==='/v1/products')return r({id:'prod_1'});
+  if(u.pathname==='/v1/prices')return r({id:'price_1',currency:'usd'});
+  if(u.pathname==='/v1/subscriptions'&&init.method==='GET')return r({data:[]});
+  if(u.pathname==='/v1/subscriptions')return r({id:'sub_1',status:'trialing',pending_setup_intent:{client_secret:'seti_secret'},latest_invoice:{amount_due:0,currency:'usd'}});
+  return new Response('{}',{status:404});};
+ const out=await subscribe(env,{id:'u1',email:'u1@example.com'},{interval:'yearly'},'https://boplo.app',fake);
+ assert.equal(out.clientSecret,'seti_secret');assert.equal(out.mode,'setup');assert.equal(out.trial,true);
+ const price=calls.find(c=>c.p==='/v1/prices'&&c.m==='POST');assert.equal(price.b.get('unit_amount'),'9999');assert.equal(price.b.get('recurring[interval]'),'year');assert.equal(price.b.get('lookup_key'),'boplo_flight_advanced_yearly');
+ const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('items[0][price]'),'price_1');assert.equal(sub.b.get('trial_period_days'),'7');assert.equal(sub.b.get('payment_behavior'),'default_incomplete');assert.deepEqual(sub.b.getAll('expand[]'),['latest_invoice.payment_intent','pending_setup_intent']);
+ const row=db.prepare("SELECT * FROM flight_billing WHERE user_id='u1'").get();assert.equal(row.customer_id,'cus_1');assert.equal(row.status,'incomplete');
 });

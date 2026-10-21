@@ -71,9 +71,20 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - Debug handle: set localStorage `boplo-sim-debug` to `true` to get `window.__boploSim`.
 - Labelled as a practice toy, not an approved training device. Heights are estimated (logs have no altitude).
 
+## Payments, plans and legal (2026-10-21, Claude)
+
+- **Stripe subscriptions** via REST in `functions/lib/billing.js` (no SDK). Stripe API version pinned to `2024-06-20`. Prices are created on first use by lookup key: `boplo_flight_advanced_monthly` ($11.99) and `boplo_flight_advanced_yearly` ($99.99), product metadata `boplo=flight_advanced`.
+- **Env (Cloudflare Pages):** `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_FLIGHT_WEBHOOK_SECRET` (the Flight endpoint's own signing secret; the old `/api` product uses `STRIPE_WEBHOOK_SECRET`). Optional: `STRIPE_TAX=on` (collects billing address and enables Stripe Tax), `BILLING_TRIAL_DAYS` (default 7, `0` disables).
+- **Migration 0010** creates `flight_billing` (one row per user: customer, subscription, status, interval, period end, cancel flag, trial).
+- **Routes:** `GET /flight/billing`, `POST /flight/billing/subscribe|sync|cancel|resume|portal`, `POST /flight/billing/webhook` (public, signature checked, runs before the origin check), `GET /flight/account/export`, `POST /flight/account/delete` (`{confirm:'DELETE'}`; cancels any subscription, deletes data, clears cookie). Workspace includes `billing`.
+- **Checkout UX:** Boplo's own sheet with Stripe's Payment Element (cards, Apple Pay, Google Pay); subscription created `default_incomplete`, trial uses the pending SetupIntent, then `/billing/sync` polls until active. Redirect-based methods come back to `/flight-app.html#plan?...` and finish on load. A trial only counts as Advanced once Stripe has a card.
+- **Plans:** Advanced = active, trialing (with card) or past_due. Free: 15 flights (server-enforced, 402), 1 saved nav plan, replays only. Advanced-only: CSV import, instructor share, debrief tidy (server-enforced), plus currency, study, radio and simulator fly mode (client-gated). Export/print stays free. Any 402 opens the upgrade sheet.
+- **Landing:** pricing lists match the plans; "Start 7-day free trial" stores `boplo-intent` so the desk opens Plan & billing after sign-in.
+- **Legal:** `dist/terms.html`, `privacy.html`, `refunds.html` (14-day money-back guarantee, EU/UK withdrawal right and model form, Google Maps/Earth terms for the 3D tiles). Seller details are highlighted `<span class="fill" data-fill="seller|nif|address">` placeholders until filled. Sign-in screen and checkout link to them; landing footer has a Legal column. Drafts: get a lawyer to review before taking real money.
+- `_headers` Referrer-Policy changed from `no-referrer` to `strict-origin-when-cross-origin` (needed for referrer-restricted Google keys and Stripe).
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
-- Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).
-- No privacy or terms pages exist yet; the footer Legal column was removed until they do.
+- Stripe is in test mode until the owner switches keys to live. Fill the legal placeholders and get the pages reviewed.
 - Unused legacy CSS/JS in `dist/` could be cleaned up.

@@ -1,3 +1,4 @@
+import { planOf, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
 const text = (value,max=200) => String(value ?? '').trim().slice(0,max);
@@ -31,8 +32,9 @@ export async function onRequest({request,env}) {
  try {
  const url=new URL(request.url),path=url.pathname.replace(/^\/flight\/?/,'');
  if(!['GET','POST','PUT','DELETE'].includes(request.method))return json({error:'Method not allowed.'},405);
- if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
+ if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request);
+ if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(path==='simkey'&&request.method==='GET')return json({key:env.GOOGLE_MAPS_BROWSER_KEY||''});
  const token=(request.headers.get('Cookie')||'').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1];
@@ -40,17 +42,20 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
+ const brow=await billingRow(env,user.id).catch(()=>null),plan=planOf(brow);
+ const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='workspace'&&request.method==='GET'){
  const profile=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();
  const records=await env.DB.prepare('SELECT id,data FROM flight_records WHERE user_id=? ORDER BY created_at DESC').bind(user.id).all();
  const prof=profile?JSON.parse(profile.data):null;if(prof){prof.shareOn=!!prof.shareHash;delete prof.shareHash;}
- return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||''});
+ return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||'',billing:publicBilling(env,brow)});
  }
  if(path==='profile'&&request.method==='PUT'){
  const prevRow=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const prev=prevRow?JSON.parse(prevRow.data):{};const p=validateProfile(await body(),prev);await env.DB.prepare('INSERT INTO flight_profiles(user_id,data,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at').bind(user.id,JSON.stringify(p),Date.now()).run();return json({profile:p});
  }
  if(path==='flights'&&request.method==='POST'){
+ if(plan!=='advanced'){const c=await env.DB.prepare('SELECT COUNT(*) n FROM flight_records WHERE user_id=?').bind(user.id).first();if((c?.n||0)>=FREE_LIMITS.flights)fail(402,`The Free plan holds ${FREE_LIMITS.flights} flights. Start a free trial of Advanced for an unlimited logbook.`);}
  const flight=validateFlight(await body()),id=crypto.randomUUID();await env.DB.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,JSON.stringify(flight),Date.now(),Date.now()).run();return json({flight:{id,...flight}},201);
  }
  const match=path.match(/^flights\/([a-f0-9-]{36})$/);
@@ -60,10 +65,23 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const flight=validateFlight(await body());await env.DB.prepare('UPDATE flight_records SET data=?,updated_at=? WHERE id=? AND user_id=?').bind(JSON.stringify(flight),Date.now(),row.id,user.id).run();return json({flight:{id:row.id,...flight}});
  }
 if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
- if(path==='share'&&request.method==='POST'){const raw=[...crypto.getRandomValues(new Uint8Array(24))].map(n=>n.toString(16).padStart(2,'0')).join('');const row=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();if(!row)fail(400,'Finish setting up your desk first.');const d=JSON.parse(row.data);d.shareHash=await sha(raw);await env.DB.prepare('UPDATE flight_profiles SET data=?,updated_at=? WHERE user_id=?').bind(JSON.stringify(d),Date.now(),user.id).run();return json({token:raw});}
+ if(path==='share'&&request.method==='POST'){needAdvanced('Sharing with your instructor');const raw=[...crypto.getRandomValues(new Uint8Array(24))].map(n=>n.toString(16).padStart(2,'0')).join('');const row=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();if(!row)fail(400,'Finish setting up your desk first.');const d=JSON.parse(row.data);d.shareHash=await sha(raw);await env.DB.prepare('UPDATE flight_profiles SET data=?,updated_at=? WHERE user_id=?').bind(JSON.stringify(d),Date.now(),user.id).run();return json({token:raw});}
  if(path==='share'&&request.method==='DELETE'){const row=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();if(row){const d=JSON.parse(row.data);delete d.shareHash;await env.DB.prepare('UPDATE flight_profiles SET data=?,updated_at=? WHERE user_id=?').bind(JSON.stringify(d),Date.now(),user.id).run();}return json({ok:true});}
- if(path==='flights/import'&&request.method==='POST'){const input=await body();const list=Array.isArray(input.flights)?input.flights:fail(400,'Send a list of flights.');if(list.length>500)fail(400,'Import at most 500 flights at a time.');const ok=[],errors=[];for(const [i,f] of list.entries()){try{ok.push(validateFlight(f));}catch(e){errors.push({row:i+1,error:e.message});}}const saved=[];for(const f of ok){const id=crypto.randomUUID();await env.DB.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,JSON.stringify(f),Date.now(),Date.now()).run();saved.push({id,...f});}return json({flights:saved,errors},201);}
- if(path==='debrief'&&request.method==='POST')return json(await debrief(env,await body()));
+ if(path==='flights/import'&&request.method==='POST'){needAdvanced('Importing flights');const input=await body();const list=Array.isArray(input.flights)?input.flights:fail(400,'Send a list of flights.');if(list.length>500)fail(400,'Import at most 500 flights at a time.');const ok=[],errors=[];for(const [i,f] of list.entries()){try{ok.push(validateFlight(f));}catch(e){errors.push({row:i+1,error:e.message});}}const saved=[];for(const f of ok){const id=crypto.randomUUID();await env.DB.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,JSON.stringify(f),Date.now(),Date.now()).run();saved.push({id,...f});}return json({flights:saved,errors},201);}
+ if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
+ // ---------- plan and billing ----------
+ if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));
+ if(path==='billing/subscribe'&&request.method==='POST')return json(await subscribe(env,user,await body(),url.origin));
+ if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,r));}
+ if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,await setCancel(env,user,true)));
+ if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,await setCancel(env,user,false)));
+ if(path==='billing/portal'&&request.method==='POST')return json(await portal(env,user,url.origin));
+ // ---------- your data ----------
+ if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}
+ if(path==='account/delete'&&request.method==='POST'){const input=await body();if(input?.confirm!=='DELETE')fail(400,'Type DELETE to confirm.');await cancelNow(env,user.id).catch(()=>{});
+  for(const q of ['DELETE FROM flight_records WHERE user_id=?','DELETE FROM flight_profiles WHERE user_id=?','DELETE FROM flight_billing WHERE user_id=?','DELETE FROM darts_sessions WHERE user_id=?'])await env.DB.prepare(q).bind(user.id).run().catch(()=>{});
+  try{await env.DB.prepare('DELETE FROM darts_users WHERE id=?').bind(user.id).run();}catch{await env.DB.prepare("UPDATE darts_users SET email=?,display_name='' WHERE id=?").bind('deleted-'+user.id+'@deleted.invalid',user.id).run().catch(()=>{});}
+  return new Response(JSON.stringify({ok:true}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':'boplo_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'}});}
  return json({error:'Not found.'},404);
  }catch(error){if(error.status)return json({error:error.message},error.status);console.error('Flight request failed',error.message);return json({error:'Your flight desk could not load. Check the Flight database migration and try again.'},503);}
 }

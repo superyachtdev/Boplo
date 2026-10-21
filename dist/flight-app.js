@@ -44,6 +44,7 @@
     const isJSON = (res.headers.get('Content-Type') || '').includes('application/json');
     const out = isJSON ? await res.json().catch(() => ({})) : {};
     if (!isJSON) throw Object.assign(new Error('The flight desk service isn’t reachable right now. Try again in a minute.'), { status: res.status === 401 ? 401 : 503 });
+    if (res.status === 402) { if (sheet.open) sheet.close(); setTimeout(() => upgradeSheet(out.error || 'This is part of Advanced.'), 50); }
     if (!res.ok) throw Object.assign(new Error(out.error || 'Something went wrong. Try again.'), { status: res.status });
     return out;
   }
@@ -68,7 +69,7 @@
   ];
   const TABS = ['overview', 'logbook', 'study', 'progress', 'more'];
   const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare' };
-  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more'].includes(k) ? k : 'overview'; };
+  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more', 'plan'].includes(k) ? k : 'overview'; };
 
   /* checklist stored as text lines: "[x] item" / "[ ] item" */
   const parseChecks = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^\[( |x)\]\s?(.*)$/i); return m ? { done: m[1].toLowerCase() === 'x', text: m[2] } : { done: false, text: l }; }).filter(c => c.text);
@@ -129,6 +130,7 @@
           <p class="auth-note" data-note aria-live="polite" style="margin:12px 0">${esc(notice)}</p>
           <button class="btn btn-blue btn-has-spark" type="submit">Email me a sign-in link ${spark}</button>
         </form>
+        <p class="auth-legal">By continuing you agree to the <a href="/terms.html">Terms</a> and confirm you’ve read the <a href="/privacy.html">Privacy policy</a>.</p>
         <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div>
       </section>
     </div></main>`;
@@ -345,8 +347,8 @@
         <button class="btn btn-blue btn-has-spark log-cta" data-add>Log a flight ${spark}</button>
         <nav aria-label="Flight desk">${PAGES.map(([id, label, icon]) => `<a href="#${id}" ${page === id ? 'aria-current="page"' : ''}>${ico(icon)}${label}</a>`).join('')}</nav>
         <div class="me">
-          <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
-          <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><button data-logout>${ico('out')}${preview ? 'Leave' : 'Sign out'}</button></div>
+          <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small><span class="plan-badge ${isAdv() ? 'adv' : ''}">${isAdv() ? 'Advanced' : 'Free'}</span>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
+          <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><a href="#plan" ${page === 'plan' ? 'aria-current="page"' : ''}>${ico('plan')}${isAdv() ? 'Plan' : 'Upgrade'}</a><button data-logout>${ico('out')}${preview ? 'Leave' : 'Sign out'}</button></div>
         </div>
       </div></aside>
       <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#profile" aria-label="Profile" style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
@@ -357,7 +359,7 @@
       </div></main>
       <nav class="tabbar" aria-label="Flight desk">${TABS.map(id => { const pg = PAGES.find(x => x[0] === id) || ['more', 'More', 'more']; const on = page === id || (id === 'more' && !TABS.includes(page)); return `<a href="#${id}" ${on ? 'aria-current="page"' : ''}>${ico(pg[2])}${pg[1]}</a>`; }).join('')}</nav>
     </div>`;
-    $$('[data-add]').forEach(b => b.onclick = () => flightSheet());
+    $$('[data-add]').forEach(b => b.onclick = () => { if (!isAdv() && state.flights.length >= B().limits.flights) return upgradeSheet(`The Free plan holds ${B().limits.flights} flights. Advanced gives you an unlimited logbook.`); flightSheet(); });
     $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
     $$('[data-logout]').forEach(b => b.onclick = logout);
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
@@ -458,7 +460,7 @@
       <div class="toolbar">
         <label class="search">${ico('search')}<span class="sr">Search flights</span><input type="search" data-q value="${esc(ui.q)}" placeholder="Search airfield, lesson, aircraft…"></label>
         <div class="filter" role="group" aria-label="Role">${[['all', 'All'], ['dual', 'Dual'], ['solo', 'Solo'], ['pic', 'PIC']].map(([v, l]) => `<button data-role="${v}" aria-pressed="${ui.role === v}">${l}</button>`).join('')}</div>
-        <span class="count" aria-live="polite">${list.length} flight${list.length === 1 ? '' : 's'} · ${hm(totalM)} h</span>
+        <span class="count" aria-live="polite">${list.length} flight${list.length === 1 ? '' : 's'} · ${hm(totalM)} h${!isAdv() ? ` · <a class="link" href="#plan">${state.flights.length} of ${B().limits.flights} on Free</a>` : ''}</span>
       </div>
       ${list.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Date</th><th>Route</th><th>Aircraft</th><th>Lesson</th><th>Role</th><th class="r">Landings</th><th class="r">Time</th></tr></thead>
@@ -480,7 +482,7 @@
     const c = $('[data-clear]'); if (c) c.onclick = () => { ui.q = ''; ui.role = 'all'; logbook(); };
     const pb = $('[data-print]'); if (pb) pb.onclick = printLogbook;
     const cb = $('[data-csv]'); if (cb) cb.onclick = exportCSV;
-    $('[data-import]').onclick = importSheet;
+    $('[data-import]').onclick = gateOr('Importing flights', importSheet);
     $$('tbody tr').forEach(tr => tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tr.click(); } });
   }
 
@@ -658,9 +660,15 @@
           </div>
           <p class="footnote">Used to estimate each flight’s cost when you don’t enter it, and to forecast your total on the overview.</p>
         </section>
+        <section class="tile span-12 data-tile"><div class="tile-head"><h2>Your data</h2></div>
+          <p class="hint">Your flights and notes are yours. Download them any time, on any plan. <a class="link" href="/privacy.html" target="_blank">How Boplo handles your data</a></p>
+          <div class="data-actions"><a class="btn btn-line btn-sm" ${preview ? 'aria-disabled="true"' : 'href="/flight/account/export" download'}>Download everything (JSON)</a><button type="button" class="btn btn-line btn-sm" data-csvx>Export logbook (CSV)</button><span style="flex:1"></span><button type="button" class="btn btn-danger btn-sm" data-delacct ${preview ? 'disabled' : ''}>Delete my account</button></div>
+        </section>
         <div class="span-12 actions"><p class="form-error" role="alert"></p><span class="hint">${state.user?.email ? `Signed in as ${esc(state.user.email)}` : ''}</span><div class="right"><button type="button" class="btn btn-line" data-logout>${ico('out')}${preview ? 'Leave example' : 'Sign out'}</button><button class="btn btn-blue btn-has-spark" type="submit">Save profile ${spark}</button></div></div>
       </form>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
+    $('[data-csvx]').onclick = exportCSV;
+    const da = $('[data-delacct]'); if (da) da.onclick = deleteAccountSheet;
     const form = $('[data-profile]');
     bindTraining(form, p);
     form.onsubmit = async e => {
@@ -798,6 +806,7 @@
   const studyOf = p => readJSON(p.study, {});
   let quiz = null;
   function studyPage() {
+    if (!isAdv()) { shell('study', { title: 'Study', sub: 'Theory practice for your licence exams.' }, paywall('Practise for your theory exams.', 'Practice questions by subject, weakest first, and timed mock exams with your authority’s pass mark.')); return; }
     if (!QB) { shell('study', { title: 'Study' }, '<div class="tile empty center"><h3>Questions didn’t load.</h3><p>Reload the page to try again.</p></div>'); return; }
     if (quiz) return quizView();
     const p = state.profile, st = studyOf(p), pm = QB.passMark(regimeOf(p));
@@ -1052,7 +1061,7 @@
       const first = N.points[0]; ww.disabled = true; ww.textContent = 'Fetching…';
       try { const d = preview ? EX_WX : await api(`weather?${first.code ? `ids=${encodeURIComponent(first.code)}&` : ''}lat=${first.lat}&lng=${first.lng}`); const s = d.stations?.[0]; if (s && s.wdir != null && s.wdir !== 'VRB') { inp.wdir = s.wdir; inp.wspd = s.wspd; navPage(); toast(`Surface wind from ${s.id}: ${pad3(s.wdir)}° at ${s.wspd} kt.`); } else { ww.textContent = 'No usable wind nearby'; } } catch (x) { ww.textContent = x.message; }
     };
-    const sv = $('[data-savenav]'); if (sv) sv.onclick = async () => { const st = navStore(); st.logs = [{ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, ...(st.logs || []).filter(x => x.name !== N.name)].slice(0, 8); try { await saveProfile({ navlogs: JSON.stringify(st) }); toast('Plan saved.'); navPage(); } catch (x) { toast(x.message); } };
+    const sv = $('[data-savenav]'); if (sv) sv.onclick = async () => { if (!isAdv() && (navStore().logs || []).filter(x => x.name !== N.name).length >= B().limits.navPlans) return upgradeSheet(`The Free plan saves ${B().limits.navPlans} nav plan. Advanced saves as many as you like.`); const st = navStore(); st.logs = [{ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, ...(st.logs || []).filter(x => x.name !== N.name)].slice(0, 8); try { await saveProfile({ navlogs: JSON.stringify(st) }); toast('Plan saved.'); navPage(); } catch (x) { toast(x.message); } };
     $$('[data-loadnav]').forEach(b => b.onclick = () => { const s = saved[+b.dataset.loadnav]; ui.nav = { name: s.name, points: s.points, inp: { ...inp, ...s.inp } }; navPage(); });
     $$('[data-delnav]').forEach(b => b.onclick = async () => { const st = navStore(); st.logs.splice(+b.dataset.delnav, 1); try { await saveProfile({ navlogs: JSON.stringify(st) }); navPage(); } catch { } });
     const fn = $('[data-flynav]'); if (fn) fn.onclick = () => openSim({ name: N.name || `${legs[0]?.from} → ${legs[legs.length - 1]?.to}`, points: N.points, inp }, 'fly');
@@ -1100,6 +1109,7 @@
     return { start, end: docs.rating, rows: [['Flight time', sum(w, f => f.minutes) / 60, 12, 'h'], ['As pilot in command', sum(w.filter(f => f.role !== 'dual'), f => f.minutes) / 60, 6, 'h'], ['Take-offs and landings', sum(w, f => f.landings), 12, ''], ['With an instructor', sum(w.filter(f => f.role === 'dual'), f => f.minutes) / 60, 1, 'h']] };
   }
   function currencyPage() {
+    if (!isAdv()) { shell('currency', { title: 'Currency', sub: 'Medical, rating and recency rules, worked out from your logbook.' }, paywall('Always know what you can fly.', 'Track your medical and rating expiry, passenger and night currency, and revalidation by experience, with reminders before anything lapses.')); return; }
     const items = currencyItems(), rv = revalidation();
     shell('currency', { title: 'Currency', sub: 'The dates and recent-experience rules that decide what you can fly, worked out from your logbook.' },
       `<div class="grid">
@@ -1198,7 +1208,8 @@
   function wireShare() {
     const box = $('[data-sharebox]'); if (!box) return;
     const show = url => { box.innerHTML = `<div class="share-link"><input readonly value="${esc(url)}" aria-label="Share link"><button class="btn btn-blue btn-sm" data-copy>Copy</button></div><p class="footnote">Only people with this link can open it. Making a new link turns this one off.</p>`; box.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch { box.querySelector('input').select(); } }; };
-    const on = $('[data-shareon]'); if (on) on.onclick = async () => { on.disabled = true; try { const r = preview ? { token: 'example' } : await api('share', 'POST', {}); state.profile.shareOn = true; progressPage(); show(`${location.origin}/share.html?t=${r.token}`); } catch (x) { toast(x.message); on.disabled = false; } };
+    const on = $('[data-shareon]'); if (on && !isAdv()) on.onclick = () => upgradeSheet('Sharing with your instructor is part of Advanced.');
+    else if (on) on.onclick = async () => { on.disabled = true; try { const r = preview ? { token: 'example' } : await api('share', 'POST', {}); state.profile.shareOn = true; progressPage(); show(`${location.origin}/share.html?t=${r.token}`); } catch (x) { toast(x.message); on.disabled = false; } };
     const off = $('[data-shareoff]'); if (off) off.onclick = async () => { try { if (!preview) await api('share', 'DELETE'); state.profile.shareOn = false; progressPage(); toast('Sharing turned off.'); } catch (x) { toast(x.message); } };
   }
 
@@ -1234,6 +1245,7 @@
     return { S, cs, faa, reg };
   }
   function radioPage(id) {
+    if (!isAdv()) { shell('radio', { title: 'Radio practice', sub: 'Say your calls out loud and get them checked.' }, paywall('Sound confident on the radio.', 'Practise real scenarios with your own callsign. Boplo listens and checks every element of your call.')); return; }
     const { S, cs, faa, reg } = radioScenarios(), best = readJSON(state.profile.radio, {});
     const sc = S.find(s => s.id === id);
     if (!sc) {
@@ -1272,6 +1284,7 @@
   const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=4'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
+    if (mode === 'fly' && !isAdv()) return upgradeSheet('Flying the simulator yourself is part of Advanced. Replays are free.');
     const p = state.profile, isPlan = !!src.inp;
     toast(mode === 'replay' ? 'Loading the replay…' : 'Loading the simulator…');
     try {
@@ -1325,9 +1338,173 @@
     $$('[data-simpf]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpf], 'fly'));
   }
 
+  function deleteAccountSheet() {
+    const adv = B().plan === 'advanced';
+    sheet.innerHTML = `<form data-del novalidate><div class="sheet-head"><h2 class="display" id="sheet-title">Delete your account</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p>This permanently deletes your profile, every flight, your notes and your instructor link. ${adv ? 'Your subscription is cancelled straight away and won’t renew. ' : ''}It can’t be undone.</p><p class="hint">Download your data first if you want to keep it. Stripe keeps payment records that tax law requires.</p>
+        <label class="field"><span>Type DELETE to confirm</span><input name="confirm" autocomplete="off" spellcheck="false"></label><p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Keep my account</button><button class="btn btn-danger">Delete everything</button></div></footer></form>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    const f = sheet.querySelector('[data-del]'), err = f.querySelector('.form-error');
+    f.onsubmit = async e => { e.preventDefault(); if (f.confirm.value.trim() !== 'DELETE') { err.textContent = 'Type DELETE in capitals to confirm.'; return; } const btn = f.querySelector('.btn-danger:not([data-close])'); btn.disabled = true; try { await api('account/delete', 'POST', { confirm: 'DELETE' }); location.href = '/?deleted=1'; } catch (x) { err.textContent = x.message; btn.disabled = false; } };
+    sheet.showModal();
+  }
+  /* ================= plan and billing ================= */
+  const B = () => state.billing || { plan: 'free', status: 'none', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false };
+  const isAdv = () => preview || B().plan === 'advanced';
+  const money2 = (cents, cur = 'usd') => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur.toUpperCase() }).format(cents / 100); } catch { return '$' + (cents / 100).toFixed(2); } };
+  const longDate = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  ui.billInterval = ui.billInterval || 'yearly';
+  const ADV_FEATURES = [
+    ['Unlimited logbook', 'Every flight, debrief and track, with CSV import from other logbooks.'],
+    ['Nav logs', 'Unlimited saved plans with headings, times and fuel for every leg.'],
+    ['Currency and expiry', 'Medical, rating and recency rules worked out from your logbook.'],
+    ['Study and mock exams', 'Practice by subject and timed mock exams with a pass mark.'],
+    ['Radio practice', 'Speak your calls and get each element checked.'],
+    ['Instructor link', 'A read-only page for your instructor with prep, progress and debriefs.'],
+    ['Fly it yourself', 'Take the controls in the 3D simulator, not just replays.'],
+    ['Voice debrief tidy-up', 'Speak your debrief and get it organised into notes.']
+  ];
+  function paywall(title, text) {
+    const b = B();
+    return `<section class="tile dark paywall">${contours('b')}
+      <span class="kicker">Advanced</span><h2 class="display">${esc(title)}</h2><p>${esc(text)}</p>
+      <div class="actions"><a class="btn btn-light btn-has-spark" href="#plan">${b.trialAvailable ? `Start your ${b.trialDays}-day free trial` : 'Upgrade to Advanced'} ${spark}</a><a class="link" href="#plan" style="color:var(--ice)">See what’s included</a></div>
+    </section>`;
+  }
+  function upgradeSheet(message) {
+    const b = B();
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Part of Advanced</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p>${esc(message)}</p><ul class="check-list">${ADV_FEATURES.slice(0, 5).map(([t]) => `<li>${esc(t)}</li>`).join('')}</ul></div>
+      <footer class="sheet-foot"><span class="hint">${b.trialAvailable ? `${b.trialDays} days free, then ${money2(b.prices.yearly.amount)} a year or ${money2(b.prices.monthly.amount)} a month.` : ''}</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Not now</button><a class="btn btn-blue btn-has-spark" href="#plan">${b.trialAvailable ? 'Start free trial' : 'Upgrade'} ${spark}</a></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.querySelector('a[href="#plan"]').onclick = () => sheet.close();
+    sheet.showModal();
+  }
+  const gateOr = (what, fn) => (...a) => { if (isAdv()) return fn(...a); upgradeSheet(`${what} is part of Advanced.`); };
+
+  function planPage() {
+    const b = B(), adv = b.plan === 'advanced' && !preview;
+    const iv = ui.billInterval, pr = b.prices[iv], other = b.prices[iv === 'yearly' ? 'monthly' : 'yearly'];
+    const save = Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100);
+    const statusLine = !adv ? '' : b.status === 'trialing' ? `Free trial until ${longDate(b.trialEnd)}. ${b.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money2(b.prices[b.interval || 'yearly'].amount)} ${b.interval === 'monthly' ? 'a month' : 'a year'}.`}`
+      : b.cancelAtPeriodEnd ? `Cancelled. You keep Advanced until ${longDate(b.periodEnd)}.` : b.status === 'past_due' ? 'Your last payment didn’t go through. Update your card to keep Advanced.' : `Renews on ${longDate(b.periodEnd)}.`;
+    shell('plan', { title: 'Plan & billing', sub: adv ? 'Your subscription and payment details.' : 'Start free. Go Advanced when the hours add up.' },
+      `${preview ? '<p class="callout">The example desk shows every Advanced feature. Sign in to see your own plan.</p>' : ''}
+      ${!b.ready && !preview ? '<p class="callout warn">Payments are being set up. You can keep using the Free plan in the meantime.</p>' : ''}
+      ${adv ? `<section class="tile dark plan-now">${contours('a')}
+          <div><span class="kicker">Your plan</span><h2 class="display">Advanced${b.interval ? ` · ${b.interval === 'monthly' ? 'monthly' : 'yearly'}` : ''}</h2><p>${esc(statusLine)}</p></div>
+          <div class="plan-now-actions">
+            <button class="btn btn-light" data-portal>Payment method and invoices</button>
+            ${b.cancelAtPeriodEnd ? '<button class="btn btn-ghost" data-resume>Keep my subscription</button>' : '<button class="btn btn-ghost" data-cancel>Cancel subscription</button>'}
+          </div>
+        </section>` : `
+        <div class="bill-toggle" role="group" aria-label="Billing period">
+          <button type="button" data-iv="monthly" aria-pressed="${iv === 'monthly'}">Monthly</button>
+          <button type="button" data-iv="yearly" aria-pressed="${iv === 'yearly'}">Yearly <span>Save ${save}%</span></button>
+        </div>
+        <div class="grid plan-grid">
+          <section class="tile span-5 plan-card">
+            <h2>Free</h2><p class="plan-price"><b>$0</b><span>forever</span></p>
+            <ul class="check-list"><li>Log up to ${b.limits.flights} flights</li><li>Licence goal, progress and milestones</li><li>Lesson preparation</li><li>Live weather at any airport</li><li>Chart map, analytics and cost planner</li><li>Nav log with ${b.limits.navPlans} saved plan</li><li>Simulator replays</li><li>Export and print your logbook any time</li></ul>
+            <p class="hint">${preview ? '' : 'You’re on Free.'}</p>
+          </section>
+          <section class="tile dark span-7 plan-card adv">${contours('b')}
+            <h2>Advanced</h2>
+            <p class="plan-price"><b>${money2(pr.amount, pr.currency)}</b><span>${iv === 'yearly' ? `a year · ${money2(Math.round(pr.amount / 12), pr.currency)} a month` : 'a month'}</span></p>
+            <ul class="feat-list">${ADV_FEATURES.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
+            <button class="btn btn-light btn-has-spark" data-checkout ${preview || !b.ready ? 'disabled' : ''}>${b.trialAvailable ? `Start ${b.trialDays}-day free trial` : `Upgrade for ${money2(pr.amount, pr.currency)}`} ${spark}</button>
+            <p class="plan-small">${b.trialAvailable ? `Free for ${b.trialDays} days, then ${money2(pr.amount, pr.currency)} ${iv === 'yearly' ? 'a year' : 'a month'}${b.tax ? ' plus any tax' : ''}. Cancel before the trial ends and you won’t be charged.` : `Billed ${iv === 'yearly' ? 'yearly' : 'monthly'}${b.tax ? ', plus any tax' : ''}. Cancel any time.`} <a class="link" href="/refunds.html" target="_blank" style="color:var(--ice)">Refunds</a></p>
+          </section>
+        </div>`}
+      <p class="footnote" style="margin-top:16px">Payments are processed securely by Stripe. Boplo never sees or stores your card number. Prices in US dollars. <a class="link" href="/terms.html" target="_blank">Terms</a> · <a class="link" href="/privacy.html" target="_blank">Privacy</a> · <a class="link" href="/refunds.html" target="_blank">Refunds and cancellation</a></p>`);
+    $$('[data-iv]').forEach(x => x.onclick = () => { ui.billInterval = x.dataset.iv; planPage(); });
+    const co = $('[data-checkout]'); if (co) co.onclick = () => checkoutSheet(ui.billInterval);
+    const pt = $('[data-portal]'); if (pt) pt.onclick = async () => { pt.disabled = true; try { location.href = (await api('billing/portal', 'POST', {})).url; } catch (x) { toast(x.message); pt.disabled = false; } };
+    const cn = $('[data-cancel]'); if (cn) cn.onclick = () => confirmCancel();
+    const rs = $('[data-resume]'); if (rs) rs.onclick = async () => { rs.disabled = true; try { state.billing = await api('billing/resume', 'POST', {}); toast('Your subscription will continue.'); planPage(); } catch (x) { toast(x.message); rs.disabled = false; } };
+  }
+  function confirmCancel() {
+    const b = B();
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Cancel Advanced?</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p>${b.status === 'trialing' ? `Your trial ends on ${longDate(b.trialEnd)} and you won’t be charged.` : `You keep Advanced until ${longDate(b.periodEnd)}, then your desk moves to Free.`} Your flights and notes stay. Anything beyond the Free limits stays readable, and you can export it any time.</p></div>
+      <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Keep Advanced</button><button type="button" class="btn btn-danger" data-yes>Cancel subscription</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.querySelector('[data-yes]').onclick = async e => { e.target.disabled = true; try { state.billing = await api('billing/cancel', 'POST', {}); sheet.close(); toast('Cancelled. Nothing more will be charged.'); planPage(); } catch (x) { toast(x.message); e.target.disabled = false; } };
+    sheet.showModal();
+  }
+
+  /* checkout: Boplo's own sheet, with Stripe's Payment Element for the card or wallet */
+  const loadStripe = () => window.Stripe ? Promise.resolve(window.Stripe) : (window.__stripeLib = window.__stripeLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = () => res(window.Stripe); s.onerror = () => { window.__stripeLib = null; rej(new Error('The payment form couldn’t load. Check your connection or ad blocker.')); }; document.head.append(s); }));
+  async function checkoutSheet(interval) {
+    const b = B(), pr = b.prices[interval];
+    sheet.innerHTML = `<form class="checkout" data-pay novalidate>
+      <div class="sheet-head"><h2 class="display" id="sheet-title">${b.trialAvailable ? 'Start your free trial' : 'Upgrade to Advanced'}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body">
+        <div class="pay-summary"><div><b>Boplo Flight Advanced</b><small>${interval === 'yearly' ? 'Yearly' : 'Monthly'}</small></div>
+          <div class="r"><b>${b.trialAvailable ? `${b.trialDays} days free` : money2(pr.amount, pr.currency)}</b><small>${b.trialAvailable ? `then ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'a year' : 'a month'}` : (interval === 'yearly' ? 'per year' : 'per month')}${b.tax ? ' + tax' : ''}</small></div></div>
+        ${b.tax ? '<div data-addr class="pay-el"></div>' : ''}
+        <div data-el class="pay-el"><div class="pay-loading">Loading the secure payment form…</div></div>
+        <label class="pay-agree"><input type="checkbox" name="agree" required> <span>I agree to the <a href="/terms.html" target="_blank">Terms</a> and understand ${b.trialAvailable ? `that after ${b.trialDays} days I’ll be charged ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'every year' : 'every month'} until I cancel` : `that I’ll be charged ${money2(pr.amount, pr.currency)} ${interval === 'yearly' ? 'every year' : 'every month'} until I cancel`}. I can cancel any time in Plan & billing. <a href="/refunds.html" target="_blank">Refund policy</a>.</span></label>
+        <p class="form-error" role="alert"></p>
+      </div>
+      <footer class="sheet-foot"><span class="hint pay-lock">${ico('lock')}Secured by Stripe</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" data-go disabled>${b.trialAvailable ? 'Start free trial' : `Pay ${money2(pr.amount, pr.currency)}`} ${spark}</button></div></footer>
+    </form>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.showModal();
+    const form = sheet.querySelector('[data-pay]'), err = sheet.querySelector('.form-error'), go = sheet.querySelector('[data-go]');
+    const appearance = { theme: 'stripe', variables: { colorPrimary: '#0A62FF', colorText: '#050B1F', colorTextSecondary: '#3E4C6E', colorDanger: '#D93A4A', fontFamily: 'Archivo, system-ui, sans-serif', borderRadius: '12px', spacingUnit: '4px' }, rules: { '.Input': { border: '1px solid rgba(5,11,31,.14)', boxShadow: 'none' }, '.Input:focus': { borderColor: '#0A62FF', boxShadow: '0 0 0 3px rgba(10,98,255,.15)' }, '.Label': { fontWeight: '550' } } };
+    let stripeJs, elements, started = null;
+    try {
+      const S = await loadStripe(); stripeJs = S(b.publishableKey);
+      const begin = async address => {
+        const out = await api('billing/subscribe', 'POST', { interval, address });
+        elements = stripeJs.elements({ clientSecret: out.clientSecret, appearance, fonts: [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;550;620&display=swap' }] });
+        const pe = elements.create('payment', { layout: { type: 'tabs' }, business: { name: 'Boplo' }, terms: { card: 'never' } });
+        sheet.querySelector('[data-el]').innerHTML = ''; pe.mount(sheet.querySelector('[data-el]'));
+        pe.on('ready', () => { go.disabled = false; });
+        started = out; return out;
+      };
+      if (b.tax) {
+        // billing address first, so the right tax can be worked out before the subscription starts
+        const ae = stripeJs.elements({ appearance, fonts: [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Archivo:wght@400;550;620&display=swap' }] }).create('address', { mode: 'billing', fields: { phone: 'never' } });
+        ae.mount(sheet.querySelector('[data-addr]'));
+        sheet.querySelector('[data-el]').innerHTML = '<div class="pay-loading">Enter your billing address, then continue to payment.</div>';
+        go.disabled = false; go.firstChild.textContent = 'Continue to payment ';
+        go.dataset.step = 'address';
+        form.onsubmit = async e => {
+          e.preventDefault(); if (go.dataset.step !== 'address') return pay();
+          const v = await ae.getValue(); if (!v.complete) { err.textContent = 'Complete your billing address.'; return; }
+          err.textContent = ''; go.disabled = true;
+          try { await begin({ country: v.value.address.country, postal_code: v.value.address.postal_code, line1: v.value.address.line1, city: v.value.address.city, state: v.value.address.state }); go.dataset.step = 'pay'; go.firstChild.textContent = (b.trialAvailable ? 'Start free trial ' : `Pay ${money2(pr.amount, pr.currency)} `); }
+          catch (x) { err.textContent = x.message; go.disabled = false; }
+        };
+      } else { await begin(); form.onsubmit = e => { e.preventDefault(); pay(); }; }
+    } catch (x) { err.textContent = x.message; sheet.querySelector('[data-el]').innerHTML = ''; }
+    async function pay() {
+      err.textContent = '';
+      if (!form.agree.checked) { err.textContent = 'Tick the box to agree to the terms.'; return; }
+      go.disabled = true; go.firstChild.textContent = 'Confirming… ';
+      const confirmParams = { return_url: `${location.origin}/flight-app.html#plan` };
+      const r = started.mode === 'setup' ? await stripeJs.confirmSetup({ elements, confirmParams, redirect: 'if_required' }) : await stripeJs.confirmPayment({ elements, confirmParams, redirect: 'if_required' });
+      if (r.error) { err.textContent = r.error.message || 'The payment didn’t go through.'; go.disabled = false; go.firstChild.textContent = b.trialAvailable ? 'Start free trial ' : `Pay ${money2(pr.amount, pr.currency)} `; return; }
+      await finishCheckout();
+    }
+  }
+  async function finishCheckout() {
+    for (let i = 0; i < 8; i++) {
+      try { state.billing = await api('billing/sync', 'POST', {}); } catch { }
+      if (B().plan === 'advanced') break;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    if (sheet.open) sheet.close();
+    if (B().plan === 'advanced') { toast(B().status === 'trialing' ? 'Your free trial has started. Enjoy Advanced.' : 'Welcome to Advanced.'); location.hash = '#plan'; render(); }
+    else toast('Payment received. Your plan will update in a moment.');
+  }
+
   /* ================= more (mobile) ================= */
   function morePage() {
-    shell('more', { title: 'More' }, `<div class="more-grid">${[['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+    shell('more', { title: 'More' }, `<div class="more-grid">${[['plan', 'Plan & billing', 'Your plan, trial and payments'], ['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
   }
 
   /* ================= voice debrief ================= */
@@ -1346,7 +1523,8 @@
         rec.start(); mic.classList.add('live'); mic.querySelector('span').textContent = 'Listening… tap to stop';
       };
     }
-    if (tidy) tidy.onclick = async () => {
+    if (tidy && !isAdv()) tidy.onclick = () => upgradeSheet('Tidying your debrief is part of Advanced.');
+    else if (tidy) tidy.onclick = async () => {
       const err = form.querySelector('.form-error'); err.textContent = '';
       tidy.disabled = true; tidy.textContent = 'Tidying…';
       try {
@@ -1485,7 +1663,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -1537,11 +1715,15 @@
 
   /* ---------------- start ---------------- */
   async function start() {
-    if (preview) { demo(); render(); return; }
+    if (preview) { demo(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
     try {
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
-      state = ws; render();
+      state = ws; state.billing = ws.billing || null;
+      const q = new URLSearchParams(location.search);
+      if (q.get('setup_intent') || q.get('payment_intent')) { history.replaceState(null, '', location.pathname + '#plan'); render(); finishCheckout(); return; }
+      try { const intent = JSON.parse(localStorage.getItem('boplo-intent') || 'null'); if (intent?.plan && ws.profile?.complete) { localStorage.removeItem('boplo-intent'); ui.billInterval = intent.plan === 'monthly' ? 'monthly' : 'yearly'; if (B().plan !== 'advanced') location.hash = '#plan'; } } catch { }
+      render();
     }
     catch (e) { if (e.status === 401) auth(); else failure(e); }
   }
