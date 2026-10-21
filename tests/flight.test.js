@@ -9,6 +9,9 @@ test('flight records reject invalid times, dates, roles and coordinates',()=>{
  assert.equal(validateFlight(valid).minutes,65);
  assert.throws(()=>validateProfile({complete:true}),/Complete/);
  assert.equal(validateProfile({step:2}).complete,false);
+ assert.equal(validateProfile({goalHours:'45',checklist:'[x] Plot the route'}).goalHours,45);
+ assert.equal(validateProfile({checklist:'[ ] Radio calls'}).checklist,'[ ] Radio calls');
+ assert.throws(()=>validateProfile({goalHours:5000}));
 });
 test('workspace persists profile and flights and prevents cross-account access',async()=>{
  const db=new DatabaseSync(':memory:');

@@ -1,56 +1,694 @@
+/* Boplo Flight — flight desk app.
+   Talks to /flight/* (Pages Function) and /auth/* (shared identity). No dependencies. */
 (() => {
- const root=document.querySelector('#app'),dialog=document.querySelector('#flight-dialog');
- const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const icon=name=>`<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${({today:'<path d="M3 11 12 3l9 8v10H3Z"/><path d="M9 21v-8h6v8"/>',log:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',map:'<path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2ZM9 3v16M15 5v16"/>',analytics:'<path d="M4 20V10m8 10V4m8 16v-7M2 21h20"/>',lesson:'<path d="M5 3h14v18H5Z M8 8h8M8 12h8M8 16h5"/>'})[name]||''}</svg>`;
- const brand=`<a class="brand" href="/"><img class="logo" src="/assets/boplo-wordmark-blue-transparent.png" alt="Boplo"><span>FLIGHT</span></a>`;
- const tabs=[['today','Overview'],['log','Logbook'],['map','Flight map'],['analytics','Analytics'],['lesson','Preparation']];
- let state={profile:null,flights:[],user:null,mapsKey:''},step=0,range='all',mapPromise;
- const preview=new URLSearchParams(location.search).get('preview')==='1';
- const hours=n=>(Number(n||0)/60).toFixed(1);
- async function api(path,method='GET',data){const response=await fetch('/flight/'+path,{method,headers:method==='GET'?{}:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data),signal:AbortSignal.timeout(15000)});const result=await response.json().catch(()=>({error:'The server returned an unexpected response.'}));if(!response.ok)throw Object.assign(new Error(result.error||'Unable to save.'),{status:response.status});return result;}
- function message(value){const box=document.querySelector('#message');box.textContent=value;setTimeout(()=>box.textContent='',4000);}
- async function saveProfile(profile){if(preview){state.profile=profile;return;}state.profile=(await api('profile','PUT',profile)).profile;}
- function field(label,name,value='',type='text',extra=''){return `<label class="field ${type==='textarea'?'full':''}">${label}${type==='textarea'?`<textarea name="${name}" maxlength="3000" ${extra}>${esc(value)}</textarea>`:`<input name="${name}" type="${type}" value="${esc(value)}" ${extra}>`}</label>`;}
- function select(label,name,values,value){return `<label class="field">${label}<select name="${name}">${values.map(v=>`<option ${v===value?'selected':''}>${esc(v)}</option>`).join('')}</select></label>`;}
- function errorForm(form,e){form.querySelector('.error').textContent=e.message;}
- function auth(error=''){root.innerHTML=`<main class="auth"><div class="auth-box">${brand}<h1>Your training.<br>Your flight desk.</h1><p>Keep your flights, preparation and progress together. Start with a few details about where you are in your training.</p>${error?`<p class="error">${esc(error)}</p>`:''}<a class="button primary" href="/auth/auth/google">Continue with Google</a><a class="button quiet" href="/flight-app.html?preview=1">Explore the interface</a><small>The preview uses example records. Your own workspace starts with your data.</small><p class="section-gap"><a href="/">Back to Boplo</a></p></div></main>`;}
- const steps=['Your starting point','Your objective','Aircraft & routine','Your existing record','Review & open'];
- function onboard(){const p=state.profile||{},screens=[
- ['Make this your flight desk.','A few details help keep your training in the right context.',field('Your name','name',p.name||state.user.display_name,'text','required maxlength="100"')+field('Country of training','country',p.country,'text','required maxlength="100"')+select('Licensing authority','authority',['UK CAA','EASA member-state authority','FAA','Other / deciding'],p.authority)+field('Home airport (name or ICAO)','airport',p.airport,'text','maxlength="100"')+field('School / training organisation (optional)','school',p.school)],
- ['What are you working toward?','Your target is a planning preference. Your school determines your training sequence and readiness.',select('Training goal','licence',['PPL(A)','LAPL(A)','Next rating','Exploring flight training'],p.licence)+field('Target date (optional)','target',p.target,'date')+field('Next lesson focus (optional)','nextLesson',p.nextLesson)+field('Next lesson date (optional)','lessonDate',p.lessonDate,'date')],
- ['Build around your routine.','Keep your aircraft and study priorities close to the lessons you fly.',field('Aircraft model (optional)','aircraft',p.aircraft)+field('Registration (optional)','registration',p.registration)+select('How often do you expect to fly?','frequency',['Still deciding','Weekly','Twice a week','Monthly','Intensive course'],p.frequency)+field('Theory topics to revisit (optional)','topics',p.topics)],
- ['Bring the experience you have.','Add an opening balance now, or start at zero and enter individual flights later. Opening hours are kept separate from dated flight analytics.',field('Existing flight time in minutes','openingMinutes',p.openingMinutes||0,'number','min="0" max="600000" step="1" required')+field('Anything to remember? (optional)','notes',p.notes,'textarea')],
- ['Your flight desk is ready.','Review your details. You can change these later in your profile.',`<dl class="review-list">${[['Pilot',p.name],['Training',p.country+' · '+p.authority],['Objective',p.licence],['Home airport',p.airport||'Add later'],['Target',p.target||'Flexible'],['Opening time',hours(p.openingMinutes)+' hours']].map(([k,v])=>`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl><p class="status-note">Your entries are self-reported. Boplo currently organises your records and preparation; official requirement tracking will appear only after the selected programme has been reviewed.</p>`]
- ];const [title,desc,fields]=screens[step];
- root.innerHTML=`<main class="onboard"><header>${brand}<button class="quiet" data-logout>Sign out</button></header><div class="onboard-layout"><ol class="steps">${steps.map((s,i)=>`<li class="${i===step?'current':i<step?'done':''}" ${i===step?'aria-current="step"':''}><b>${i+1}</b>${s}</li>`).join('')}</ol><form class="onboard-form"><span class="step-count">SET UP YOUR DESK · ${step+1} / 5${preview?' · PREVIEW':''}</span><h1 tabindex="-1">${title}</h1><p>${desc}</p><div class="form-grid">${fields}</div><p class="error" role="alert"></p><div class="form-actions"><button type="button" data-back ${step===0?'disabled':''}>Back</button><button class="primary" type="submit">${step===4?'Open my flight desk':'Save & continue'}</button></div><small>Progress is ${preview?'held for this preview only':'saved to your account'} after each step.</small></form></div></main>`;
- root.querySelector('[data-back]').onclick=()=>{step--;onboard();};root.querySelector('[data-logout]').onclick=logout;
- root.querySelector('form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=form.querySelector('[type=submit]');button.disabled=true;try{const values=Object.fromEntries(new FormData(form));await saveProfile({...p,...values,openingMinutes:Number(values.openingMinutes??p.openingMinutes??0),step:Math.min(step+1,4),complete:step===4});if(step===4){location.hash='today';render();}else{step++;onboard();root.querySelector('h1').focus();}}catch(err){errorForm(form,err);button.disabled=false;}};
- }
- async function logout(){if(!preview)await fetch('/auth/logout',{method:'POST'});location.href='/flight-app.html';}
- function filtered(){const cutoff=range==='all'?'':new Date(Date.now()-Number(range)*86400000).toISOString().slice(0,10);return state.flights.filter(f=>!cutoff||f.date>=cutoff).sort((a,b)=>b.date.localeCompare(a.date));}
- function metrics(flights,opening=false){const sum=flights.reduce((n,f)=>n+f.minutes,0);return `<div class="metrics">${[[opening?'Recorded time':'Flight time',hours(sum+(opening?Number(state.profile.openingMinutes||0):0)),'hrs'],['Flights',flights.length,''],['Landings',flights.reduce((n,f)=>n+f.landings,0),''],['Airports',new Set(flights.flatMap(f=>[f.departure.toUpperCase(),f.arrival.toUpperCase()])).size,'']].map(([label,value,unit])=>`<div class="metric"><span>${label}</span><strong>${value}</strong><small>${unit}</small></div>`).join('')}</div>`;}
- function table(flights){return flights.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Aircraft</th><th>Time</th><th>Role</th><th></th></tr></thead><tbody>${flights.map(f=>`<tr><td>${esc(f.date)}</td><td class="route-code">${esc(f.departure)} → ${esc(f.arrival)}</td><td>${esc(f.registration||f.aircraft||'—')}</td><td>${hours(f.minutes)} h</td><td>${esc(f.role)}</td><td><button data-edit="${esc(f.id)}">View / edit</button></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty"><h2>Your first flight belongs here.</h2><p>Log the route, time and what you learned. Your overview and analytics will grow with your record.</p><button class="primary" data-add>Log your first flight</button></div>`;}
- const mapPanel=()=>`<section class="panel"><div class="panel-head"><h2>Your flight map</h2><span class="tag">${preview?'Example data':'Recorded flights'}</span></div><div id="flight-map" class="map"><div class="map-empty">${icon('map')}<h3>${state.mapsKey?'Loading your map…':'Map connection pending'}</h3><p>${state.mapsKey?'Your recorded coordinates will appear here.':'Your flight records are saved. Satellite and terrain views will become available when Google Maps is connected.'}</p></div></div><p class="map-caption">Endpoint lines join logged locations; they do not show the path flown. Recorded tracks are shown only when imported. For reviewing records.</p></section>`;
- function analytics(){const flights=filtered();const months=Array.from({length:6},(_,i)=>{const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-5+i);return {key:d.toISOString().slice(0,7),label:d.toLocaleString('en',{month:'short'})};});const sums=months.map(m=>flights.filter(f=>f.date.startsWith(m.key)).reduce((n,f)=>n+f.minutes,0)),max=Math.max(60,...sums),total=flights.reduce((n,f)=>n+f.minutes,0);return `<div class="filters" aria-label="Analytics period">${[['90','Last 90 days'],['365','Last year'],['all','All time']].map(([v,l])=>`<button data-range="${v}" aria-pressed="${range===v}">${l}</button>`).join('')}</div>${metrics(flights)}${flights.length?`<div class="desk-grid"><section class="panel"><h2>Time in the air</h2><p>Last six calendar months · ${range==='all'?'all records':'within selected period'}</p><div class="chart" role="img" aria-label="${months.map((m,i)=>m.label+': '+hours(sums[i])+' hours').join(', ')}">${months.map((m,i)=>`<div class="bar-col"><small>${hours(sums[i])}h</small><div class="bar" style="--height:${sums[i]/max*85}%"></div><span>${m.label}</span></div>`).join('')}</div></section><section class="panel"><h2>Time by role</h2><p>From your dated flight entries</p><div class="breakdown">${['dual','solo','pic'].map(role=>{const n=flights.filter(f=>f.role===role).reduce((n,f)=>n+f.minutes,0);return `<div class="breakdown-row"><div><span>${role==='pic'?'PIC':role==='dual'?'Dual instruction':'Solo'}</span><span>${hours(n)} h</span></div><div class="track"><i style="--width:${total?n/total*100:0}%"></i></div></div>`;}).join('')}</div></section></div>`:`<section class="panel empty"><h2>No flights in this period.</h2><p>Log a completed flight or choose a wider date range.</p><button data-add>Log a flight</button></section>`}<p class="section-gap">Opening balances are excluded from dated charts. Time by role reflects your entries; it does not determine regulatory credit or eligibility.</p>`;}
- function lesson(){const p=state.profile;return `<form id="lesson-form" class="lesson-form"><section class="panel"><h2>Next lesson</h2><div class="form-grid">${field('Lesson focus','nextLesson',p.nextLesson)}${field('Lesson date','lessonDate',p.lessonDate,'date')}${field('Questions for your instructor','questions',p.questions,'textarea')}${field('Preparation notes','notes',p.notes,'textarea')}</div><p class="error" role="alert"></p><div class="form-actions"><small>Saved as your personal preparation.</small><button class="primary">Save preparation</button></div></section><h2>Bring the last lesson with you</h2>${state.flights.slice(0,3).map(f=>`<article class="panel section-gap"><small>${esc(f.date)} · ${esc(f.lesson||f.departure+' → '+f.arrival)}</small><p>${esc(f.notes||'No debrief note recorded for this flight.')}</p></article>`).join('')||'<p>Your debrief notes will appear here once you log a flight.</p>'}</form>`;}
- function render(){if(!state.profile?.complete){step=state.profile?.step||0;onboard();return;}const active=tabs.some(([id])=>id===location.hash.slice(1))?location.hash.slice(1):'today',p=state.profile;let content='';
- if(active==='today')content=`${metrics(state.flights,true)}${p.openingMinutes?`<small>Includes ${hours(p.openingMinutes)} opening hours, entered by you.</small>`:''}<div class="desk-grid section-gap">${mapPanel()}<section class="panel next-lesson"><div class="panel-head"><h2>Up next</h2><span class="tag">${esc(p.licence)}</span></div><h3>${esc(p.nextLesson||'Make room for your next lesson.')}</h3><p>${esc(p.lessonDate||'No lesson date set')}<br>${esc(p.airport||'Add your home airport in your profile')}</p><p>${esc(p.questions||'Capture a question while it is fresh. Bring it to your next briefing.')}</p><a class="button quiet" href="#lesson">Open preparation</a></section></div><section class="panel section-gap"><div class="panel-head"><h2>Recent flights</h2><a href="#log">View logbook</a></div>${table(filtered().slice(0,5))}</section>`;
- if(active==='log')content=`<div class="panel">${table(filtered())}</div>`;
- if(active==='map')content=mapPanel()+`<div class="section-gap">${table(filtered())}</div>`;
- if(active==='analytics')content=analytics();if(active==='lesson')content=lesson();
- const title=active==='today'?`Good to see you, ${esc(p.name.split(' ')[0])}.`:tabs.find(([id])=>id===active)[1];
- root.innerHTML=`<div class="shell"><aside class="sidebar">${brand}<nav aria-label="Workspace">${tabs.map(([id,label])=>`<a href="#${id}" class="${id===active?'active':''}" ${id===active?'aria-current="page"':''}>${icon(id)}<span>${label}</span></a>`).join('')}</nav><div class="sidebar-foot"><p>${esc(p.name)}<br><small>${esc(p.authority)} · ${esc(p.licence)}</small></p><button class="quiet" data-profile>Edit profile</button></div></aside><div class="workspace"><header class="topbar"><span>${preview?'PREVIEW · Example records, changes are temporary':'YOUR FLIGHT DESK · '+esc(p.airport||p.country)}</span><button class="quiet" data-logout>${preview?'Leave preview':'Sign out'}</button></header><main class="content"><div class="page-heading"><div><h1>${title}</h1><p>${active==='today'?'A clear view of the work behind you, and the lesson ahead.':active==='analytics'?'Your flying, measured from your own records.':active==='log'?'Every flight. All the context.':active==='map'?'Explore the places in your record.':'Arrive with your notes and questions in one place.'}</p></div><button class="primary" data-add>Log a flight</button></div>${content}<p class="section-gap"><small>Self-reported training records · ${esc(p.authority)} programme requirements are not yet reviewed in Boplo.</small> <button class="quiet" data-profile>Profile</button></p></main></div></div>`;
- root.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>flightForm());root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>flightForm(state.flights.find(f=>f.id===b.dataset.edit)));root.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>{step=0;onboard();});root.querySelector('[data-logout]').onclick=logout;root.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{range=b.dataset.range;render();});
- const form=root.querySelector('#lesson-form');if(form)form.onsubmit=async e=>{e.preventDefault();const b=form.querySelector('button');b.disabled=true;try{await saveProfile({...p,...Object.fromEntries(new FormData(form))});message('Preparation saved.');}catch(err){errorForm(form,err);}finally{b.disabled=false;}};
- if(root.querySelector('#flight-map')&&state.mapsKey)loadMap();
- }
- function flightForm(record={}){const f=record,p=state.profile;dialog.innerHTML=`<header><h2>${f.id?'Flight record':'Log a completed flight'}</h2><button type="button" data-close aria-label="Close flight form">Close</button></header><form><div class="form-grid">${field('Date','date',f.date||new Date().toISOString().slice(0,10),'date','required')}${field('Duration (minutes)','minutes',f.minutes||'','number','required min="1" max="1440" step="1"')}${field('Departure airport','departure',f.departure||p.airport,'text','required maxlength="100"')}${field('Arrival airport','arrival',f.arrival||'','text','required maxlength="100"')}${field('Aircraft model','aircraft',f.aircraft||p.aircraft)}${field('Registration','registration',f.registration||p.registration)}${select('Your role','role',['dual','solo','pic'],f.role||'dual')}${field('Landings','landings',f.landings??1,'number','min="0" max="100" step="1" required')}${field('Instructor (optional)','instructor',f.instructor)}${field('Lesson / exercise','lesson',f.lesson)}${field('Debrief notes','notes',f.notes,'textarea')}<label class="field full">Route coordinates (optional)<textarea name="coordinates" placeholder="51.2136,-1.6335&#10;50.9503,-1.3568">${esc((f.points||[]).map(p=>p.lat+','+p.lng).join('\n'))}</textarea><small>One latitude,longitude pair per line. Two endpoints show a connection, not a flown track.</small></label>${select('Coordinate source','routeKind',['endpoints','track'],f.routeKind||'endpoints')}</div><p class="error" role="alert"></p><div class="form-actions">${f.id?'<button type="button" class="danger" data-delete>Delete flight</button>':'<span></span>'}<button class="primary" type="submit">Save flight</button></div></form>`;
- dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.showModal();
- const form=dialog.querySelector('form');form.onsubmit=async e=>{e.preventDefault();const b=form.querySelector('[type=submit]');b.disabled=true;try{const input=Object.fromEntries(new FormData(form));input.minutes=Number(input.minutes);input.landings=Number(input.landings);input.points=input.coordinates.trim()?input.coordinates.trim().split('\n').map(line=>{const values=line.split(',');if(values.length!==2||values.some(s=>!s.trim()))throw new Error('Use latitude,longitude on each line.');const [lat,lng]=values.map(Number);if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)throw new Error('Check your route coordinates.');return {lat,lng};}):[];delete input.coordinates;if(input.date>new Date().toISOString().slice(0,10))throw new Error('Log completed flights only.');const result=preview?{flight:{...input,id:f.id||crypto.randomUUID()}}:await api(f.id?'flights/'+f.id:'flights',f.id?'PUT':'POST',input);state.flights=[result.flight,...state.flights.filter(x=>x.id!==result.flight.id)];dialog.close();render();message('Flight saved.');}catch(err){errorForm(form,err);b.disabled=false;}};
- const del=dialog.querySelector('[data-delete]');if(del)del.onclick=async()=>{if(del.dataset.confirm!=='yes'){del.dataset.confirm='yes';del.textContent='Confirm delete';return;}del.disabled=true;try{if(!preview)await api('flights/'+f.id,'DELETE');state.flights=state.flights.filter(x=>x.id!==f.id);dialog.close();render();message('Flight deleted.');}catch(e){errorForm(form,e);del.disabled=false;}};
- }
- async function loadMap(){const container=root.querySelector('#flight-map');try{if(!mapPromise)mapPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(state.mapsKey)+'&callback=boploMapReady&loading=async';window.boploMapReady=resolve;script.onerror=()=>reject(new Error('Map service unavailable.'));setTimeout(()=>reject(new Error('Map service timed out.')),15000);document.head.append(script);});await mapPromise;if(!container.isConnected)return;const points=state.flights.flatMap(f=>f.points||[]);const map=new google.maps.Map(container,{center:points[0]||{lat:50,lng:5},zoom:points.length?8:3,mapTypeId:'hybrid',streetViewControl:false,fullscreenControl:true});const bounds=new google.maps.LatLngBounds();state.flights.forEach(f=>{if(!f.points?.length)return;f.points.forEach(p=>bounds.extend(p));new google.maps.Polyline({map,path:f.points,strokeColor:'#3b9bff',strokeWeight:3,strokeOpacity:f.routeKind==='track'?1:.6,geodesic:f.routeKind!=='track'});});if(points.length>1)map.fitBounds(bounds,40);}catch(e){mapPromise=null;if(container.isConnected)container.innerHTML=`<div class="map-empty"><h3>Map unavailable</h3><p>${esc(e.message)} Your records are still available below.</p></div>`;}}
- function demo(){const today=new Date(),day=(months,days)=>{const d=new Date(today);d.setMonth(d.getMonth()-months);d.setDate(Math.max(1,d.getDate()-days));return d.toISOString().slice(0,10);};state={user:{display_name:'Alex'},mapsKey:'',profile:{name:'Alex Morgan',country:'United Kingdom',authority:'UK CAA',licence:'PPL(A)',airport:'EGHP · Popham',aircraft:'Cessna 152',registration:'Example aircraft',frequency:'Weekly',openingMinutes:0,nextLesson:'Navigation preparation',questions:'Review my diversion planning with my instructor.',complete:true,step:4},flights:Array.from({length:8},(_,i)=>({id:'demo-'+i,date:day(Math.floor(i/2),i%2*7),departure:'EGHP',arrival:i%3?'EGHP':'EGHH',minutes:50+i*5,landings:i%3?4:1,role:i===0?'solo':'dual',aircraft:'Cessna 152',registration:'Example aircraft',lesson:i%3?'Circuits':'Navigation',notes:'Example debrief: review the lesson notes before the next session.',points:i%3?[]:[{lat:51.1939,lng:-1.2347},{lat:50.78,lng:-1.8425}],routeKind:'endpoints'}))};}
- async function start(){if(preview){demo();render();return;}try{state=await api('workspace');render();}catch(e){if(e.status===401)auth();else{root.innerHTML=`<main class="auth"><div class="auth-box">${brand}<h1>We couldn’t open your desk.</h1><p>${esc(e.message)}</p><button class="primary" data-retry>Try again</button><a class="button quiet" href="/flight-app.html?preview=1">Explore the interface</a></div></main>`;root.querySelector('[data-retry]').onclick=start;}}}
- window.addEventListener('hashchange',()=>{if(state.user){render();window.scrollTo({top:0,behavior:'instant'});}});start();
+  'use strict';
+  const root = document.getElementById('app');
+  const sheet = document.getElementById('sheet');
+  const toastEl = document.getElementById('toast');
+  const preview = new URLSearchParams(location.search).get('preview') === '1';
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------------- helpers ---------------- */
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $ = (s, r = root) => r.querySelector(s);
+  const $$ = (s, r = root) => [...r.querySelectorAll(s)];
+  const ico = (name, cls = 'ico') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+  const spark = '<svg class="spark" aria-hidden="true"><use href="#spark"/></svg>';
+  const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+  const parseISO = s => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+  const fmtDate = (s, opts = { weekday: 'short', day: 'numeric', month: 'short' }) => s ? parseISO(s).toLocaleDateString('en-GB', opts) : '';
+  const daysUntil = s => Math.round((parseISO(s) - parseISO(todayISO())) / 86400000);
+  const hrs = min => (Number(min || 0) / 60).toFixed(1);
+  const hm = min => { min = Math.round(Number(min || 0)); return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`; };
+  const roleName = r => ({ dual: 'Dual', solo: 'Solo', pic: 'PIC' }[r] || r);
+  const roleLong = r => ({ dual: 'Dual instruction', solo: 'Solo', pic: 'Pilot in command' }[r] || r);
+  const upper = s => String(s || '').trim().toUpperCase();
+  const firstName = n => String(n || '').trim().split(/\s+/)[0] || 'pilot';
+  const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+  const sum = (a, f) => a.reduce((n, x) => n + f(x), 0);
+
+  let toastTimer;
+  function toast(msg) {
+    toastEl.innerHTML = `<svg aria-hidden="true"><use href="#spark"/></svg>${esc(msg)}`;
+    toastEl.classList.add('on'); clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('on'), 3200);
+  }
+
+  async function api(path, method = 'GET', data) {
+    const res = await fetch('/flight/' + path, {
+      method, credentials: 'same-origin',
+      headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' },
+      body: data === undefined ? undefined : JSON.stringify(data),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+    });
+    const out = await res.json().catch(() => ({ error: 'The server sent an unexpected response.' }));
+    if (!res.ok) throw Object.assign(new Error(out.error || 'Something went wrong. Try again.'), { status: res.status });
+    return out;
+  }
+
+  /* ---------------- state ---------------- */
+  let state = { user: null, profile: null, flights: [], mapsKey: '' };
+  const ui = { step: 0, q: '', role: 'all', range: '365', mapSel: null };
+
+  const PAGES = [
+    ['overview', 'Overview', 'overview'],
+    ['logbook', 'Logbook', 'logbook'],
+    ['map', 'Map', 'map'],
+    ['analytics', 'Analytics', 'analytics'],
+    ['prepare', 'Prepare', 'prepare']
+  ];
+  const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare' };
+  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile'].includes(k) ? k : 'overview'; };
+
+  /* checklist stored as text lines: "[x] item" / "[ ] item" */
+  const parseChecks = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^\[( |x)\]\s?(.*)$/i); return m ? { done: m[1].toLowerCase() === 'x', text: m[2] } : { done: false, text: l }; }).filter(c => c.text);
+  const writeChecks = list => list.filter(c => c.text.trim()).map(c => `[${c.done ? 'x' : ' '}] ${c.text.trim()}`).join('\n').slice(0, 3000);
+
+  async function saveProfile(patch) {
+    const next = { ...state.profile, ...patch };
+    if (preview) { state.profile = next; return next; }
+    state.profile = (await api('profile', 'PUT', next)).profile;
+    return state.profile;
+  }
+
+  /* ---------------- decorative contours (same field as the landing) ---------------- */
+  function contourSVG(w = 1200, h = 800, seed = 0) {
+    const hash = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7 + seed) * 43758.5453; return s - Math.floor(s); };
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const vn = (x, z) => { const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi, u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf); return lerp(lerp(hash(xi, zi), hash(xi + 1, zi), u), lerp(hash(xi, zi + 1), hash(xi + 1, zi + 1), u), v); };
+    const fbm = (x, z) => { let s = 0, a = .5, f = 1; for (let i = 0; i < 4; i++) { s += a * vn(x * f, z * f); f *= 2; a *= .5; } return s; };
+    const N = 70, M = Math.round(N * h / w), H = [];
+    for (let j = 0; j <= M; j++) { H[j] = []; for (let i = 0; i <= N; i++) H[j][i] = fbm(i / N * 4.2 + 1.3, j / M * 4.2 * h / w + .7); }
+    let minor = '', major = '';
+    const levels = [.3, .36, .42, .48, .54, .6, .66, .72];
+    levels.forEach((L, li) => {
+      let d = '';
+      for (let j = 0; j < M; j++) for (let i = 0; i < N; i++) {
+        const v = [H[j][i], H[j][i + 1], H[j + 1][i + 1], H[j + 1][i]], c = [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]], e = [];
+        for (let k = 0; k < 4; k++) { const a = v[k], b = v[(k + 1) % 4]; if ((a < L) !== (b < L)) { const t = (L - a) / (b - a), p = c[k], q = c[(k + 1) % 4]; e.push([lerp(p[0], q[0], t), lerp(p[1], q[1], t)]); } }
+        for (let k = 0; k + 1 < e.length; k += 2) d += `M${(e[k][0] / N * w).toFixed(1)} ${(e[k][1] / M * h).toFixed(1)}L${(e[k + 1][0] / N * w).toFixed(1)} ${(e[k + 1][1] / M * h).toFixed(1)}`;
+      }
+      if (li % 3 === 2) major += d; else minor += d;
+    });
+    return `<svg class="contours" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="${minor}"/><path class="major" d="${major}"/></svg>`;
+  }
+  const CONTOURS = { a: null, b: null };
+  const contours = k => CONTOURS[k] || (CONTOURS[k] = contourSVG(k === 'a' ? 1200 : 500, k === 'a' ? 800 : 1000, k === 'a' ? 0 : 3.7));
+
+  const brand = (href = '/') => `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
+
+  /* ---------------- sign in ---------------- */
+  function auth(notice = '') {
+    document.title = 'Sign in · Boplo Flight';
+    root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
+      <div class="auth-copy">
+        ${brand()}
+        <div>
+          <h1 class="display">Your flight desk is waiting.</h1>
+          <p>Sign in to keep your next lesson, your flights and your hours in one place.</p>
+        </div>
+        <small>Boplo supports preparation and record keeping. It is not flight instruction or operational approval.</small>
+      </div>
+      <section class="auth-card" aria-labelledby="auth-title">
+        <h2 id="auth-title">Sign in or create your desk</h2>
+        <p>New here? Signing in creates your account. It’s free to start.</p>
+        <a class="btn btn-google" href="/auth/auth/google">${ico('google')}Continue with Google</a>
+        <div class="or">or use your email</div>
+        <form data-email novalidate>
+          <label for="auth-email">Email address<input id="auth-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+          <p class="auth-note" data-note aria-live="polite" style="margin:12px 0">${esc(notice)}</p>
+          <button class="btn btn-blue btn-has-spark" type="submit">Email me a sign-in link ${spark}</button>
+        </form>
+        <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div>
+      </section>
+    </div></main>`;
+    const form = $('[data-email]'), note = $('[data-note]');
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const email = form.email.value.trim(), btn = form.querySelector('button');
+      note.className = 'auth-note';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note.textContent = 'Enter a valid email address.'; note.classList.add('err'); form.email.focus(); return; }
+      btn.disabled = true; note.textContent = 'Sending your link…';
+      try {
+        const res = await fetch('/auth/auth/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'We couldn’t send that email. Try again shortly.');
+        note.textContent = `Check ${email}. The link opens your desk and expires in 15 minutes.`; note.classList.add('ok');
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); btn.disabled = false; }
+    };
+  }
+
+  function failure(err) {
+    root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
+      <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
+      <section class="auth-card"><h2>Try again</h2><p>Your records are safe. This is usually a connection problem.</p>
+        <button class="btn btn-blue" data-retry>Reload my desk</button>
+        <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div></section>
+    </div></main>`;
+    $('[data-retry]').onclick = start;
+  }
+
+  /* ---------------- fields ---------------- */
+  const input = (label, name, value = '', type = 'text', extra = '', opt = false, hint = '') =>
+    `<label class="field${type === 'textarea' ? ' full' : ''}"><span>${label}${opt ? ' <i>(optional)</i>' : ''}</span>${type === 'textarea'
+      ? `<textarea name="${name}" maxlength="3000" ${extra}>${esc(value)}</textarea>`
+      : `<input name="${name}" type="${type}" value="${esc(value)}" ${extra}>`}${hint ? `<small>${hint}</small>` : ''}</label>`;
+  const select = (label, name, options, value) =>
+    `<label class="field"><span>${label}</span><select name="${name}">${options.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(l)}</option>`; }).join('')}</select></label>`;
+  const duration = (label, name, minutes, required = true, hint = '') => {
+    const m = Math.round(Number(minutes || 0)), h = minutes === '' || minutes == null ? '' : Math.floor(m / 60), mm = minutes === '' || minutes == null ? '' : m % 60;
+    return `<div class="field"><span>${label}</span><div class="duo" data-duration="${name}">
+      <label><span class="sr">${label} hours</span><input type="number" inputmode="numeric" min="0" max="${name === 'openingMinutes' ? 10000 : 24}" step="1" value="${h}" data-h ${required ? 'required' : ''}><em>h</em></label>
+      <label><span class="sr">${label} minutes</span><input type="number" inputmode="numeric" min="0" max="59" step="1" value="${mm}" data-m><em>min</em></label>
+    </div>${hint ? `<small>${hint}</small>` : ''}</div>`;
+  };
+  const readDuration = (form, name) => { const box = form.querySelector(`[data-duration="${name}"]`); const h = Number(box.querySelector('[data-h]').value || 0), m = Number(box.querySelector('[data-m]').value || 0); return Math.round(h * 60 + m); };
+
+  const AUTHORITIES = ['UK CAA', 'EASA member-state authority', 'FAA', 'Other / deciding'];
+  const LICENCES = ['PPL(A)', 'LAPL(A)', 'Next rating', 'Exploring flight training'];
+  const FREQ = ['Still deciding', 'Weekly', 'Twice a week', 'Monthly', 'Intensive course'];
+
+  /* ---------------- onboarding ---------------- */
+  const STEPS = ['About you', 'Your goal', 'Aircraft', 'Hours so far', 'Review'];
+  function onboard() {
+    document.title = 'Set up your desk · Boplo Flight';
+    const p = state.profile || {}, s = ui.step;
+    const screens = [
+      ['Let’s set up your flight desk.', 'A few details keep everything in the right context. You can change any of this later.',
+        input('Your name', 'name', p.name || state.user?.display_name || '', 'text', 'required maxlength="100" autocomplete="name"') +
+        input('Country of training', 'country', p.country, 'text', 'required maxlength="100" autocomplete="country-name"') +
+        select('Licensing authority', 'authority', AUTHORITIES, p.authority || 'UK CAA') +
+        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="e.g. EGHP · Popham"', true) +
+        input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)],
+      ['What are you working toward?', 'Your target is your own planning date. Your school decides the training sequence and when you’re ready.',
+        select('Training goal', 'licence', LICENCES, p.licence || 'PPL(A)') +
+        input('Target date', 'target', p.target, 'date', '', true) +
+        input('Hours goal', 'goalHours', p.goalHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'A number you choose to track against. Boplo doesn’t set requirements.') +
+        input('Next lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"', true) +
+        input('Next lesson date', 'lessonDate', p.lessonDate, 'date', '', true)],
+      ['What do you usually fly?', 'These fill in new flight records for you.',
+        input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200" placeholder="e.g. PA-28 Warrior"', true) +
+        input('Registration', 'registration', p.registration, 'text', 'maxlength="200" placeholder="e.g. G-ABCD"', true) +
+        select('How often do you fly?', 'frequency', FREQ, p.frequency || 'Still deciding') +
+        input('Theory to revisit', 'topics', p.topics, 'text', 'maxlength="200" placeholder="e.g. Air law, meteorology"', true)],
+      ['Bring the hours you already have.', 'Add the total from your logbook, or leave it at zero and log flights as you go. These hours are kept separate from your dated flights.',
+        duration('Existing flight time', 'openingMinutes', p.openingMinutes || 0, false) +
+        input('Anything to remember', 'notes', p.notes, 'textarea', '', true)],
+      ['Your desk is ready.', 'Check the details below. Everything can be changed later in your profile.',
+        `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', p.licence], ['Target date', p.target ? fmtDate(p.target, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
+         <p class="callout" style="grid-column:1/-1">Everything you enter is self-reported. Boplo organises your records and preparation; it doesn’t assess your eligibility or readiness.</p>`]
+    ];
+    const [title, lead, fields] = screens[s];
+    root.innerHTML = `<div class="onboard">
+      <aside class="onboard-side night">${contours('b')}
+        ${brand()}
+        <ol class="steps" aria-label="Setup steps">${STEPS.map((t, i) => `<li class="${i === s ? 'current' : i < s ? 'done' : ''}" ${i === s ? 'aria-current="step"' : ''}><b>${i < s ? '✓' : i + 1}</b><span>${t}</span></li>`).join('')}</ol>
+        <div class="foot"><span>${preview ? 'Example desk · not saved' : 'Saved after each step'}</span><button data-logout>${preview ? 'Leave' : 'Sign out'}</button></div>
+      </aside>
+      <main class="onboard-main"><form class="onboard-form" novalidate>
+        <p class="kicker">Step ${s + 1} of ${STEPS.length}</p>
+        <h1 class="display" tabindex="-1">${title}</h1>
+        <p class="lead">${lead}</p>
+        <div class="fields">${fields}</div>
+        <p class="form-error" role="alert"></p>
+        <div class="actions">
+          ${s ? '<button type="button" class="btn btn-line" data-back>Back</button>' : '<span></span>'}
+          <div class="right"><button class="btn btn-blue btn-has-spark" type="submit">${s === 4 ? 'Open my flight desk' : 'Continue'} ${spark}</button></div>
+        </div>
+      </form></main></div>`;
+    $('[data-logout]').onclick = logout;
+    const back = $('[data-back]'); if (back) back.onclick = () => { ui.step--; onboard(); $('h1').focus(); };
+    const form = $('form');
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
+      const bad = [...form.querySelectorAll('input[required]')].find(i => !i.value.trim());
+      if (bad) { err.textContent = 'Fill in the required fields to continue.'; bad.focus(); return; }
+      const v = Object.fromEntries(new FormData(form));
+      if (form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
+      if ('goalHours' in v) v.goalHours = Number(v.goalHours || 0);
+      btn.disabled = true;
+      try {
+        await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, 4), complete: s === 4 });
+        if (s === 4) { location.hash = 'overview'; render(); toast('Your flight desk is ready.'); }
+        else { ui.step++; onboard(); $('h1').focus(); }
+      } catch (x) { err.textContent = x.message; btn.disabled = false; }
+    };
+  }
+
+  async function logout() {
+    if (!preview) { try { await fetch('/auth/logout', { method: 'POST' }); } catch { } }
+    location.href = preview ? '/' : '/flight-app.html';
+  }
+
+  /* ---------------- derived numbers ---------------- */
+  const sorted = () => [...state.flights].sort((a, b) => b.date.localeCompare(a.date) || 0);
+  const totalMin = () => sum(state.flights, f => f.minutes) + Number(state.profile.openingMinutes || 0);
+  const inLast = days => { const c = new Date(parseISO(todayISO()) - days * 86400000); const iso = `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, '0')}-${String(c.getDate()).padStart(2, '0')}`; return state.flights.filter(f => f.date >= iso); };
+
+  /* ---------------- tracks: projection ---------------- */
+  function project(lists, w, h, pad = 28) {
+    const pts = lists.flat(); if (!pts.length) return null;
+    const lat0 = sum(pts, p => p.lat) / pts.length, k = Math.cos(lat0 * Math.PI / 180);
+    const xs = pts.map(p => p.lng * k), ys = pts.map(p => -p.lat);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const span = Math.max(x1 - x0, y1 - y0, .02); const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const s = Math.min((w - 2 * pad) / Math.max(x1 - x0, span * (w / h) * .25, .02), (h - 2 * pad) / Math.max(y1 - y0, span * .25, .02));
+    return p => [w / 2 + (p.lng * k - cx) * s, h / 2 + (-p.lat - cy) * s];
+  }
+  const pathD = (pts, P) => pts.map((p, i) => { const [x, y] = P(p); return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`; }).join('');
+  const gridLines = (w, h, step = 40) => { let d = ''; for (let x = step; x < w; x += step) d += `M${x} 0V${h}`; for (let y = step; y < h; y += step) d += `M0 ${y}H${w}`; return `<path d="${d}" stroke="rgba(158,216,255,.07)" stroke-width="1" fill="none"/>`; };
+
+  function trackSVG(flights, w, h, selected = null) {
+    const withPts = flights.filter(f => f.points?.length);
+    const P = project(withPts.map(f => f.points), w, h, 34);
+    if (!P) return '';
+    let routes = '', labels = '', seen = [];
+    const label = (pt, code) => { const [x, y] = P(pt); if (seen.some(([a, b]) => Math.hypot(a - x, b - y) < 24)) return; seen.push([x, y]); labels += `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><circle r="4.5" fill="#020611" stroke="#9ED8FF" stroke-width="1.5"/><text y="-11" text-anchor="middle" fill="rgba(230,240,255,.92)" font-size="11.5" font-weight="600" letter-spacing=".04em">${esc(upper(code).slice(0, 8))}</text></g>`; };
+    withPts.forEach(f => {
+      const on = !selected || selected === f.id, d = pathD(f.points, P), dash = f.routeKind === 'track' ? '' : 'stroke-dasharray="5 5"';
+      routes += `<path d="${d}" fill="none" stroke="rgba(10,98,255,${on ? .55 : .16})" stroke-width="${on ? 9 : 5}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      routes += `<path d="${d}" fill="none" stroke="${on ? '#9ED8FF' : 'rgba(158,216,255,.35)'}" stroke-width="${on ? 2.2 : 1.4}" stroke-linecap="round" stroke-linejoin="round" ${dash}/>`;
+    });
+    withPts.forEach(f => { label(f.points[0], f.departure); label(f.points[f.points.length - 1], f.arrival); });
+    return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Flight tracks from your records">${gridLines(w, h)}${routes}${labels}</svg>`;
+  }
+
+  /* ---------------- shell ---------------- */
+  function shell(page, head, body) {
+    const p = state.profile;
+    document.title = `${head.title.replace(/<[^>]+>/g, '')} · Boplo Flight`;
+    root.innerHTML = `<div class="shell">
+      <aside class="side"><div class="side-in night">${contours('b')}
+        ${brand('#overview')}
+        <button class="btn btn-blue btn-has-spark log-cta" data-add>Log a flight ${spark}</button>
+        <nav aria-label="Flight desk">${PAGES.map(([id, label, icon]) => `<a href="#${id}" ${page === id ? 'aria-current="page"' : ''}>${ico(icon)}${label}</a>`).join('')}</nav>
+        <div class="me">
+          <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
+          <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><button data-logout>${ico('out')}${preview ? 'Leave' : 'Sign out'}</button></div>
+        </div>
+      </div></aside>
+      <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#profile" aria-label="Profile" style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
+      <main class="main"><div class="page">
+        ${preview ? `<div class="preview-bar"><span><b>Example desk.</b> These are sample records; changes aren’t saved.</span><a class="btn btn-light btn-sm" href="/flight-app.html">Open my own desk</a></div>` : ''}
+        <header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>
+        ${body}
+      </div></main>
+      <nav class="tabbar" aria-label="Flight desk">${PAGES.map(([id, label, icon]) => `<a href="#${id}" ${page === id ? 'aria-current="page"' : ''}>${ico(icon)}${label}</a>`).join('')}</nav>
+    </div>`;
+    $$('[data-add]').forEach(b => b.onclick = () => flightSheet());
+    $$('[data-logout]').forEach(b => b.onclick = logout);
+    $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
+  }
+
+  /* ---------------- pages ---------------- */
+  function flightRows(list) {
+    return list.map(f => `<button class="frow" data-flight="${esc(f.id)}">
+      <span class="fdate"><b>${esc(fmtDate(f.date, { day: 'numeric', month: 'short' }))}</b>${esc(fmtDate(f.date, { weekday: 'short' }))}</span>
+      <span class="froute"><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc(f.lesson || f.aircraft || 'Flight')}</small></span>
+      <span class="chip role-${esc(f.role)}"><i></i>${esc(roleName(f.role))}</span>
+      <span class="ftime">${hm(f.minutes)}<small>${f.landings} ldg</small></span>
+    </button>`).join('');
+  }
+
+  function overview() {
+    const p = state.profile, list = sorted(), last30 = inLast(30), checks = parseChecks(p.checklist);
+    const done = checks.filter(c => c.done).length, goal = Number(p.goalHours || 0), total = totalMin() / 60;
+    const pct = goal ? Math.min(1, total / goal) : 0, C = 2 * Math.PI * 64;
+    const dLesson = p.lessonDate ? daysUntil(p.lessonDate) : null;
+    const when = dLesson == null ? 'No date set' : dLesson === 0 ? 'Today' : dLesson === 1 ? 'Tomorrow' : dLesson > 1 ? `In ${dLesson} days` : `${-dLesson} days ago`;
+    const firstQ = String(p.questions || '').split('\n').map(s => s.trim()).filter(Boolean)[0];
+    const latest = list.find(f => f.points?.length);
+    const hour = new Date().getHours(), greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+
+    shell('overview', { title: `${greet}, ${esc(firstName(p.name))}.`, sub: list.length ? `${list.length} flight${list.length === 1 ? '' : 's'} logged, ${hrs(totalMin())} hours recorded in total.` : 'Log your first flight and your desk starts filling in.' },
+      `<div class="grid">
+        <section class="tile dark next span-7" aria-labelledby="next-h">${contours('b')}
+          <div class="tile-head"><h2 id="next-h">Up next</h2><span class="chip">${esc(when)}</span></div>
+          <h3 class="display">${esc(p.nextLesson || 'Add your next lesson')}</h3>
+          <div class="next-meta">${p.lessonDate ? `<span><b>${esc(fmtDate(p.lessonDate, { weekday: 'long', day: 'numeric', month: 'long' }))}</b></span>` : ''}${p.airport ? `<span>${esc(p.airport)}</span>` : ''}${p.aircraft ? `<span>${esc(p.aircraft)}</span>` : ''}</div>
+          ${firstQ ? `<p class="next-q">${esc(firstQ)}</p>` : ''}
+          <div class="next-foot">
+            ${checks.length ? `<span class="progress"><span class="progress-bar"><i style="width:${checks.length ? done / checks.length * 100 : 0}%"></i></span>${done} of ${checks.length} prepared</span>` : '<span class="progress">No preparation checklist yet</span>'}
+            <a class="btn btn-light btn-has-spark" href="#prepare">Prepare ${spark}</a>
+          </div>
+        </section>
+
+        <section class="tile span-5" aria-labelledby="goal-h">
+          <div class="tile-head"><h2 id="goal-h">Toward your licence</h2><a class="link" href="#profile">Edit</a></div>
+          <div class="goal">
+            <div class="ring" role="img" aria-label="${goal ? `${total.toFixed(1)} of a ${goal} hour goal` : `${total.toFixed(1)} hours recorded`}">
+              <svg viewBox="0 0 150 150"><circle cx="75" cy="75" r="64"/><circle class="fill" cx="75" cy="75" r="64" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - pct)).toFixed(1)}"/></svg>
+              <div><b class="num">${total.toFixed(1)}</b><span>${goal ? `of ${goal} h goal` : 'hours recorded'}</span></div>
+            </div>
+            <dl>
+              <div><dt>Licence</dt><dd>${esc(p.licence || '—')}</dd></div>
+              <div><dt>Authority</dt><dd>${esc(p.authority || '—')}</dd></div>
+              <div><dt>Target date</dt><dd>${p.target ? esc(fmtDate(p.target, { month: 'long', year: 'numeric' })) : '<a class="link" href="#profile">Set a date</a>'}</dd></div>
+            </dl>
+          </div>
+          ${goal ? '' : '<p class="footnote">Set an hours goal in your profile to see progress here.</p>'}
+        </section>
+
+        <section class="stats span-12" aria-label="Totals">
+          <div class="stat"><span>Total time</span><b>${hrs(totalMin())}<small>h</small></b><em>${p.openingMinutes ? `Includes ${hrs(p.openingMinutes)} h from before` : 'From your logged flights'}</em></div>
+          <div class="stat"><span>Last 30 days</span><b>${hrs(sum(last30, f => f.minutes))}<small>h</small></b><em>${last30.length} flight${last30.length === 1 ? '' : 's'}</em></div>
+          <div class="stat"><span>Landings</span><b>${sum(state.flights, f => f.landings)}</b><em>Across all flights</em></div>
+          <div class="stat"><span>Solo and PIC</span><b>${hrs(sum(state.flights.filter(f => f.role !== 'dual'), f => f.minutes))}<small>h</small></b><em>${hrs(sum(state.flights.filter(f => f.role === 'dual'), f => f.minutes))} h dual</em></div>
+        </section>
+
+        <section class="tile span-7" aria-labelledby="recent-h">
+          <div class="tile-head"><h2 id="recent-h">Recent flights</h2>${list.length ? '<a class="link" href="#logbook">Open logbook</a>' : ''}</div>
+          ${list.length ? `<div class="flist">${flightRows(list.slice(0, 5))}</div>` : `<div class="empty"><h3>Your first flight goes here.</h3><p>Log the time, role, landings and what you learned while it’s fresh.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
+        </section>
+
+        <section class="tile span-5" aria-labelledby="track-h">
+          <div class="tile-head"><h2 id="track-h">Latest track</h2>${latest ? '<a class="link" href="#map">Open map</a>' : ''}</div>
+          <div class="mini">${latest ? trackSVG([latest], 480, 300) : `<div class="mini-empty"><b>No track yet</b>Add coordinates to a flight and its route is drawn here.</div>`}</div>
+          ${latest ? `<div class="mini-meta"><span><b>${esc(upper(latest.departure))} → ${esc(upper(latest.arrival))}</b> · ${esc(fmtDate(latest.date))}</span><span>${hm(latest.minutes)} · ${esc(roleName(latest.role))}</span></div>` : ''}
+        </section>
+      </div>`);
+  }
+
+  function logbook() {
+    const q = ui.q.toLowerCase();
+    const list = sorted().filter(f => (ui.role === 'all' || f.role === ui.role) && (!q || [f.departure, f.arrival, f.aircraft, f.registration, f.instructor, f.lesson, f.notes, f.date].join(' ').toLowerCase().includes(q)));
+    const totalM = sum(list, f => f.minutes);
+    shell('logbook', { title: 'Logbook', sub: 'Every flight you’ve logged, with the context behind it.', actions: '<button class="btn btn-blue btn-has-spark" data-add>Log a flight ' + spark + '</button>' },
+      state.flights.length ? `
+      <div class="toolbar">
+        <label class="search">${ico('search')}<span class="sr">Search flights</span><input type="search" data-q value="${esc(ui.q)}" placeholder="Search airfield, lesson, aircraft…"></label>
+        <div class="filter" role="group" aria-label="Role">${[['all', 'All'], ['dual', 'Dual'], ['solo', 'Solo'], ['pic', 'PIC']].map(([v, l]) => `<button data-role="${v}" aria-pressed="${ui.role === v}">${l}</button>`).join('')}</div>
+        <span class="count" aria-live="polite">${list.length} flight${list.length === 1 ? '' : 's'} · ${hm(totalM)} h</span>
+      </div>
+      ${list.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Route</th><th>Aircraft</th><th>Lesson</th><th>Role</th><th class="r">Landings</th><th class="r">Time</th></tr></thead>
+        <tbody>${list.map(f => `<tr data-flight="${esc(f.id)}" tabindex="0" aria-label="Open flight on ${esc(fmtDate(f.date))}">
+          <td>${esc(fmtDate(f.date, { day: 'numeric', month: 'short', year: 'numeric' }))}</td>
+          <td class="route">${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</td>
+          <td>${esc([f.aircraft, f.registration].filter(Boolean).join(' · ') || '—')}</td>
+          <td class="lesson">${esc(f.lesson || '—')}</td>
+          <td><span class="chip role-${esc(f.role)}"><i></i>${esc(roleName(f.role))}</span></td>
+          <td class="r">${f.landings}</td><td class="r"><b>${hm(f.minutes)}</b></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="5">${list.length} flight${list.length === 1 ? '' : 's'}</td><td class="r">${sum(list, f => f.landings)}</td><td class="r">${hm(totalM)}</td></tr></tfoot>
+      </table></div>
+      <div class="cards">${list.map(f => `<button class="card" data-flight="${esc(f.id)}"><span class="froute"><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc(fmtDate(f.date))} · ${esc(roleName(f.role))} · ${f.landings} ldg</small></span><span class="ftime">${hm(f.minutes)}</span><small style="color:var(--ink-3);font-size:13px;grid-column:1">${esc(f.lesson || f.aircraft || '')}</small></button>`).join('')}</div>`
+        : `<div class="tile empty center"><h3>No flights match.</h3><p>Try a different search or role.</p><button class="btn btn-line" data-clear>Clear filters</button></div>`}`
+        : `<div class="tile empty center"><h3>Your logbook is empty.</h3><p>Each flight you log keeps its time, role, landings and debrief together.</p><button class="btn btn-blue btn-has-spark" data-add>Log your first flight ${spark}</button></div>`);
+    const qi = $('[data-q]');
+    if (qi) qi.oninput = () => { ui.q = qi.value; const pos = qi.selectionStart; logbook(); const n = $('[data-q]'); n.focus(); n.setSelectionRange(pos, pos); };
+    $$('[data-role]').forEach(b => b.onclick = () => { ui.role = b.dataset.role; logbook(); });
+    const c = $('[data-clear]'); if (c) c.onclick = () => { ui.q = ''; ui.role = 'all'; logbook(); };
+    $$('tbody tr').forEach(tr => tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tr.click(); } });
+  }
+
+  function mapPage() {
+    const list = sorted().filter(f => f.points?.length);
+    const sel = list.some(f => f.id === ui.mapSel) ? ui.mapSel : null;
+    shell('map', { title: 'Map', sub: 'The routes in your record. Dashed lines join start and end points; solid lines are recorded tracks.' },
+      list.length ? `<div class="grid">
+        <section class="span-8"><div class="mapbox" data-mapbox>${trackSVG(list, 800, 560, sel)}<div class="map-legend"><span><i></i>Recorded track</span><span><i class="dash"></i>Start to end</span></div></div>
+          <p class="map-note">${state.mapsKey ? 'Satellite view loads when available.' : 'Satellite imagery appears here once maps are connected for your account.'} For reviewing records only, not for navigation.</p></section>
+        <section class="tile span-4"><div class="tile-head"><h2>Flights with routes</h2>${sel ? '<button class="link" data-all>Show all</button>' : ''}</div>
+          <div class="track-list">${list.map(f => `<button class="track-item" data-sel="${esc(f.id)}" aria-pressed="${sel === f.id}"><span><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc(fmtDate(f.date))} · ${esc(f.lesson || roleLong(f.role))}</small></span><span class="ftime">${hm(f.minutes)}</span></button>`).join('')}</div>
+        </section></div>`
+        : `<div class="tile empty center"><h3>No routes yet.</h3><p>When you log a flight, open “Route on the map” and paste the coordinates of your start and end points, or a full track.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`);
+    $$('[data-sel]').forEach(b => b.onclick = () => { ui.mapSel = ui.mapSel === b.dataset.sel ? null : b.dataset.sel; mapPage(); });
+    const all = $('[data-all]'); if (all) all.onclick = () => { ui.mapSel = null; mapPage(); };
+    if (state.mapsKey && list.length) googleMap(list, sel);
+  }
+
+  let mapsReady;
+  async function googleMap(list, sel) {
+    const box = $('[data-mapbox]'); if (!box) return;
+    try {
+      mapsReady = mapsReady || new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(state.mapsKey) + '&callback=__boploMaps&loading=async';
+        window.__boploMaps = res; s.onerror = () => rej(new Error('Map service unavailable.'));
+        setTimeout(() => rej(new Error('Map service timed out.')), 15000); document.head.append(s);
+      });
+      await mapsReady; if (!box.isConnected) return;
+      const el = document.createElement('div'); el.className = 'gmap'; box.prepend(el);
+      const map = new google.maps.Map(el, { mapTypeId: 'hybrid', streetViewControl: false, mapTypeControl: false, fullscreenControl: true, center: list[0].points[0], zoom: 9 });
+      const b = new google.maps.LatLngBounds();
+      list.forEach(f => { const on = !sel || sel === f.id; f.points.forEach(p => b.extend(p)); new google.maps.Polyline({ map, path: f.points, geodesic: f.routeKind !== 'track', strokeColor: on ? '#9ED8FF' : '#5B86C9', strokeOpacity: on ? 1 : .45, strokeWeight: on ? 3 : 2 }); });
+      map.fitBounds(b, 48);
+      const svg = box.querySelector('svg'); if (svg) svg.style.display = 'none';
+    } catch { mapsReady = null; }
+  }
+
+  function analytics() {
+    const r = ui.range, days = r === 'all' ? null : Number(r), list = days ? inLast(days) : state.flights;
+    const nMonths = r === '90' ? 3 : 12;
+    const months = Array.from({ length: nMonths }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - (nMonths - 1) + i); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleString('en-GB', { month: 'short' }) }; });
+    const per = months.map(m => { const fs = state.flights.filter(f => f.date.startsWith(m.key)); return { dual: sum(fs.filter(f => f.role === 'dual'), f => f.minutes), solo: sum(fs.filter(f => f.role === 'solo'), f => f.minutes), pic: sum(fs.filter(f => f.role === 'pic'), f => f.minutes) }; });
+    const max = Math.max(60, ...per.map(x => x.dual + x.solo + x.pic));
+    const total = sum(list, f => f.minutes);
+    const airports = {}; list.forEach(f => new Set([upper(f.departure), upper(f.arrival)].filter(Boolean)).forEach(k => { airports[k] = (airports[k] || 0) + 1; }));
+    const topA = Object.entries(airports).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const avg = list.length ? total / list.length : 0;
+    const colors = { dual: 'var(--dual)', solo: 'var(--solo)', pic: 'var(--pic)' };
+    shell('analytics', { title: 'Analytics', sub: 'Your flying, measured from your own records.', actions: `<div class="filter" role="group" aria-label="Period">${[['90', '90 days'], ['365', '12 months'], ['all', 'All time']].map(([v, l]) => `<button data-range="${v}" aria-pressed="${r === v}">${l}</button>`).join('')}</div>` },
+      `<div class="grid">
+        <section class="stats span-12" aria-label="Totals for this period">
+          <div class="stat"><span>Flight time</span><b>${hrs(total)}<small>h</small></b><em>${r === 'all' ? 'All logged flights' : `Last ${r === '90' ? '90 days' : '12 months'}`}</em></div>
+          <div class="stat"><span>Flights</span><b>${list.length}</b><em>${list.length ? `Average ${hm(avg)}` : 'None in this period'}</em></div>
+          <div class="stat"><span>Landings</span><b>${sum(list, f => f.landings)}</b><em>${list.length ? `${(sum(list, f => f.landings) / list.length).toFixed(1)} per flight` : '—'}</em></div>
+          <div class="stat"><span>Airfields</span><b>${Object.keys(airports).length}</b><em>Visited or departed</em></div>
+        </section>
+        <section class="tile span-8" aria-labelledby="m-h">
+          <div class="tile-head"><h2 id="m-h">Hours by month</h2><div class="legend"><span><i style="background:var(--dual)"></i>Dual</span><span><i style="background:var(--solo)"></i>Solo</span><span><i style="background:var(--pic)"></i>PIC</span></div></div>
+          <div class="chart" role="img" aria-label="${months.map((m, i) => `${m.label}: ${hrs(per[i].dual + per[i].solo + per[i].pic)} hours`).join(', ')}">
+            ${months.map((m, i) => { const t = per[i].dual + per[i].solo + per[i].pic; return `<div class="col"><small>${t ? hrs(t) : ''}</small><div class="stack" style="height:${Math.max(1, t / max * 88)}%">${['dual', 'solo', 'pic'].map(k => per[i][k] ? `<i style="height:${per[i][k] / t * 100}%;background:${colors[k]}"></i>` : '').join('')}</div><span>${m.label}</span></div>`; }).join('')}
+          </div>
+        </section>
+        <section class="tile span-4" aria-labelledby="r-h">
+          <div class="tile-head"><h2 id="r-h">Time by role</h2></div>
+          <div class="bars">${['dual', 'solo', 'pic'].map(k => { const n = sum(list.filter(f => f.role === k), f => f.minutes); return `<div class="bar-row"><div><span>${roleLong(k)}</span><b>${hrs(n)} h</b></div><div class="bar-track"><i style="width:${total ? n / total * 100 : 0}%;background:${colors[k]}"></i></div></div>`; }).join('')}</div>
+          <p class="footnote">From your own entries. It doesn’t decide what counts toward a licence.</p>
+        </section>
+        <section class="tile span-6" aria-labelledby="a-h">
+          <div class="tile-head"><h2 id="a-h">Airfields</h2></div>
+          ${topA.length ? `<div class="airports">${topA.map(([k, n]) => `<div><b>${esc(k)}</b><span>${n} flight${n === 1 ? '' : 's'}</span></div>`).join('')}</div>` : '<p class="hint">No flights in this period.</p>'}
+        </section>
+        <section class="tile span-6" aria-labelledby="l-h">
+          <div class="tile-head"><h2 id="l-h">Recent lessons</h2></div>
+          ${list.length ? `<div class="flist">${flightRows(sorted().filter(f => list.includes(f)).slice(0, 4))}</div>` : '<p class="hint">No flights in this period.</p>'}
+        </section>
+      </div>
+      <p class="footnote">Hours you had before joining (${hrs(state.profile.openingMinutes)} h) aren’t included in dated charts.</p>`);
+    $$('[data-range]').forEach(b => b.onclick = () => { ui.range = b.dataset.range; analytics(); });
+  }
+
+  function prepare() {
+    const p = state.profile; let checks = parseChecks(p.checklist);
+    const recent = sorted().slice(0, 3);
+    shell('prepare', { title: 'Prepare', sub: 'Your notes and questions for the next lesson, with the last debriefs beside them.' },
+      `<form class="grid" data-prep novalidate>
+        <section class="tile span-7"><div class="tile-head"><h2>Next lesson</h2></div>
+          <div class="fields">
+            ${input('Lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"')}
+            ${input('Date', 'lessonDate', p.lessonDate, 'date')}
+          </div>
+          <div class="group" style="margin-top:22px"><h3>Preparation checklist</h3>
+            <div class="checklist" data-checks></div>
+            <div class="add-check"><input data-new placeholder="Add something to prepare and press Enter" maxlength="200" aria-label="New checklist item"><button type="button" class="btn btn-line" data-addcheck>Add</button></div>
+          </div>
+          <div class="fields" style="margin-top:22px">
+            ${input('Questions for your instructor', 'questions', p.questions, 'textarea', 'placeholder="One question per line"')}
+            ${input('Preparation notes', 'notes', p.notes, 'textarea')}
+          </div>
+          <p class="form-error" role="alert" style="margin-top:12px"></p>
+          <div class="actions" style="margin-top:16px"><span class="hint">${preview ? 'Example desk: changes aren’t saved.' : 'Saved to your account.'}</span><div class="right"><button class="btn btn-blue btn-has-spark" type="submit">Save preparation ${spark}</button></div></div>
+        </section>
+        <section class="tile span-5"><div class="tile-head"><h2>From your last flights</h2>${recent.length ? '<a class="link" href="#logbook">Logbook</a>' : ''}</div>
+          ${recent.length ? recent.map(f => `<div class="debrief"><small>${esc(fmtDate(f.date))} · ${esc(f.lesson || `${upper(f.departure)} → ${upper(f.arrival)}`)}</small><p class="${f.notes ? '' : 'none'}">${esc(f.notes || 'No debrief notes for this flight.')}</p></div>`).join('') : '<p class="hint">Debrief notes from your flights will show here.</p>'}
+        </section>
+      </form>`);
+    const form = $('[data-prep]'), box = $('[data-checks]'), nw = $('[data-new]');
+    const draw = () => {
+      box.innerHTML = checks.length ? checks.map((c, i) => `<div class="check ${c.done ? 'done' : ''}"><input type="checkbox" ${c.done ? 'checked' : ''} data-i="${i}" aria-label="Mark as prepared"><input type="text" value="${esc(c.text)}" data-t="${i}" maxlength="200" aria-label="Checklist item"><button type="button" data-x="${i}" aria-label="Remove item">${ico('close')}</button></div>`).join('') : '<p class="hint">Nothing on the list yet.</p>';
+      box.querySelectorAll('[data-i]').forEach(el => el.onchange = () => { checks[el.dataset.i].done = el.checked; draw(); });
+      box.querySelectorAll('[data-t]').forEach(el => el.oninput = () => { checks[el.dataset.t].text = el.value; });
+      box.querySelectorAll('[data-x]').forEach(el => el.onclick = () => { checks.splice(Number(el.dataset.x), 1); draw(); });
+    };
+    const add = () => { const t = nw.value.trim(); if (!t) return; checks.push({ done: false, text: t }); nw.value = ''; draw(); nw.focus(); };
+    nw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+    $('[data-addcheck]').onclick = add;
+    draw();
+    form.onsubmit = async e => {
+      e.preventDefault(); const btn = form.querySelector('[type=submit]'), err = $('.form-error', form); err.textContent = ''; btn.disabled = true;
+      try { const v = Object.fromEntries(new FormData(form)); ['nw'].forEach(k => delete v[k]); await saveProfile({ nextLesson: v.nextLesson, lessonDate: v.lessonDate, questions: v.questions, notes: v.notes, checklist: writeChecks(checks) }); toast('Preparation saved.'); prepare(); }
+      catch (x) { err.textContent = x.message; btn.disabled = false; }
+    };
+  }
+
+  function profilePage() {
+    const p = state.profile;
+    shell('profile', { title: 'Profile', sub: 'The details your desk is built around.' },
+      `<form class="grid" data-profile novalidate>
+        <section class="tile span-7"><div class="tile-head"><h2>You and your training</h2></div>
+          <div class="fields">
+            ${input('Your name', 'name', p.name, 'text', 'required maxlength="100" autocomplete="name"')}
+            ${input('Country of training', 'country', p.country, 'text', 'required maxlength="100"')}
+            ${select('Licensing authority', 'authority', AUTHORITIES, p.authority)}
+            ${select('Training goal', 'licence', LICENCES, p.licence)}
+            ${input('Target date', 'target', p.target, 'date', '', true)}
+            ${input('Hours goal', 'goalHours', p.goalHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric"', true)}
+            ${input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100"', true)}
+            ${input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)}
+          </div>
+        </section>
+        <section class="tile span-5"><div class="tile-head"><h2>Flying</h2></div>
+          <div class="fields" style="grid-template-columns:1fr">
+            ${input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200"', true)}
+            ${input('Registration', 'registration', p.registration, 'text', 'maxlength="200"', true)}
+            ${select('How often you fly', 'frequency', FREQ, p.frequency || 'Still deciding')}
+            ${input('Theory to revisit', 'topics', p.topics, 'text', 'maxlength="200"', true)}
+            ${duration('Hours before Boplo', 'openingMinutes', p.openingMinutes || 0, false, 'Kept separate from dated flights.')}
+          </div>
+        </section>
+        <div class="span-12 actions"><p class="form-error" role="alert"></p><span class="hint">${state.user?.email ? `Signed in as ${esc(state.user.email)}` : ''}</span><div class="right"><button type="button" class="btn btn-line" data-logout>${ico('out')}${preview ? 'Leave example' : 'Sign out'}</button><button class="btn btn-blue btn-has-spark" type="submit">Save profile ${spark}</button></div></div>
+      </form>`);
+    $$('[data-logout]').forEach(b => b.onclick = logout);
+    const form = $('[data-profile]');
+    form.onsubmit = async e => {
+      e.preventDefault(); const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
+      const bad = [...form.querySelectorAll('input[required]')].find(i => !i.value.trim()); if (bad) { err.textContent = 'Name and country are required.'; bad.focus(); return; }
+      const v = Object.fromEntries(new FormData(form)); v.openingMinutes = readDuration(form, 'openingMinutes'); v.goalHours = Number(v.goalHours || 0);
+      btn.disabled = true;
+      try { await saveProfile({ ...v, complete: true, step: 4 }); toast('Profile saved.'); profilePage(); } catch (x) { err.textContent = x.message; btn.disabled = false; }
+    };
+  }
+
+  /* ---------------- flight sheet ---------------- */
+  function flightSheet(f = {}) {
+    const p = state.profile, editing = !!f.id;
+    const role = f.role || 'dual';
+    const coords = (f.points || []).map(x => `${x.lat},${x.lng}`).join('\n');
+    sheet.innerHTML = `<form method="dialog" novalidate data-sheet>
+      <header class="sheet-head"><h2 id="sheet-title" class="display">${editing ? 'Flight record' : 'Log a flight'}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></header>
+      <div class="sheet-body">
+        <div class="group"><h3>The flight</h3><div class="fields">
+          ${input('Date', 'date', f.date || todayISO(), 'date', `required max="${todayISO()}"`)}
+          ${duration('Flight time', 'minutes', f.minutes ?? '', true)}
+          ${input('From', 'departure', f.departure || p.airport || '', 'text', 'required maxlength="100" placeholder="e.g. EGHP"')}
+          ${input('To', 'arrival', f.arrival || '', 'text', 'required maxlength="100" placeholder="e.g. EGHP"')}
+          ${input('Aircraft', 'aircraft', f.aircraft ?? p.aircraft ?? '', 'text', 'maxlength="100"', true)}
+          ${input('Registration', 'registration', f.registration ?? p.registration ?? '', 'text', 'maxlength="100"', true)}
+        </div></div>
+        <div class="group"><h3>Your role</h3>
+          <div class="segmented" role="radiogroup" aria-label="Your role">${['dual', 'solo', 'pic'].map(r => `<label><input type="radio" name="role" value="${r}" ${role === r ? 'checked' : ''}><span>${roleLong(r)}</span></label>`).join('')}</div>
+          <div class="fields">
+            ${input('Landings', 'landings', f.landings ?? 1, 'number', 'required min="0" max="100" step="1" inputmode="numeric"')}
+            ${input('Instructor', 'instructor', f.instructor || '', 'text', 'maxlength="100"', true)}
+          </div>
+        </div>
+        <div class="group"><h3>Lesson and debrief</h3><div class="fields">
+          <label class="field full"><span>Lesson or exercise <i>(optional)</i></span><input name="lesson" value="${esc(f.lesson || (editing ? '' : p.nextLesson || ''))}" maxlength="100"></label>
+          ${input('Debrief notes', 'notes', f.notes || '', 'textarea', 'placeholder="What went well, what to work on next time"', true)}
+        </div></div>
+        <details class="more" ${coords ? 'open' : ''}><summary>Route on the map <span class="hint" style="margin-left:auto;margin-right:12px">optional</span></summary>
+          <div class="fields">
+            <label class="field full"><span>Coordinates</span><textarea name="coordinates" placeholder="51.1939,-1.2347&#10;50.7800,-1.8425" spellcheck="false">${esc(coords)}</textarea><small>One latitude,longitude pair per line. Two points draw a dashed start-to-end line; many points draw your track.</small></label>
+            ${select('These points are', 'routeKind', [['endpoints', 'Start and end points'], ['track', 'A recorded track']], f.routeKind || 'endpoints')}
+          </div>
+        </details>
+        <p class="form-error" role="alert"></p>
+      </div>
+      <footer class="sheet-foot">
+        ${editing ? '<button type="button" class="btn btn-danger" data-delete>Delete flight</button>' : `<span class="hint">${preview ? 'Example desk: not saved.' : ''}</span>`}
+        <div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" type="submit">${editing ? 'Save changes' : 'Save flight'} ${spark}</button></div>
+      </footer>
+    </form>`;
+    const form = sheet.querySelector('form'), err = sheet.querySelector('.form-error');
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close());
+    sheet.onclick = e => { if (e.target === sheet) sheet.close(); };
+    sheet.showModal();
+    form.onsubmit = async e => {
+      e.preventDefault(); err.textContent = '';
+      const btn = form.querySelector('[type=submit]');
+      try {
+        const v = Object.fromEntries(new FormData(form));
+        const minutes = readDuration(form, 'minutes');
+        if (!v.date) throw new Error('Choose the date you flew.');
+        if (v.date > todayISO()) throw new Error('Log completed flights only.');
+        if (!v.departure.trim() || !v.arrival.trim()) throw new Error('Enter where you flew from and to.');
+        if (!minutes || minutes < 1 || minutes > 1440) throw new Error('Enter the flight time in hours and minutes.');
+        const points = v.coordinates.trim() ? v.coordinates.trim().split(/\n+/).map((line, i) => {
+          const parts = line.split(/[,\s]+/).filter(Boolean); const [lat, lng] = parts.map(Number);
+          if (parts.length !== 2 || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error(`Check route line ${i + 1}: use latitude,longitude.`);
+          return { lat, lng };
+        }) : [];
+        const data = { date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: v.routeKind };
+        btn.disabled = true;
+        const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
+        state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
+        sheet.close(); render(); toast(editing ? 'Flight updated.' : 'Flight saved.');
+      } catch (x) { err.textContent = x.message; btn.disabled = false; err.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }); }
+    };
+    const del = sheet.querySelector('[data-delete]');
+    if (del) del.onclick = async () => {
+      if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'Delete for good'; return; }
+      del.disabled = true;
+      try { if (!preview) await api('flights/' + f.id, 'DELETE'); state.flights = state.flights.filter(x => x.id !== f.id); sheet.close(); render(); toast('Flight deleted.'); }
+      catch (x) { err.textContent = x.message; del.disabled = false; }
+    };
+  }
+
+  /* ---------------- router ---------------- */
+  function render() {
+    if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage })[current()]();
+  }
+  addEventListener('hashchange', () => { if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
+
+  /* ---------------- example desk ---------------- */
+  function demo() {
+    const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const ago = n => { const d = parseISO(todayISO()); d.setDate(d.getDate() - n); return iso(d); };
+    const ahead = n => { const d = parseISO(todayISO()); d.setDate(d.getDate() + n); return iso(d); };
+    const POP = { lat: 51.1939, lng: -1.2347 };
+    let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const interp = (a, b, n) => Array.from({ length: n }, (_, i) => ({ lat: a.lat + (b.lat - a.lat) * i / n + (rnd() - .5) * .002, lng: a.lng + (b.lng - a.lng) * i / n + (rnd() - .5) * .003 }));
+    const circuit = () => { const c = [{ lat: 51.1939, lng: -1.2347 }, { lat: 51.1985, lng: -1.2005 }, { lat: 51.2125, lng: -1.2055 }, { lat: 51.2080, lng: -1.2780 }, { lat: 51.1925, lng: -1.2740 }, { lat: 51.1939, lng: -1.2347 }]; let o = []; for (let i = 0; i < c.length - 1; i++) o = o.concat(interp(c[i], c[i + 1], 6)); o.push(c[c.length - 1]); return o; };
+    const loop = wps => { let o = []; for (let i = 0; i < wps.length - 1; i++) o = o.concat(interp(wps[i], wps[i + 1], 14)); o.push(wps[wps.length - 1]); return o; };
+    const area = loop([POP, { lat: 51.255, lng: -1.19 }, { lat: 51.27, lng: -1.30 }, { lat: 51.22, lng: -1.36 }, POP]);
+    const nav = loop([POP, { lat: 51.2083, lng: -1.48 }, { lat: 51.11, lng: -1.49 }, { lat: 51.06, lng: -1.31 }, POP]);
+    const F = [
+      [170, 'Lesson 1 · Effects of controls', 'dual', 55, 1, 'Light touch on the controls. Use the horizon, not the instruments.', area, 'track'],
+      [160, 'Lesson 2 · Straight and level', 'dual', 60, 1, 'Trim more often. Hold attitude, then check.', area, 'track'],
+      [146, 'Lesson 3 · Climbing and descending', 'dual', 62, 1, 'Power, attitude, trim. Remember to look out during the climb.', area, 'track'],
+      [133, 'Lesson 4 · Medium turns', 'dual', 58, 1, 'Balance with rudder going into the turn. Good lookout.', area, 'track'],
+      [118, 'Lesson 5 · Slow flight', 'dual', 65, 1, 'Stay ahead of the aircraft at low speed.', area, 'track'],
+      [104, 'Lesson 6 · Stalling', 'dual', 60, 1, 'Recovery was smooth. Work on the HASELL checks from memory.', area, 'track'],
+      [86, 'Lesson 7 · Circuits', 'dual', 70, 5, 'Downwind spacing drifted wide. Use the road as a reference.', circuit(), 'track'],
+      [72, 'Lesson 8 · Circuits', 'dual', 68, 6, 'Flare height better. Keep the centreline on short final.', circuit(), 'track'],
+      [57, 'Lesson 9 · Glide approaches', 'dual', 66, 5, 'Judged two of three glides well. Fly the base turn earlier.', circuit(), 'track'],
+      [43, 'Lesson 10 · First solo', 'solo', 18, 1, 'First solo circuit. Calm and on speed.', circuit(), 'track'],
+      [29, 'Lesson 11 · Solo consolidation', 'solo', 52, 5, 'Five full-stop landings. Radio calls more confident.', circuit(), 'track'],
+      [12, 'Lesson 11b · Navigation planning', 'dual', 75, 1, 'Turn at the reservoir was 40 seconds late. Start the timing from overhead, not abeam.', nav, 'track']
+    ];
+    state = {
+      user: { display_name: 'Alex Morgan', email: '' }, mapsKey: '',
+      profile: {
+        name: 'Alex Morgan', country: 'United Kingdom', authority: 'UK CAA', licence: 'PPL(A)', airport: 'EGHP · Popham', school: 'Example flying club',
+        aircraft: 'PA-28 Warrior', registration: 'G-BOPL', frequency: 'Weekly', topics: 'Air law, navigation',
+        target: ahead(240), goalHours: 45, openingMinutes: 0, nextLesson: 'Lesson 12 · Navigation', lessonDate: ahead(4),
+        questions: 'When would you divert if the reservoir turn is late?\nWhich frequency do I change to first after departure?',
+        notes: 'Plan the route the evening before and print the log.', checklist: '[x] Plot the route and mark the turn points\n[x] Work out diversion timings\n[ ] Read through the radio calls\n[ ] Check the aircraft tech log',
+        complete: true, step: 4
+      },
+      flights: F.map(([d, lesson, role, minutes, landings, notes, points, routeKind], i) => ({ id: 'demo-' + i, date: ago(d), departure: 'EGHP', arrival: 'EGHP', aircraft: 'PA-28 Warrior', registration: 'G-BOPL', role, minutes, landings, instructor: role === 'dual' ? 'Sam Patel' : '', lesson, notes, points, routeKind }))
+    };
+  }
+
+  /* ---------------- start ---------------- */
+  async function start() {
+    if (preview) { demo(); render(); return; }
+    try { state = await api('workspace'); render(); }
+    catch (e) { if (e.status === 401) auth(); else failure(e); }
+  }
+  start();
 })();

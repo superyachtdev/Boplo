@@ -19,6 +19,13 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - Font: Archivo (Google Fonts), italic at width 112 for display, regular for body.
 - Previous landing (`flight-landing.*`, `flight-expansion.css`) is untouched on disk; the old `index.html` is backed up at `work/index.flight-landing-previous.html`.
 
+## Flight desk app (rebuilt 2026-10-21, Claude)
+
+- `dist/flight-app.html|css|js`, same visual system as the landing (Archivo, night navy sidebar, cloud work surface, electric blue).
+- Screens: sign-in (Google + email magic link via `POST /auth/auth/email`), 5-step onboarding, Overview, Logbook (search + role filter, table on desktop / cards on phone), Map (SVG track view; Google satellite if `GOOGLE_MAPS_BROWSER_KEY` is set), Analytics (12-month stacked hours by role, airfields), Prepare (lesson, checklist, questions, notes, last debriefs), Profile.
+- Same API as before (`/flight/workspace`, `/flight/profile`, `/flight/flights[/:id]`). Profile gained `goalHours` (0–2000) and `checklist` (text lines `[x] item` / `[ ] item`); tests updated.
+- `?preview=1` loads a richer example desk (12 flights from first lesson to navigation, with tracks around EGHP).
+
 ## Open items
 
 - Pricing section shows Free vs Advanced ($99.99/year or $11.99/month, monthly/yearly switch). The Free/Advanced feature split (e.g. 10-flight limit on Free) is a proposal — nothing enforces it yet, and checkout isn't wired up (CTAs go to sign-in).
