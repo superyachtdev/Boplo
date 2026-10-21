@@ -80,11 +80,11 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Checkout UX:** Boplo's own sheet with Stripe's Payment Element (cards, Apple Pay, Google Pay); subscription created `default_incomplete`, trial uses the pending SetupIntent, then `/billing/sync` polls until active. Redirect-based methods come back to `/flight-app.html#plan?...` and finish on load. A trial only counts as Advanced once Stripe has a card.
 - **Plans:** Advanced = active, trialing (with card) or past_due. Free: 15 flights (server-enforced, 402), 1 saved nav plan, replays only. Advanced-only: CSV import, instructor share, debrief tidy (server-enforced), plus currency, study, radio and simulator fly mode (client-gated). Export/print stays free. Any 402 opens the upgrade sheet.
 - **Landing:** pricing lists match the plans; "Start 7-day free trial" stores `boplo-intent` so the desk opens Plan & billing after sign-in.
-- **Legal:** `dist/terms.html`, `privacy.html`, `refunds.html` (14-day money-back guarantee, EU/UK withdrawal right and model form, Google Maps/Earth terms for the 3D tiles). Seller details are highlighted `<span class="fill" data-fill="seller|nif|address">` placeholders until filled. Sign-in screen and checkout link to them; landing footer has a Legal column. Drafts: get a lawyer to review before taking real money.
+- **Legal:** `dist/terms.html`, `privacy.html`, `refunds.html` (14-day money-back guarantee, EU/UK withdrawal right and model form, Google Maps/Earth terms for the 3D tiles). Seller is named as BOPLO (sole trader; owner asked for no address or tax ID on the pages). Sign-in screen and checkout link to them; landing footer has a Legal column. Drafts: get a lawyer to review before taking real money.
 - `_headers` Referrer-Policy changed from `no-referrer` to `strict-origin-when-cross-origin` (needed for referrer-restricted Google keys and Stripe).
 
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
-- Stripe is in test mode until the owner switches keys to live. Fill the legal placeholders and get the pages reviewed.
+- Stripe is in test mode until the owner switches keys to live. Get the legal pages reviewed.
 - Unused legacy CSS/JS in `dist/` could be cleaned up.
