@@ -140,6 +140,12 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Controls panel (K): sensitivity curve (expo), key rate, spring-to-centre, invert, auto-rudder, mouse yoke (Y), and joystick/yoke axis mapping with Detect, reverse and a throttle-lever axis. Saved in localStorage 'boplo-sim-ctl' style store key 'ctl'.
 - Takeoff "launch" fix: runways and the datum are never shifted while the aircraft is on them; far runways are resampled lazily when within 9 km.
 
+## Simulator practice mode (2026-10-22, Claude)
+- Sim page "Practise at any airfield": pick any airfield in the pilot's country (datalist from /airfields/<CC>.json) and a runway end (from /runways/<CC>.json), then Take-off, Circuit, Long final (6 NM) or Short final (2 NM). Advanced only.
+- flight-app.js openPractice() builds a short route on the chosen end and calls openSim with src.practice = {kind, end}; finals start in the air with no departure airport.
+- flight-sim.js: O.practice forces the runway end, flies finals straight in on a 3° glidepath, starts configured (flaps, trim, power from BoploPhysics.approachPower, which flies a throwaway copy of the aircraft to find the power for a 3° descent), ends a take-off at 1,000 ft AAL, and the debrief grades glidepath, speed, centreline and touchdown point (or roll centreline, lift-off and Vy for take-offs).
+- Gotcha: path.project() is stateful (search cursor); don't call it for setup maths, use path.S / path.P.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
