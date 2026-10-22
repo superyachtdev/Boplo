@@ -119,7 +119,7 @@ Built from market research: students quit over cost overruns, lost momentum and 
 ## Simulator aircraft (2026-10-22, Claude)
 - `dist/flight-aircraft.js` (`window.BoploAircraft`) builds nine training types as glTF binaries in code from short specs in metres: Cessna 152 and 172, Piper PA-28 Warrior, Diamond DA40 and DA20, Tecnam P2008, Robin DR400, Cirrus SR20 and Piper J-3 Cub. Specs cover high or low wing, struts, cranked tips, conventional or T-tail, tricycle or tailwheel, fairings, cabin or bubble canopy and a generic livery (no manufacturer marks).
 - `model(id)` turns book figures (stall, rotate, approach, cruise, top speed, climb) into the sim's thrust and drag. `flight-sim.js` uses them for lift-off, stall, approach speeds, autopilot targets and overspeed. The Cub sits nose-up on its tailwheel (`groundAtt`) and raises the tail during the take-off roll.
-- The Simulator page has an Aircraft picker (`ui.sim.ac`, kept in localStorage `boplo-sim-ac`), with side-view icons from `profileSVG()`. "Match my logbook" maps the flight's aircraft text with `match()` (for example "PA-28 Warrior" → pa28), falling back to the profile aircraft and then the C172.
+- The Simulator page has an Aircraft picker (`ui.sim.ac`, kept in localStorage `boplo-sim-ac`), with rendered images (`dist/aircraft/<id>.webp`, regenerate with `scripts/aircraft-renders`: serve a folder with render.html + flight-aircraft.js, run render.mjs, then `python3 composite.py r dist/aircraft`). "Match my logbook" maps the flight's aircraft text with `match()` (for example "PA-28 Warrior" → pa28), falling back to the profile aircraft and then the C172.
 
 ## Open items
 

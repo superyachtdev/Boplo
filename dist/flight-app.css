@@ -992,16 +992,24 @@ details.more .fields{padding:0 16px 16px}
 @media (max-width:960px){.fc-basis{display:flex;width:100%;border-radius:16px}.fc-basis button{flex:1 1 auto;padding:0 10px;font-size:13px;border-radius:12px}}
 
 /* ===== simulator aircraft picker ===== */
-.ac-pick{margin:4px 0 8px}
-.ac-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.ac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:10px}
-.ac-card{display:grid;gap:6px;text-align:left;padding:14px;border-radius:var(--r-ui,16px);background:#fff;border:1px solid var(--hair-l);transition:border-color .2s,box-shadow .2s,transform .2s;align-content:start}
-.ac-card:hover{border-color:rgba(10,98,255,.35);transform:translateY(-1px)}
-.ac-card.on{border-color:var(--electric);box-shadow:0 0 0 3px rgba(10,98,255,.15)}
-.ac-card b{font-weight:620;font-size:15px}
-.ac-card small{color:var(--ink-3);font-size:13px;line-height:1.4}
-.ac-perf{font-size:12px;color:var(--electric);font-weight:600;font-variant-numeric:tabular-nums}
-.ac-svg{width:100%;height:auto;aspect-ratio:220/90;border-radius:10px;background:linear-gradient(180deg,#EEF4FD,#F8FAFE)}
-.ac-svg .b{fill:#0B1430}.ac-svg .w{fill:var(--electric)}.ac-svg .g{fill:#9ED8FF}
-.ac-auto{display:grid;place-items:center;aspect-ratio:220/90;border-radius:10px;background:linear-gradient(180deg,#EEF4FD,#F8FAFE);color:var(--electric)}
-.ac-auto .ico{width:34px;height:34px}
+.ac-pick{margin:6px 0 10px}
+.ac-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ac-head .section-h{margin-bottom:2px}
+.ac-head .hint{margin:0}
+.ac-auto-btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;color:var(--ink-2);background:#fff;border:1px solid var(--hair-l)}
+.ac-auto-btn .ico{width:16px;height:16px}
+.ac-auto-btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.ac-card{display:flex;flex-direction:column;text-align:left;border-radius:18px;background:#fff;border:1px solid var(--hair-l);overflow:hidden;transition:border-color .2s,box-shadow .2s,transform .2s}
+.ac-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(5,11,31,.08)}
+.ac-card.on{border-color:var(--electric);box-shadow:0 0 0 3px rgba(10,98,255,.16),0 10px 24px rgba(10,98,255,.1)}
+.ac-img{position:relative;display:block;aspect-ratio:16/9;background:radial-gradient(120% 90% at 50% 40%,#FFFFFF 0%,#EAF1FC 70%,#DFE9F8 100%)}
+.ac-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.ac-badge{position:absolute;left:10px;top:10px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:650;color:#fff;background:var(--electric)}
+.ac-txt{display:grid;gap:5px;padding:12px 14px 14px}
+.ac-txt b{font-weight:620;font-size:15px}
+.ac-txt small{color:var(--ink-3);font-size:12.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ac-perf{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.ac-perf span{font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--well);border:1px solid var(--hair-l);border-radius:999px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.ac-card.on .ac-perf span{color:var(--electric);background:rgba(10,98,255,.06);border-color:rgba(10,98,255,.15)}
+@media (max-width:960px){.ac-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ac-txt small{display:none}.ac-txt{padding:10px 12px 12px}.ac-txt b{font-size:14px}}

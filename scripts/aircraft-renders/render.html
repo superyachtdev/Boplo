@@ -1,0 +1,43 @@
+<!doctype html><html><head><style>html,body{margin:0;background:transparent}canvas{display:block}</style><script src="flight-aircraft.js"></script></head><body><canvas id="c" width="1200" height="700"></canvas>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const A = BoploAircraft.build(id), T = A.type, u8 = A.glb, dv = new DataView(u8.buffer);
+const jl = dv.getUint32(12, true), J = JSON.parse(new TextDecoder().decode(u8.slice(20, 20 + jl))), bin = 20 + jl + 8;
+const acc = i => { const a = J.accessors[i], v = J.bufferViews[a.bufferView], o = bin + v.byteOffset; return a.componentType === 5125 ? new Uint32Array(u8.buffer.slice(o, o + v.byteLength)) : new Float32Array(u8.buffer.slice(o, o + v.byteLength)); };
+const cv = document.getElementById('c'), gl = cv.getContext('webgl', { preserveDrawingBuffer: true, antialias: true, premultipliedAlpha: false, alpha: true }); gl.getExtension('OES_element_index_uint');
+const vs = `attribute vec3 p;attribute vec3 n;attribute vec4 c;uniform mat4 M;uniform mat4 V;varying vec4 vc;varying vec3 vn;varying vec3 vw;void main(){vec4 w=M*vec4(p,1.);vw=w.xyz;vn=mat3(M)*n;vc=c;gl_Position=V*w;}`;
+const fs = `precision highp float;varying vec4 vc;varying vec3 vn;varying vec3 vw;uniform vec3 E;uniform float R;uniform float Mt;
+void main(){vec3 N=normalize(vn);vec3 Vd=normalize(E-vw);if(dot(N,Vd)<0.)N=-N;
+vec3 L1=normalize(vec3(.35,.85,.55)),L2=normalize(vec3(-.6,.3,-.4));
+vec3 base=pow(vc.rgb,vec3(2.2));
+float hemi=.5+.5*N.y;vec3 amb=mix(vec3(.30,.32,.30),vec3(.62,.70,.82),hemi)*.55;
+float d1=max(dot(N,L1),0.),d2=max(dot(N,L2),0.)*.35;
+vec3 H=normalize(L1+Vd);float sp=pow(max(dot(N,H),0.),mix(90.,14.,R))*mix(1.1,.12,R);
+float fr=pow(1.-max(dot(N,Vd),0.),4.)*.35*(1.-R*.6);
+vec3 col=base*(amb+vec3(1.,.97,.92)*d1*1.05+vec3(.7,.8,1.)*d2)+vec3(sp)+fr*vec3(.75,.85,1.)*(.4+Mt);
+col=col/(col+vec3(.85))*1.6;col=pow(col,vec3(1./2.2));gl_FragColor=vec4(col,1.);}`;
+const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) document.title = gl.getShaderInfoLog(x); return x; };
+const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); gl.useProgram(pr);
+const mul = (a, b) => { const r = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; r[i * 4 + j] = s; } return r; };
+const persp = (f, a, n, fa) => { const t = 1 / Math.tan(f / 2); return new Float32Array([t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0]); };
+const look = (e, c, up) => { const z = e.map((v, i) => v - c[i]), zl = Math.hypot(...z); z.forEach((v, i) => z[i] = v / zl); const x = [up[1] * z[2] - up[2] * z[1], up[2] * z[0] - up[0] * z[2], up[0] * z[1] - up[1] * z[0]], xl = Math.hypot(...x); x.forEach((v, i) => x[i] = v / xl); const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]]; return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1]); };
+// framed by wingspan: three-quarter front view from the left, slightly above
+const D = T.span * 1.02, az = 38 * Math.PI / 180, el = 15 * Math.PI / 180;
+const E = [Math.sin(az) * Math.cos(el) * D, A.wheelDrop * .7 + Math.sin(el) * D, Math.cos(az) * Math.cos(el) * D];
+const C0 = [0, A.wheelDrop * .62, -T.len * .06];
+const V = mul(persp(.62, cv.width / cv.height, .1, 200), look(E, C0, [0, 1, 0]));
+const ga = A.groundAtt * Math.PI / 180, cg = Math.cos(ga), sg = Math.sin(ga);
+const M0 = new Float32Array([1, 0, 0, 0, 0, cg, -sg, 0, 0, sg, cg, 0, 0, A.wheelDrop, 0, 1]);
+gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+gl.uniformMatrix4fv(gl.getUniformLocation(pr, 'V'), false, V); gl.uniform3fv(gl.getUniformLocation(pr, 'E'), E);
+const buf = (d, t = gl.ARRAY_BUFFER) => { const b = gl.createBuffer(); gl.bindBuffer(t, b); gl.bufferData(t, d, gl.STATIC_DRAW); return b; };
+const ROUGH = { paint: [.3, .05], matte: [.75, .1], glass: [.05, .9], blades: [.5, .2] };
+J.nodes.forEach(n => { if (n.name === 'disc') return; const m = J.meshes[n.mesh].primitives[0], t = n.translation || [0, 0, 0]; const M = mul(M0, new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t[0], t[1], t[2], 1]));
+  gl.uniformMatrix4fv(gl.getUniformLocation(pr, 'M'), false, M); gl.uniform1f(gl.getUniformLocation(pr, 'R'), ROUGH[n.name][0]); gl.uniform1f(gl.getUniformLocation(pr, 'Mt'), ROUGH[n.name][1]);
+  for (const [nm, d, k] of [['p', acc(m.attributes.POSITION), 3], ['n', acc(m.attributes.NORMAL), 3], ['c', acc(m.attributes.COLOR_0), 4]]) { buf(d); const l = gl.getAttribLocation(pr, nm); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, k, gl.FLOAT, false, 0, 0); }
+  const idx = acc(m.indices); buf(idx, gl.ELEMENT_ARRAY_BUFFER); gl.drawElements(gl.TRIANGLES, idx.length, gl.UNSIGNED_INT, 0); });
+// project the ground footprint for the shadow
+const proj = p => { const v = [p[0], p[1], p[2], 1], o = [0, 0, 0, 0]; for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) o[j] += V[k * 4 + j] * v[k]; return [(o[0] / o[3] * .5 + .5) * cv.width, (1 - (o[1] / o[3] * .5 + .5)) * cv.height]; };
+window.shadow = { c: proj([0, 0, -T.len * .1]), l: proj([T.span / 2, 0, 0]), r: proj([-T.span / 2, 0, 0]), f: proj([0, 0, T.len * .4]), b: proj([0, 0, -T.len * .6]) };
+window.done = true;
+</script></body></html>

@@ -126,8 +126,8 @@ window.BoploAircraft = (() => {
     const tipX = WG.secs[WG.secs.length - 1][0];
     const yAt = x => { if (WG.crank && x > WG.crank.x) return rootY + WG.crank.x * Math.tan(WG.dih * D2R) + (x - WG.crank.x) * Math.tan(WG.crank.dih * D2R); return rootY + x * Math.tan(WG.dih * D2R); };
     const secAtX = x => { const S = WG.secs; let i = 0; while (i < S.length - 2 && S[i + 1][0] < x) i++; const [x0, s0, c0] = S[i], [x1, s1, c1] = S[i + 1], k = (x - x0) / ((x1 - x0) || 1); return [WG.le - (s0 + (s1 - s0) * k), c0 + (c1 - c0) * k]; };
-    const xs = [...new Set([0, ...WG.secs.map(s => s[0]), ...(WG.crank ? [WG.crank.x] : []), tipX * .25, tipX * .5, tipX * .75, tipX - .4, tipX - .05])].filter(x => x <= tipX).sort((a, b) => a - b);
-    const tipCol = x => x >= tipX - .4 && T.tips !== false ? CACC : CBASE;
+    const xs = [...new Set([0, ...WG.secs.map(s => s[0]), ...(WG.crank ? [WG.crank.x] : []), tipX * .25, tipX * .5, tipX * .75, tipX - .42, tipX - .4, tipX - .05])].filter(x => x <= tipX).sort((a, b) => a - b);
+    const tipCol = x => x >= tipX - .41 && T.tips !== false ? CACC : CBASE;
     for (const side of [1, -1]) {
       const rings = xs.map(x => { const [zLE, c] = secAtX(x), y = yAt(x); return wf.map(([s, v]) => [side * Math.max(x, rs.w * .3), y + v * c, zLE - s * c]); });
       loft('paint', side > 0 ? rings : rings.map(r => r.slice().reverse()), xs.map(tipCol), { capEnd: true });
@@ -145,11 +145,11 @@ window.BoploAircraft = (() => {
     // ---- tail ----
     const TL = T.tail, tf = foil(.1, 0), tailS = secAt(.94), finRootZ = FU.tailZ + TL.fin[0][1] + .05, finTop = TL.fin[1][0] || 1;
     const finH = TL.fin[1][0], finLE = h => finRootZ - h * TL.finSweep / finH * .9;
-    const fin = [0, .3, .6, .85, 1].map(k => { const h = finH * k, c = TL.fin[0][1] + (TL.fin[1][1] - TL.fin[0][1]) * k; return tf.map(([s, v]) => [v * c, tailS.cy + tailS.h * .3 + h, finLE(h) - s * c]); });
-    loft('paint', fin, [CBASE, CBASE, CTIP, CTIP, CTIP], { capEnd: true });
-    const stabY = TL.type === 'T' ? tailS.cy + tailS.h * .3 + finH * .98 : tailS.cy + (T.wing.pos === 'low' ? tailS.h * .05 : 0);
+    const fin = [0, .3, .59, .6, .85, 1].map(k => { const h = finH * k, c = TL.fin[0][1] + (TL.fin[1][1] - TL.fin[0][1]) * k; return tf.map(([s, v]) => [v * c, tailS.cy + tailS.h * .3 + h, finLE(h) - s * c]); });
+    loft('paint', fin, [CBASE, CBASE, CBASE, CTIP, CTIP, CTIP], { capEnd: true });
+    const stabY = TL.type === 'T' ? tailS.cy + tailS.h * .3 + finH - .06 : tailS.cy + (T.wing.pos === 'low' ? tailS.h * .05 : 0);
     const stabLE = TL.type === 'T' ? finLE(finH) - .05 : FU.tailZ + TL.stab[0][1] + .15;
-    for (const side of [1, -1]) { const span = TL.stab[1][0], r = [0, .5, 1].map(k => { const c = TL.stab[0][1] + (TL.stab[1][1] - TL.stab[0][1]) * k; return tf.map(([s, v]) => [side * Math.max(span * k, .05), stabY + v * c, stabLE - k * .12 - s * c]); }); loft('paint', side > 0 ? r : r.map(q => q.slice().reverse()), [CBASE, CBASE, CTIP], { capEnd: true }); }
+    for (const side of [1, -1]) { const span = TL.stab[1][0], r = [0, .5, .72, .74, 1].map(k => { const c = TL.stab[0][1] + (TL.stab[1][1] - TL.stab[0][1]) * k; return tf.map(([s, v]) => [side * Math.max(span * k, .05), stabY + v * c, stabLE - k * .12 - s * c]); }); loft('paint', side > 0 ? r : r.map(q => q.slice().reverse()), [CBASE, CBASE, CBASE, CTIP, CTIP], { capEnd: true }); }
 
     // ---- landing gear ----
     const G = T.gear, belly = secAt(rootT).cy - secAt(rootT).h / 2, wheelY = belly - G.legLen;
