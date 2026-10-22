@@ -1536,7 +1536,7 @@
 
   /* ================= simulator ================= */
   ui.sim = ui.sim || { wind: 'calm', start: 'ground' };
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=4'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=5'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
     if (mode === 'fly' && !isAdv()) return upgradeSheet('Flying the simulator yourself is part of Advanced. Replays are free.');
@@ -1563,7 +1563,8 @@
         id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind,
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: true
+        runwayHdg: rwyHdg(dep), land: true,
+        depAirport: dep ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
     } catch (x) { toast(x.message); }
   }

@@ -122,6 +122,74 @@ window.BoploSim = (() => {
     return { P, S, len, at, project, reset: () => { hint = 0; lastS = null; }, seed: v => { lastS = v; hint = 0; for (let i = 0; i < S.length - 1; i++) if (S[i] <= v) hint = i; } };
   }
 
+  /* ---------------- runways: real geometry from OurAirports, drawn by us ---------------- */
+  const rwCache = {};
+  const loadRunways = cc => !cc || !/^[A-Z]{2}$/.test(cc) ? Promise.resolve({}) : (rwCache[cc] ||= fetch(`/runways/${cc}.json`).then(r => r.ok ? r.json() : { rows: {} }).then(d => d.rows || {}).catch(() => ({})));
+  const PAVED = s => s === 'asphalt' || s === 'concrete' || s === 'other' || !s;
+  // ICAO threshold stripe count by runway width
+  const stripesFor = w => w >= 60 ? 16 : w >= 45 ? 12 : w >= 30 ? 8 : w >= 23 ? 6 : 4;
+  function runwayCanvas(rw) {
+    const W = rw.wid, Lm = rw.len, cw = 256, ch = Math.min(4096, Math.max(512, Math.round(Lm * 2.2)));
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d');
+    const mx = cw / W, my = ch / Lm; // pixels per metre across and along
+    const Y = u => ch - u * my;        // u metres from end A (canvas bottom) to end B (top)
+    const paved = PAVED(rw.surf);
+    // surface
+    const base = rw.surf === 'concrete' ? [138, 140, 142] : paved ? [52, 55, 60] : rw.surf === 'grass' ? [86, 118, 58] : rw.surf === 'water' ? [40, 80, 120] : [150, 126, 92];
+    g.fillStyle = `rgb(${base})`; g.fillRect(0, 0, cw, ch);
+    // texture: speckle, tyre marks on pavement, mowing stripes on grass
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < ch * 3; i++) { const v = (rnd() - .5) * (paved ? 26 : 34); g.fillStyle = `rgba(${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${v > 0 ? 255 : 0},${Math.abs(v) / 255})`; g.fillRect(rnd() * cw, rnd() * ch, 2 + rnd() * 3, 2 + rnd() * 6); }
+    if (!paved && rw.surf === 'grass') { for (let x = 0; x < cw; x += cw / 6) { g.fillStyle = (x / (cw / 6)) % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)'; g.fillRect(x, 0, cw / 6, ch); } }
+    if (paved) {
+      g.fillStyle = 'rgba(15,15,15,.35)';
+      for (const end of [0, 1]) for (let k = 0; k < 40; k++) { const u0 = 250 + rnd() * 500, x = cw * (.38 + rnd() * .24); const yy = end ? Y(Lm - u0) : Y(u0); g.fillRect(x, yy - 60 * my, 3 + rnd() * 4, (60 + rnd() * 220) * my * (end ? 1 : -1)); }
+    }
+    if (paved) {
+      const white = 'rgba(244,244,240,.92)'; g.fillStyle = white;
+      // edge lines (where wide enough) and centreline: 30 m dashes, 20 m gaps
+      if (W >= 18) { g.fillRect(.9 * mx, 0, .9 * mx, ch); g.fillRect(cw - 1.8 * mx, 0, .9 * mx, ch); }
+      const cl = Math.max(.3, W >= 30 ? .9 : .45) * mx;
+      for (let u = 6 + 30 + 12 + 9 + 12 + 10; u < Lm - (6 + 30 + 12 + 9 + 12 + 10); u += 50) g.fillRect(cw / 2 - cl / 2, Y(u + 30), cl, 30 * my);
+      const endMarks = (ident, disp, flip) => {
+        const at = u => flip ? Lm - u : u; // distance from this end's threshold
+        const put = (u, len, x, w) => { const a = at(u), b = at(u + len); g.fillRect(x, Y(Math.max(a, b)), w, Math.abs(b - a) * my); };
+        const d = Math.min(disp || 0, Lm * .3);
+        if (d > 20) { // displaced threshold: arrows and a bar
+          g.fillRect(0, Y(at(d)) - (flip ? 0 : 3 * my), cw, 3 * my);
+          for (let u = 20; u < d - 20; u += 40) put(u, 18, cw / 2 - .45 * mx, .9 * mx);
+        }
+        const n = stripesFor(W), sw = 1.8, gp = Math.max(.6, (W - 6 - n * sw) / n);
+        for (let i = 0; i < n; i++) put(d + 6, 30, (3 + i * (sw + gp) + (i >= n / 2 ? gp : 0)) * mx, sw * mx);
+        // designator: number, with any L/R/C letter nearer the threshold
+        const m = String(ident || '').toUpperCase().match(/^(\d{1,2})([LRC]?)$/);
+        if (m) {
+          const num = m[1].padStart(2, '0'), letter = m[2], u0 = d + 6 + 30 + 12;
+          const glyph = (txt, u, hM) => {
+            g.save(); const yy = Y(at(u + hM / 2)); g.translate(cw / 2, yy); if (flip) g.rotate(Math.PI);
+            g.scale(1, my / mx); const px = hM * mx; g.font = `700 ${px}px "Archivo Narrow", "Arial Narrow", Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+            const w = g.measureText(txt).width, maxW = cw * .8; if (w > maxW) g.scale(maxW / w, 1);
+            g.fillText(txt, 0, 0); g.restore();
+          };
+          if (letter) { glyph(letter, u0, 9); glyph(num, u0 + 9 + 6, 9); } else glyph(num, u0, 9);
+        }
+        // aiming point and touchdown zone on longer runways
+        if (Lm >= 800) {
+          const aim = Lm >= 2400 ? 400 : Lm >= 1200 ? 300 : 250, aw = W >= 30 ? 6 : 4;
+          put(d + aim, Lm >= 1200 ? 45 : 30, cw / 2 - (W * .18 + aw) * mx, aw * mx); put(d + aim, Lm >= 1200 ? 45 : 30, cw / 2 + W * .18 * mx, aw * mx);
+          if (Lm >= 1500 && W >= 30) for (const u of [150, 450, 600, 750, 900].filter(u => u < Lm / 2 - 100)) { const bars = u < 300 ? 3 : u < 700 ? 2 : 1; for (let k = 0; k < bars; k++) { put(d + u, 22.5, cw / 2 - (W * .3 + k * 2.6) * mx, 1.8 * mx); put(d + u, 22.5, cw / 2 + (W * .3 + k * 2.6 - 1.8) * mx, 1.8 * mx); } }
+        }
+      };
+      endMarks(rw.le, rw.leD, false); endMarks(rw.he, rw.heD, true);
+    } else {
+      // unpaved: white edge markers every 90 m and painted end bars
+      g.fillStyle = 'rgba(250,250,245,.9)';
+      for (let u = 0; u < Lm; u += 90) { g.fillRect(0, Y(u) - 3 * my, 1.2 * mx, 3 * my); g.fillRect(cw - 1.2 * mx, Y(u) - 3 * my, 1.2 * mx, 3 * my); }
+      g.fillRect(0, Y(2), cw, 1.2 * my); g.fillRect(0, Y(Lm - .8), cw, 1.2 * my);
+    }
+    return c;
+  }
+
   /* ---------------- aircraft model: a low-wing trainer, built as a glTF binary in code ----------------
      glTF axes: +Y up, +Z forward, +X to the left wing. Units are metres. */
   function aircraftGLB() {
@@ -330,10 +398,72 @@ window.BoploSim = (() => {
     if (P.length > 2) P = simplify(P, 35);
     let synthetic = false;
     const span = P.reduce((m, p) => Math.max(m, Math.hypot(p[0], p[1])), 0);
-    if (P.length < 2 || span < 400) { P = circuitAround(P[0], (O.runwayHdg || 0) * D2R); synthetic = true; }
+    /* ---- runways at the departure and arrival airfields ---- */
+    const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const unit = (a, b) => { const d = dist2(a, b) || 1; return [(b[0] - a[0]) / d, (b[1] - a[1]) / d]; };
+    const add = (p, v, k) => [p[0] + v[0] * k, p[1] + v[1] * k];
+    const leftOf = v => [-v[1], v[0]];
+    const windFrom = O.wind && O.wind.spd >= 5 ? O.wind.dir * D2R : null;
+    async function airportRunways(ap) {
+      if (!ap || !Number.isFinite(ap.lat)) return null;
+      const C0 = F.to(ap.lat, ap.lng), rows = (await loadRunways(ap.cc))[ap.code] || [];
+      const list = rows.map(r => { const A = F.to(r[2], r[3]), B = F.to(r[4], r[5]), len = dist2(A, B); return len < 120 ? null : { A, B, len, wid: clamp(r[7] || (PAVED(r[8]) ? (len > 1800 ? 45 : len > 1100 ? 30 : 23) : 18), 10, 75), le: r[0], he: r[1], surf: r[8], lit: r[9], leD: r[10] || 0, heD: r[11] || 0, approx: r[12], code: ap.code }; }).filter(Boolean);
+      return { ap, C0, list };
+    }
+    const [depR, arrR0] = await Promise.all([airportRunways(O.depAirport), O.arrAirport && O.depAirport && O.arrAirport.code === O.depAirport.code ? null : airportRunways(O.arrAirport)]);
+    const arrR = arrR0 || depR;
+    const nearAp = (R0, p, m = 3500) => R0 && dist2(R0.C0, p) < m;
+    const depOn = nearAp(depR, P[0]) && O.start !== 'air', arrOn = O.land !== false && nearAp(arrR, P[P.length - 1]);
+    // a made-up grass strip when an airfield has no published runway, laid along the way you'll go
+    const stripFor = (R0, hdg) => { const f = [Math.sin(hdg), Math.cos(hdg)]; const A = add(R0.C0, f, -275), B = add(R0.C0, f, 275); const r = { A, B, len: 550, wid: 18, le: '', he: '', surf: 'grass', leD: 0, heD: 0, approx: 2, code: R0.ap.code }; R0.list.push(r); return r; };
+    const endsOf = rw => [{ rw, T: rw.A, far: rw.B, disp: rw.leD, id: rw.le }, { rw, T: rw.B, far: rw.A, disp: rw.heD, id: rw.he }].map(e => ({ ...e, dir: unit(e.T, e.far), hdg: Math.atan2(e.far[0] - e.T[0], e.far[1] - e.T[1]) }));
+    // best runway end: into a real wind, otherwise lined up with where the route goes, preferring long paved runways
+    function pickEnd(R0, want) {
+      if (!R0.list.length) stripFor(R0, want ?? windFrom ?? 0);
+      let best = null, bs = -Infinity;
+      for (const rw of R0.list) for (const e of endsOf(rw)) {
+        const head = windFrom != null ? Math.cos(windFrom - e.hdg) * O.wind.spd : 0;
+        const align = want != null ? Math.cos(wrap180((want - e.hdg) * R2D) * D2R) : 0;
+        const sc = (windFrom != null ? head * 3 : 0) + align * 6 + Math.min(rw.len, 2500) / 1000 + (PAVED(rw.surf) ? 1 : 0) - (rw.approx ? .5 : 0);
+        if (sc > bs) { bs = sc; best = e; }
+      }
+      return best;
+    }
+    const bearing = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);
+    let depE = null, arrE = null, rwys = [], rollEnd = 0;
+    const circuitLike = span < 6000 && (!arrR || !depR || arrR === depR);
+    if (depOn || arrOn) {
+      if (circuitLike && depOn) {
+        // circuits or a short local flight: a standard left-hand circuit off the real runway
+        const e = pickEnd(depR, P.length > 1 ? bearing(P[0], P.find(p => dist2(p, P[0]) > 800) || P[1]) : null);
+        depE = arrE = e; const f = e.dir, l = leftOf(f), at = (a, b) => add(add(e.T, f, a), l, b), Ln = e.rw.len;
+        const td = Math.max(e.disp, 0);
+        P = [at(25, 0), at(Ln, 0), at(Ln + 800, 0), at(Ln + 1150, 380), at(Ln + 1150, 1000), at(-900, 1000), at(-1350, 560), at(-1300, 0), at(td, 0), at(Ln - 60, 0)];
+        synthetic = true; rollEnd = Ln - 60 - td;
+      } else {
+        const outbound = depOn ? (P.find(p => dist2(p, depR.C0) > 2500) || P[P.length - 1]) : null;
+        if (depOn) depE = pickEnd(depR, outbound && dist2(outbound, depR.C0) > 1000 ? bearing(depR.C0, outbound) : null);
+        const inbound = arrOn ? ([...P].reverse().find(p => dist2(p, arrR.C0) > 3500) || P[0]) : null;
+        if (arrOn) arrE = pickEnd(arrR, inbound && dist2(inbound, arrR.C0) > 1000 ? bearing(inbound, arrR.C0) : null);
+        const clearDep = depE ? depE.rw.len + 1800 : 0, clearArr = arrE ? 6000 : 0;
+        let mid = P.filter(p => (!depE || dist2(p, depR.C0) > clearDep) && (!arrE || dist2(p, arrR.C0) > clearArr));
+        const out = [];
+        if (depE) out.push(add(depE.T, depE.dir, 25), depE.far, add(depE.far, depE.dir, 1800));
+        else out.push(P[0]);
+        out.push(...mid);
+        if (arrE) {
+          const f = arrE.dir, Ta = add(arrE.T, f, Math.max(arrE.disp, 0)), FA = add(Ta, f, -5500), last = out[out.length - 1];
+          const inc = unit(last, FA), turn = Math.acos(clamp(inc[0] * f[0] + inc[1] * f[1], -1, 1)) * R2D;
+          if (turn > 65) { const l = leftOf(f), side = Math.sign((last[0] - Ta[0]) * l[0] + (last[1] - Ta[1]) * l[1]) || 1; out.push(add(add(Ta, f, -2500), l, side * 3200), add(add(Ta, f, -7000), l, side * 1500)); }
+          out.push(FA, Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0);
+        } else out.push(P[P.length - 1]);
+        P = out.filter((p, i, a) => !i || dist2(p, a[i - 1]) > 15);
+      }
+      rwys = [...new Set([...(depR?.list || []), ...(arrR?.list || [])])];
+    } else if (P.length < 2 || span < 400) { P = circuitAround(P[0], (O.runwayHdg || 0) * D2R); synthetic = true; }
     // circuits and local tracks: start along the first stretch of the route
     const path = buildPath(P);
-    const circuit = span < 6000 || synthetic;
+    const circuit = circuitLike || synthetic;
     const L = path.len;
 
     /* ---- 3D scenery (CesiumJS) ---- */
@@ -413,8 +543,12 @@ window.BoploSim = (() => {
         return pts.map(() => null);
       } catch { return pts.map(() => null); }
     };
-    const last = P[P.length - 1], sameEnd = Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
-    const [h0, h1] = await mostDetailed(sameEnd ? [P[0], P[0]] : [P[0], last]);
+    const landPt = arrE ? add(arrE.T, arrE.dir, Math.max(arrE.disp, 0)) : P[P.length - 1];
+    const last = landPt, sameEnd = !arrE && Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
+    // runway surfaces: sample the ground along each runway (centre and both sides) so our runway sits on the scenery
+    const rwSt = rwys.map(rw => { const n = Math.max(2, Math.ceil(rw.len / 45) + 1), f = unit(rw.A, rw.B), l = leftOf(f), pts = []; for (let i = 0; i < n; i++) { const c = add(rw.A, f, rw.len * i / (n - 1)); pts.push(c, add(c, l, rw.wid * .4), add(c, l, -rw.wid * .4)); } return { rw, n, f, l, pts, h: [] }; });
+    const hs = await mostDetailed([P[0], sameEnd ? P[0] : last, ...rwSt.flatMap(r => r.pts)]);
+    const [h0, h1] = hs;
     if (!alive) return { close: destroy };
     // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
     let geoN = 0;
@@ -423,6 +557,41 @@ window.BoploSim = (() => {
     let g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
     // if the detailed start height wasn't ready in time, fix the datum from the first real ground reading at the start
     let datumFixed = !(tileset && h0 == null);
+    // shape each runway: robust end heights, a straight slope between them, small local variation, never through the ground
+    { let k = 2; const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+      for (const r of rwSt) {
+        const raw = []; for (let i = 0; i < r.n; i++, k += 3) raw.push(med([hs[k], hs[k + 1], hs[k + 2]]));
+        const ok = raw.filter(Number.isFinite), fallback = ok.length ? med(ok) : g0;
+        const ha = med(raw.slice(0, 3)) ?? fallback, hb = med(raw.slice(-3)) ?? fallback;
+        r.h = raw.map((v, i) => { const lin = ha + (hb - ha) * i / (r.n - 1); return Number.isFinite(v) ? lin + clamp(v - lin, -1.2, 1.2) : lin; });
+        for (let i = 1; i < r.n - 1; i++) r.h[i] = (r.h[i - 1] + r.h[i] * 2 + r.h[i + 1]) / 4;
+        r.h = r.h.map(v => v + .35);
+      }
+    }
+    const rwHeight = (x, z) => {
+      for (const r of rwSt) {
+        const dx = x - r.rw.A[0], dz = z - r.rw.A[1], u = dx * r.f[0] + dz * r.f[1], w = dx * r.l[0] + dz * r.l[1];
+        if (u < -8 || u > r.rw.len + 8 || Math.abs(w) > r.rw.wid / 2 + 6) continue;
+        const t = clamp(u / r.rw.len, 0, 1) * (r.n - 1), i = Math.min(r.n - 2, Math.floor(t)), a = t - i;
+        return r.h[i] + (r.h[i + 1] - r.h[i]) * a;
+      }
+      return null;
+    };
+    // draw them: a textured strip mesh with real markings, receiving shadows
+    for (const r of rwSt) {
+      try {
+        const n = r.n, pos = new Float64Array(n * 6), nor = new Float32Array(n * 6), sts = new Float32Array(n * 4), idx = new Uint16Array((n - 1) * 6);
+        for (let i = 0; i < n; i++) {
+          const c = add(r.rw.A, r.f, r.rw.len * i / (n - 1));
+          [add(c, r.l, r.rw.wid / 2), add(c, r.l, -r.rw.wid / 2)].forEach((p, j) => { const q = LLH(p[0], p[1], r.h[i]), nn = C.Ellipsoid.WGS84.geodeticSurfaceNormal(q, new C.Cartesian3()); pos.set([q.x, q.y, q.z], (i * 2 + j) * 3); nor.set([nn.x, nn.y, nn.z], (i * 2 + j) * 3); sts.set([j, i / (n - 1)], (i * 2 + j) * 2); });
+          if (i < n - 1) idx.set([i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2], i * 6);
+        }
+        const geometry = new C.Geometry({ attributes: { position: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.DOUBLE, componentsPerAttribute: 3, values: pos }), normal: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 3, values: nor }), st: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 2, values: sts }) }, indices: idx, primitiveType: C.PrimitiveType.TRIANGLES, boundingSphere: C.BoundingSphere.fromVertices(pos) });
+        const prim = scene.primitives.add(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry }), appearance: new C.MaterialAppearance({ material: C.Material.fromType('Image', { image: runwayCanvas(r.rw).toDataURL('image/png') }), flat: true, faceForward: true, translucent: false, closed: false }), asynchronous: false, shadows: C.ShadowMode.RECEIVE_ONLY }));
+        exclude.push(prim);
+      } catch (e) { console.warn('runway', e); }
+    }
+    if (rwSt.length) { const a = rwHeight(P[0][0], P[0][1]); if (a != null && depE) g0 = a; const b = rwHeight(landPt[0], landPt[1]); if (b != null && arrE) g1 = b; }
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
@@ -483,7 +652,7 @@ window.BoploSim = (() => {
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
-    const ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = circuit ? 0.06 : 330 * FT / NM;
+    const AIM = arrE ? Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3) : 0, ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = arrE ? Math.max(120, rollEnd - AIM) : Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = circuit ? 0.06 : 330 * FT / NM;
     const groundStart = O.start !== 'air', landEnd = O.land !== false;
     const prof = s => { const up = groundStart ? g0 + Math.max(0, s - ROLL) * CG : cruise, dn = landEnd ? g1 + Math.max(0, L - TDZ - s) * DG : cruise; return Math.min(cruise, up, dn); };
 
@@ -505,8 +674,8 @@ window.BoploSim = (() => {
       const [x, z, h] = path.at(s); st.x = x; st.z = z; st.hdg = h * R2D; st.trk = st.hdg; st.bank = 0; st.crashed = st.landed = false;
       st.airT = airborne ? 10 : 0; st.flaps = 0; flapT = 0; st.landedOnce = false; st.touch = null;
       if (airborne) { st.ground = false; st.alt = Math.max(prof(s), (elevAt(x, z) ?? g0) + 150); st.v = (circuit ? 85 : 95) * KT; st.thr = .72; st.pitch = 0; }
-      else { st.ground = true; st.alt = elevAt(x, z) ?? g0; st.v = 0; st.thr = 0; st.pitch = 0; }
-      const gh = elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0); st.gnd = gh ?? (airborne ? st.alt - 300 : st.alt);
+      else { st.ground = true; st.alt = rwHeight(x, z) ?? elevAt(x, z) ?? g0; st.v = 0; st.thr = 0; st.pitch = 0; }
+      const gh = rwHeight(x, z) ?? elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0); st.gnd = gh ?? (airborne ? st.alt - 300 : st.alt);
       path.reset(); path.seed(s);
     }
     const replay = O.mode === 'replay';
@@ -612,7 +781,7 @@ window.BoploSim = (() => {
       st.thr += clamp(thrTarget - st.thr, -dt * .8, dt * .8);
       st.flaps += clamp(flapT - st.flaps, -dt * .25, dt * .25);
       let vk = st.v / KT;
-      const ge = elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; if (!datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(ge); }
+      const ge = rwHeight(st.x, st.z) ?? elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; if (!datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(ge); }
       if (!st.ground) st.airT = (st.airT || 0) + dt;
       if (st.ground) {
         st.bank += (0 - st.bank) * Math.min(1, dt * 6);
