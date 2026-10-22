@@ -6,7 +6,7 @@ export const PLANS = {
   monthly: { lookup: 'boplo_flight_advanced_monthly', amount: 1199, currency: 'usd', interval: 'month', label: 'Advanced monthly' },
   yearly: { lookup: 'boplo_flight_advanced_yearly', amount: 9999, currency: 'usd', interval: 'year', label: 'Advanced yearly' }
 };
-export const FREE_LIMITS = { flights: 15, navPlans: 1 };
+export const FREE_LIMITS = { flights: 15, navPlans: 1, shortFinals: 2 };
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const STRIPE_VERSION = '2024-06-20'; // pinned so response shapes stay stable
 

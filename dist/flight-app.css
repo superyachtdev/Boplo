@@ -1033,3 +1033,8 @@ details.more .fields{padding:0 16px 16px}
 .combo-list button span{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .combo-list button:hover,.combo-list button.on{background:#EEF4FF}
 .combo-none{margin:0;padding:10px;font-size:13.5px;color:var(--ink-3)}
+.pr-kind{position:relative}
+.pr-tag{justify-self:start;margin-bottom:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--ink-2);background:#EEF1F7}
+.pr-tag.free{color:#0B6B3A;background:#DDF7E6}
+.pr-kind.locked{opacity:.78}
+.pr-tag[hidden]{display:none}

@@ -1338,8 +1338,9 @@ window.BoploSim = (() => {
         ${replay ? '' : `<div><span>On the route</span><b>${tube}%</b></div><div><span>Average off track</span><b>${xte < .1 ? Math.round(xte * NM) + ' m' : xte.toFixed(2) + ' NM'}</b></div><div><span>Your best</span><b>${best != null ? Math.max(best, kind === 'crash' ? 0 : tube) + '%' : (kind === 'crash' ? '—' : tube + '%')}</b></div>`}</div>
         ${practiceFacts(kind)}
         ${replay || PR ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
-        <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button><button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button></div>`);
+        <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button>${O.noRetry ? '<button type="button" class="sim-btn" data-more>Unlimited practice</button>' : `<button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button>`}</div>`);
       wireX();
+      if (O.noRetry) { $('[data-more]').onclick = () => { destroy(); O.onUpgrade && O.onUpgrade(); }; return; }
       $('[data-again]').onclick = () => { ended = false; Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
     }
 
