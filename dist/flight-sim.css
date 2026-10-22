@@ -235,3 +235,6 @@
 .sim-radio.done .sr-row{opacity:.4;pointer-events:none}
 .sim-rh{margin:14px 0 8px;font-size:15px}
 .sim-radio [hidden]{display:none!important}
+.sim-score{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:16px;background:linear-gradient(120deg,rgba(10,98,255,.35),rgba(10,98,255,.12));border:1px solid rgba(158,216,255,.25)}
+.sim-score b{font-size:46px;line-height:1;font-weight:800;letter-spacing:-.03em}
+.sim-score span{display:grid;gap:2px;font-weight:650}.sim-score small{font-weight:500;color:rgba(222,233,255,.8);font-size:13px}

@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=9'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=10'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -1323,6 +1323,13 @@ window.BoploSim = (() => {
         if (!st.ground && st.agl > 50 * FT) { P0.vyN++; P0.vySum += Math.abs(kt - PF.vy); P0.clSum = (P0.clSum || 0) + pr.d; }
       }
     }
+    // one 0–100 landing score for the leaderboards: touchdown rate, touchdown point, centreline and speed
+    function landingScore() {
+      const P0 = pscore; if (!PR || !P0 || P0.td == null || !st.touch || st.crashed || PR.kind === 'takeoff') return null;
+      const c01 = v => Math.max(0, Math.min(1, v)), aim = Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3), fpm = Math.abs(st.touch.fpm || 0), vtd = (FM.p.vso || PF.vs * .9) * 1.1;
+      const parts = { rate: 40 * c01(1 - Math.max(0, fpm - 150) / 450), point: P0.td < 0 ? 0 : 25 * c01(1 - Math.abs(P0.td - aim) / 350), line: 20 * c01(1 - (P0.tdCl || 0) / 12), speed: 15 * c01(1 - Math.abs((P0.tdKt || 0) - vtd) / 15) };
+      return { score: Math.round(parts.rate + parts.point + parts.line + parts.speed), parts, fpm: -Math.round(fpm), td: Math.round(P0.td), cl: +(P0.tdCl || 0).toFixed(1), kt: Math.round(P0.tdKt || 0) };
+    }
     function practiceFacts(kind) {
       const P0 = pscore; if (!PR || !P0 || replay || kind === 'crash') return '';
       const g = (v, ok, fine) => v <= ok ? 'great' : v <= fine ? 'ok' : 'firm', row = (l, v, cls) => `<div class="pr-${cls}"><span>${l}</span><b>${v}</b></div>`;
@@ -1347,10 +1354,12 @@ window.BoploSim = (() => {
         ${kind === 'crash' ? `<p>${esc(st.crash)}</p>` : ld ? `<p>Touchdown at ${Math.abs(Math.round(touch.fpm / 10) * 10)} fpm with ${Math.abs(Math.round(touch.bank))}° of bank.</p>` : ''}
         <div class="sim-facts"><div><span>Time</span><b>${mmss(t)}</b></div><div><span>Flown</span><b>${(score.dist / NM).toFixed(1)} NM</b></div><div><span>Highest</span><b>${Math.round((score.maxAlt - geoN) / FT / 10) * 10} ft</b></div>
         ${replay ? '' : `<div><span>On the route</span><b>${tube}%</b></div><div><span>Average off track</span><b>${xte < .1 ? Math.round(xte * NM) + ' m' : xte.toFixed(2) + ' NM'}</b></div><div><span>Your best</span><b>${best != null ? Math.max(best, kind === 'crash' ? 0 : tube) + '%' : (kind === 'crash' ? '—' : tube + '%')}</b></div>`}</div>
+        ${(() => { const L = kind === 'land' && !replay ? landingScore() : null; return L ? `<div class="sim-score"><b>${L.score}</b><span>Landing score<small data-rank>${O.onResult ? 'Posting to the leaderboard…' : ''}</small></span></div>` : ''; })()}
         ${practiceFacts(kind)}${radioFacts()}
         ${replay || PR ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
         <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button>${O.noRetry ? '<button type="button" class="sim-btn" data-more>Unlimited practice</button>' : `<button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button>`}</div>`);
       wireX();
+      { const L = kind === 'land' && !replay ? landingScore() : null; if (L && O.onResult) Promise.resolve(O.onResult({ ...L, kind: PR.kind, rw: arrE?.id || '' })).then(t => { const el = $('[data-rank]'); if (el) el.textContent = t || ''; }).catch(() => { const el = $('[data-rank]'); if (el) el.textContent = ''; }); }
       if (O.noRetry) { $('[data-more]').onclick = () => { destroy(); O.onUpgrade && O.onUpgrade(); }; return; }
       $('[data-again]').onclick = () => { ended = false; if (RAD) { rPend.length = 0; RAD.calls.forEach(c => rPend.push({ ...c })); radioLog.length = 0; rStartT = 0; rBusy = false; radioHide(); } Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
     }

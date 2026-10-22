@@ -152,6 +152,13 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Logbook scan: Import sheet "Scan paper logbook pages". POST /flight/flights/scan (Advanced, 40 a day, up to ~7 MB body) sends the photo to Claude (ANTHROPIC_API_KEY, SCAN_MODEL or AI_MODEL) or Gemini as fallback and returns rows; the pilot edits them before the normal import.
 - Sim radio: practice sessions pass O.radio from simRadio() in flight-app.js (calls per exercise with elements to check, ATC replies and readbacks; tower for large/medium airfields, Radio/Traffic otherwise). flight-sim.js shows the radio card, push-to-talk (button or hold N) with SpeechRecognition or typing, speaks replies with speechSynthesis, and adds a radio score to the debrief.
 
+## Community (2026-10-22, Claude)
+- New Community hub: Q&A (#community), Landing leaderboards (#leaderboards), Students nearby (#students). Server: functions/lib/community.js routed from /flight/community/*; tables are created lazily (community_*, sim_scores). Checked by `node --experimental-sqlite scripts/community-check.mjs`.
+- Identity shown everywhere: first name + home airfield code + licence. Public ids are random 16-hex pids (community_ids), never user ids or emails.
+- Q&A: questions, answers, up/down votes, report (3 reports hide a post until the owner restores it via /community/posts/:id/restore; /community/moderation lists reported posts for the owner), owner can delete anything, light word masking, daily limits.
+- Leaderboards: the sim computes a 0–100 landing score (rate 40, touchdown point 25, centreline 20, speed 15) after a practice landing and calls O.onResult; the app posts it to /community/scores unless profile.boardsOff. Weekly and all-time boards per airfield and exercise; a daily challenge (rotating list in community.js) everyone flies as a short final with a fixed weather preset.
+- Students nearby: opt-in (profile.dirOn, dirBio, homeLat/homeLng saved from the home airfield), within 250 km, same airfield first. Messages: anyone listed can be messaged, others only replied to; block hides both ways.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

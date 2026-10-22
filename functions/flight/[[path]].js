@@ -1,5 +1,6 @@
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
+import { community } from '../lib/community.js';
 import { health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
@@ -11,7 +12,7 @@ export function validateProfile(input,prev={}) {
  const p={};
  for(const key of ['name','country','authority','licence','airport','school','aircraft','registration','frequency','topics','nextLesson','questions','notes','checklist','countryCode','regime'])p[key]=text(input[key],['notes','questions','checklist'].includes(key)?3000:200);
  p.target=date(input.target);p.lessonDate=date(input.lessonDate);p.openingMinutes=number(input.openingMinutes??0,0,600000,'opening flight time');p.goalHours=Math.round(number(input.goalHours||0,0,2000,'hours goal'));p.currency=/^[A-Z]{3}$/.test(String(input.currency||''))?String(input.currency):'';p.rateAircraft=number(input.rateAircraft||0,0,5000,'aircraft rate');p.rateInstructor=number(input.rateInstructor||0,0,2000,'instructor rate');p.lessonsPerWeek=number(input.lessonsPerWeek||0,0,14,'lessons per week');for(const [key,max] of [['syllabus',12000],['study',24000],['reqs',2000],['budget',6000],['milestones',4000],['docs',4000],['navlogs',16000],['radio',4000],['preflight',12000],['exams',2000]])p[key]=jsonText(input[key],max,key);p.step=Math.round(number(input.step??0,0,5,'onboarding step'));p.complete=input.complete===true;p.reminders=input.reminders===true;
-if(prev.shareHash)p.shareHash=prev.shareHash;if(prev.calHash)p.calHash=prev.calHash;p.lessonTime=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(input.lessonTime||''))?String(input.lessonTime):'';
+if(prev.shareHash)p.shareHash=prev.shareHash;if(prev.calHash)p.calHash=prev.calHash;p.dirOn=input.dirOn===true;p.boardsOff=input.boardsOff===true;p.dirBio=text(input.dirBio,160);p.homeLat=Number.isFinite(+input.homeLat)&&input.homeLat!==''&&input.homeLat!=null?Math.max(-90,Math.min(90,+input.homeLat)):null;p.homeLng=Number.isFinite(+input.homeLng)&&input.homeLng!==''&&input.homeLng!=null?Math.max(-180,Math.min(180,+input.homeLng)):null;p.lessonTime=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(input.lessonTime||''))?String(input.lessonTime):'';
  if(p.complete&&(!p.name||!p.authority||!p.licence||!p.country))fail(400,'Complete your name, country, authority and training goal.');
  return p;
 }
@@ -99,6 +100,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
   await env.DB.prepare('INSERT INTO flight_scans(user_id,day,n) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET n=n+1').bind(user.id,day).run();
   return json(out);
  }
+ if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
  // ---------- plan and billing ----------
  if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));

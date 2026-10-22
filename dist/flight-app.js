@@ -68,7 +68,10 @@
     ['currency', 'Currency', 'currency'],
     ['radio', 'Radio', 'radio'],
     ['map', 'Map', 'map'],
-    ['analytics', 'Analytics', 'analytics']
+    ['analytics', 'Analytics', 'analytics'],
+    ['community', 'Q&A', 'community'],
+    ['leaderboards', 'Leaderboards', 'sim'],
+    ['students', 'Students nearby', 'profile']
   ];
   // the sidebar groups pages into hubs; each hub shows its pages as tabs across the top
   const HUBS = [
@@ -77,7 +80,8 @@
     ['logbook', 'Logbook', 'logbook', ['logbook', 'map', 'analytics'], 'Logbook'],
     ['training', 'Training', 'study', ['progress', 'budget', 'study', 'prepare', 'radio', 'currency'], 'Training'],
     ['planning', 'Flight planning', 'navlog', ['navlog', 'preflight', 'weather'], 'Planning'],
-    ['sim', 'Simulator', 'sim', ['sim'], 'Fly']
+    ['sim', 'Simulator', 'sim', ['sim'], 'Fly'],
+    ['community', 'Community', 'community', ['community', 'leaderboards', 'students'], 'Community']
   ];
   const SUBLABEL = { logbook: 'Flights' };
   const hubOf = id => HUBS.find(h => h[3].includes(id));
@@ -1900,7 +1904,7 @@
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=17', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=18', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -1916,7 +1920,8 @@
       const wps = isPlan ? src.points.filter(x => x.code).map(x => ({ code: x.code, lat: +x.lat, lng: +x.lng })) : [dep, arr].filter(Boolean).filter((a, i, l) => l.findIndex(b => b.code === a.code) === i).map(a => ({ code: a.code, lat: a.lat, lng: a.lng }));
       let wind = null, weather = null;
       const WXP = { clear: { visM: 40000 }, fair: { clouds: [{ cover: 'FEW', base: 3500 }], visM: 30000, turb: .12 }, scattered: { clouds: [{ cover: 'SCT', base: 2800 }], visM: 20000, turb: .25 }, broken: { clouds: [{ cover: 'BKN', base: 2200 }, { cover: 'SCT', base: 5500 }], visM: 14000, turb: .3 }, overcast: { clouds: [{ cover: 'OVC', base: 1600 }], visM: 9000, turb: .2 }, hazy: { clouds: [{ cover: 'FEW', base: 4000 }], visM: 4500, turb: .05 }, gusty: { clouds: [{ cover: 'SCT', base: 3000 }], visM: 25000, turb: .45, windRel: { off: 50, spd: 16, gust: 26 } } };
-      if (ui.sim.wx === 'live') {
+      const wxKey = src.wxOverride || ui.sim.wx;
+      if (wxKey === 'live') {
         try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0];
           if (s) {
             let clouds = (s.clouds || []).filter(c => c && c.cover && Number.isFinite(+c.base)).map(c => ({ cover: c.cover, base: +c.base }));
@@ -1927,7 +1932,7 @@
             if (Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id };
           } } catch { }
         if (!weather) toast('Live weather wasn’t available, so it’s clear skies.');
-      } else weather = WXP[ui.sim.wx] || null;
+      } else weather = WXP[wxKey] || null;
       if (wind) { } // live weather already set the wind
       else if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
       else if (ui.sim.wind === 'live') {
@@ -1942,7 +1947,9 @@
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry, onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
+        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
+        onResult: PRc && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
+        onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
         depAirport: dep && !PRfin ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
     } catch (x) { toast(x.message); }
@@ -1951,9 +1958,9 @@
   const paintFree = () => { $$('[data-prk]').forEach(b => { const tag = b.querySelector('.pr-tag'); if (!tag) return; if (isAdv()) { tag.hidden = true; return; } tag.hidden = false; const free = b.dataset.prk === 'short'; tag.textContent = free ? (simFreeLeft == null ? '2 free a day' : simFreeLeft ? `${simFreeLeft} free left today` : 'Free tries used today') : 'Advanced'; tag.classList.toggle('free', free && simFreeLeft !== 0); b.classList.toggle('locked', !free || simFreeLeft === 0); }); };
   const PRACTICE = { takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final' };
   // practice at any airfield: build a short route on the chosen runway end, then fly it as a normal sim session
-  async function openPractice(code, endId, kind) {
+  async function openPractice(code, endId, kind, opts = {}) {
     if (!isAdv() && kind !== 'short') return upgradeSheet('Take-offs, circuits and long finals are part of Advanced. Free includes two short finals a day.');
-    const ap = await anyAirfield(code); if (!ap) { toast('Pick an airfield from the list.'); return; }
+    const ap = await anyAirfield(code) || (opts.af ? { code: opts.af.code, name: opts.af.name, lat: opts.af.lat, lng: opts.af.lng, cc: opts.af.cc, type: 'M', runways: [] } : null); if (!ap) { toast('Pick an airfield from the list.'); return; }
     let freeTry = false;
     if (!isAdv()) {
       // Free: two short finals a day, counted on the server when one starts
@@ -1977,7 +1984,7 @@
     const pts = kind === 'takeoff' ? [T, far, move(far, brg, 9000)] : kind === 'circuit' ? [T, move(T, brg, Math.min(len, 1000))]
       : [move(T, brg + Math.PI, kind === 'long' ? 11112 : 3704), T];
     if (freeTry && simFreeLeft != null) toast(simFreeLeft ? `Free short final: ${simFreeLeft} left today.` : 'That’s your last free short final today.');
-    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id }, aircraft: state.profile.aircraft, freeTry }, 'fly');
+    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, challenge: !!opts.challenge }, 'fly');
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   function simPage() {
@@ -2041,6 +2048,152 @@
     $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
     $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));
     $$('[data-simpf]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpf], 'fly'));
+  }
+
+  /* ================= community: Q&A, landing leaderboards, students nearby ================= */
+  const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : s < 86400 * 7 ? `${Math.floor(s / 86400)} d ago` : fmtDate(new Date(t).toISOString().slice(0, 10), { day: 'numeric', month: 'short' }); };
+  const pilotTag = b => `<span class="pilot"><span class="avatar sm" aria-hidden="true">${esc((b?.name || 'P')[0])}</span><b>${esc(b?.name || 'Pilot')}</b>${b?.airfield ? `<small>${esc(b.airfield)}</small>` : ''}${b?.licence ? `<small>${esc(b.licence)}</small>` : ''}</span>`;
+  const DEMO_Q = { topics: [['general', 'General'], ['training', 'Training and lessons'], ['exams', 'Theory exams'], ['checkride', 'Skill test and checkride'], ['radio', 'Radio'], ['navigation', 'Navigation'], ['weather', 'Weather'], ['aircraft', 'Aircraft'], ['costs', 'Costs and schools'], ['medical', 'Medicals']], questions: [
+    { id: 'd1', title: 'How did you deal with nerves before your first solo?', excerpt: 'My instructor says I’m ready but I keep overthinking the go-around. Anything that helped you?', topic: 'training', score: 14, answers: 6, at: Date.now() - 7200e3, last: Date.now() - 1800e3, my: 0, by: { name: 'Priya', airfield: 'EGHP', licence: 'PPL(A)' } },
+    { id: 'd2', title: 'Best way to learn the air law questions on VFR minima?', excerpt: 'I keep mixing up the class D and G numbers.', topic: 'exams', score: 9, answers: 3, at: Date.now() - 86400e3, last: Date.now() - 20000e3, my: 0, by: { name: 'Tom', airfield: 'EGTF', licence: 'PPL(A)' } },
+    { id: 'd3', title: 'Crosswind landings in a PA-28: wing down or crab?', excerpt: '', topic: 'aircraft', score: 5, answers: 0, at: Date.now() - 3 * 86400e3, last: Date.now() - 3 * 86400e3, my: 0, by: { name: 'Lucía', airfield: 'LEVC', licence: 'LAPL(A)' } }] };
+  const cApi = (path, method, body) => preview ? Promise.reject(Object.assign(new Error('The example desk can’t post to the community.'), { status: 400 })) : api('community/' + path, method, body);
+
+  async function communityPage() {
+    const st = ui.cq || (ui.cq = { topic: '', sort: 'new', q: '', open: null });
+    if (st.open) return questionView(st.open);
+    shell('community', { title: 'Community', sub: 'Ask other student pilots, share what worked, and help the next person.', actions: `<button class="btn btn-blue btn-has-spark" data-newq>Ask a question ${spark}</button>` },
+      `<p class="callout">Be kind and specific. Answers here are from other students, not instructors: check anything that matters with your school.</p>
+      <div class="c-tools"><label class="search">${ico('search')}<span class="sr">Search questions</span><input data-cqs value="${esc(st.q)}" placeholder="Search questions"></label>
+        <div class="segmented" data-csort>${[['new', 'Latest'], ['top', 'Top'], ['open', 'Unanswered']].map(([v, l]) => `<label><input type="radio" name="csort" value="${v}" ${st.sort === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+      <div class="c-topics" data-ctopics></div>
+      <div data-clist><div class="tile"><p class="hint">Loading questions…</p></div></div>`);
+    $('[data-newq]').onclick = () => askSheet();
+    const load = async () => {
+      let d; try { d = preview ? DEMO_Q : await cApi(`posts?sort=${st.sort}${st.topic ? '&topic=' + st.topic : ''}${st.q ? '&q=' + encodeURIComponent(st.q) : ''}`); } catch (x) { $('[data-clist]').innerHTML = `<div class="tile empty center"><h3>The community didn’t load.</h3><p>${esc(x.message)}</p></div>`; return; }
+      ui.cTopics = d.topics;
+      $('[data-ctopics]').innerHTML = [['', 'All topics'], ...d.topics].map(([k, l]) => `<button type="button" class="chip ${st.topic === k ? 'on' : ''}" data-ctopic="${k}">${esc(l)}</button>`).join('');
+      $$('[data-ctopic]').forEach(b => b.onclick = () => { st.topic = b.dataset.ctopic; load(); });
+      const qs = preview ? d.questions.filter(q => (!st.topic || q.topic === st.topic) && (st.sort !== 'open' || !q.answers)) : d.questions;
+      $('[data-clist]').innerHTML = qs.length ? `<div class="c-list">${qs.map(q => `<button type="button" class="tile c-q" data-openq="${esc(q.id)}">
+          <div class="c-votes"><b>${q.score}</b><small>votes</small></div><div class="c-ans ${q.answers ? 'has' : ''}"><b>${q.answers}</b><small>${q.answers === 1 ? 'answer' : 'answers'}</small></div>
+          <div class="c-body"><h3>${esc(q.title)}</h3>${q.excerpt ? `<p>${esc(q.excerpt)}</p>` : ''}<div class="c-meta"><span class="chip">${esc((d.topics.find(t => t[0] === q.topic) || ['', 'General'])[1])}</span>${pilotTag(q.by)}<small>${esc(ago(q.last || q.at))}</small></div></div></button>`).join('')}</div>`
+        : `<div class="tile empty center"><h3>${st.q || st.topic || st.sort === 'open' ? 'Nothing here yet.' : 'Be the first to ask.'}</h3><p>Questions about lessons, exams, checkrides, radio, costs: anything another student might know.</p><button class="btn btn-blue" data-newq2>Ask a question</button></div>`;
+      $$('[data-openq]').forEach(b => b.onclick = () => { st.open = b.dataset.openq; communityPage(); scrollTo(0, 0); });
+      const n2 = $('[data-newq2]'); if (n2) n2.onclick = () => askSheet();
+    };
+    let qt = 0; $('[data-cqs]').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { st.q = e.target.value.trim(); load(); }, 350); };
+    $('[data-csort]').onchange = e => { st.sort = e.target.value; load(); };
+    load();
+  }
+  function askSheet() {
+    const topics = ui.cTopics || DEMO_Q.topics;
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Ask the community</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <form class="sheet-body" data-askf novalidate><label class="field"><span>Your question</span><input name="title" maxlength="140" required placeholder="e.g. How did you prepare for the navigation exam?"></label>
+        <label class="field"><span>Topic</span><select name="topic">${topics.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+        <label class="field"><span>Details <i>(optional)</i></span><textarea name="body" rows="5" maxlength="3000" placeholder="Add context: your licence, aircraft, what you’ve tried."></textarea></label>
+        <p class="hint">Others see your first name, home airfield and licence. Don’t share personal details, and follow your instructor’s advice over anything posted here.</p><p class="form-error" role="alert"></p></form>
+      <footer class="sheet-foot"><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-post>Post question</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
+    sheet.querySelector('[data-post]').onclick = async e => {
+      const f = sheet.querySelector('[data-askf]'), v = Object.fromEntries(new FormData(f)), err = sheet.querySelector('.form-error'); e.target.disabled = true; err.textContent = '';
+      try { const r = await cApi('posts', 'POST', v); sheet.close(); ui.cq.open = r.id; communityPage(); } catch (x) { err.textContent = x.message; e.target.disabled = false; }
+    };
+  }
+  async function questionView(id) {
+    const st = ui.cq, owner = !!B().owner;
+    shell('community', { title: 'Community', actions: '<button class="btn btn-line" data-cback>All questions</button>' }, '<div data-cq><div class="tile"><p class="hint">Loading…</p></div></div>');
+    $('[data-cback]').onclick = () => { st.open = null; communityPage(); };
+    let d;
+    try { d = preview ? { question: { ...DEMO_Q.questions.find(q => q.id === id), body: DEMO_Q.questions.find(q => q.id === id)?.excerpt || '' }, answers: id === 'd1' ? [{ id: 'a1', body: 'Chair-fly the whole circuit the night before, out loud, including the go-around. It made it feel routine.', score: 8, at: Date.now() - 5000e3, my: 0, by: { name: 'Jack', airfield: 'EGHP', licence: 'PPL(A)' } }] : [] } : await cApi('posts/' + id); }
+    catch (x) { $('[data-cq]').innerHTML = `<div class="tile empty center"><h3>${esc(x.message)}</h3></div>`; return; }
+    const q = d.question, topic = ((ui.cTopics || DEMO_Q.topics).find(t => t[0] === q.topic) || ['', 'General'])[1];
+    const voteBox = p => `<div class="c-vote" data-pid="${esc(p.id)}"><button type="button" class="${p.my > 0 ? 'on' : ''}" data-v="1" aria-label="Helpful" ${p.mine ? 'disabled' : ''}>▲</button><b>${p.score}</b><button type="button" class="${p.my < 0 ? 'on' : ''}" data-v="-1" aria-label="Not helpful" ${p.mine ? 'disabled' : ''}>▼</button></div>`;
+    const actions = p => `<div class="c-acts">${p.mine || owner ? `<button type="button" class="link" data-del="${esc(p.id)}">Delete</button>` : ''}${!p.mine ? `<button type="button" class="link" data-rep="${esc(p.id)}">Report</button>` : ''}${p.hidden ? '<span class="chip warn">Hidden after reports</span>' : ''}${owner && p.reports ? `<span class="chip">${p.reports} reports</span>` : ''}</div>`;
+    $('[data-cq]').innerHTML = `<article class="tile c-full">${voteBox(q)}<div><span class="chip">${esc(topic)}</span><h2 class="c-title">${esc(q.title)}</h2>${q.body ? `<div class="c-text">${esc(q.body).replace(/\n/g, '<br>')}</div>` : ''}<div class="c-meta">${pilotTag(q.by)}<small>${esc(ago(q.at))}</small></div>${actions(q)}</div></article>
+      <h3 class="section-h">${d.answers.length} ${d.answers.length === 1 ? 'answer' : 'answers'}</h3>
+      ${d.answers.map(a => `<article class="tile c-full ans">${voteBox(a)}<div><div class="c-text">${esc(a.body).replace(/\n/g, '<br>')}</div><div class="c-meta">${pilotTag(a.by)}<small>${esc(ago(a.at))}</small></div>${actions(a)}</div></article>`).join('')}
+      <form class="tile c-reply" data-reply><label class="field"><span>Your answer</span><textarea name="body" rows="4" maxlength="3000" placeholder="Share what worked for you"></textarea></label><p class="form-error" role="alert"></p><div class="actions"><span class="hint">Shown with your first name, home airfield and licence.</span><button class="btn btn-blue">Post answer</button></div></form>`;
+    $$('[data-pid]').forEach(box => box.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { const cur = box.querySelector('.on')?.dataset.v, v = cur === b.dataset.v ? 0 : +b.dataset.v; try { const r = await cApi('vote', 'POST', { id: box.dataset.pid, v }); box.querySelector('b').textContent = r.score; box.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', +x.dataset.v === r.my)); } catch (x) { toast(x.message); } }));
+    $$('[data-del]').forEach(b => b.onclick = async () => { if (!confirmInline(b, 'Delete?')) return; try { await cApi('posts/' + b.dataset.del, 'DELETE'); if (b.dataset.del === q.id) { st.open = null; communityPage(); } else questionView(id); } catch (x) { toast(x.message); } });
+    $$('[data-rep]').forEach(b => b.onclick = async () => { try { await cApi('report', 'POST', { id: b.dataset.rep, reason: 'reported' }); b.textContent = 'Reported'; b.disabled = true; toast('Thanks. Posts reported by several people are hidden until reviewed.'); } catch (x) { toast(x.message); } });
+    $('[data-reply]').onsubmit = async e => { e.preventDefault(); const f = e.target, err = f.querySelector('.form-error'), btn = f.querySelector('button'); btn.disabled = true; err.textContent = ''; try { await cApi(`posts/${id}/answers`, 'POST', Object.fromEntries(new FormData(f))); questionView(id); } catch (x) { err.textContent = x.message; btn.disabled = false; } };
+  }
+  // ask once before a destructive click: the first click arms the button, the second confirms
+  const confirmInline = (b, label) => { if (b.dataset.armed) return true; b.dataset.armed = '1'; const t = b.textContent; b.textContent = label; setTimeout(() => { delete b.dataset.armed; b.textContent = t; }, 3000); return false; };
+
+  /* ---- leaderboards ---- */
+  async function boardsPage() {
+    const p = state.profile, home = upper(p.airport).split(/[\s·]/)[0];
+    const st = ui.cb || (ui.cb = { ap: home, kind: 'short', period: 'week' });
+    shell('leaderboards', { title: 'Landing leaderboards', sub: 'Your best simulator landing at each airfield, against everyone else’s. A new daily challenge every day.' }, '<div data-cbx><div class="tile"><p class="hint">Loading…</p></div></div>');
+    let d;
+    try { d = preview ? { challenge: { date: todayISO(), code: 'LPMA', name: 'Madeira', runway: '05', weather: 'gusty', kind: 'short' }, daily: { rows: [{ rank: 1, score: 93, by: { name: 'Lucía', airfield: 'LEVC' }, aircraft: 'Cessna 172S' }, { rank: 2, score: 88, by: { name: 'Tom', airfield: 'EGTF' }, aircraft: 'PA-28' }], me: null }, local: { rows: [{ rank: 1, score: 86, by: { name: 'Priya', airfield: 'EGHP' }, aircraft: 'PA-28' }], me: null }, mine: [], busy: [{ ap: 'LPMA', pilots: 12, best: 93 }, { ap: 'EGHP', pilots: 4, best: 86 }], week: todayISO() }
+      : await cApi(`boards?ap=${encodeURIComponent(st.ap || '')}&kind=${st.kind}&period=${st.period}`); }
+    catch (x) { $('[data-cbx]').innerHTML = `<div class="tile empty center"><h3>Leaderboards didn’t load.</h3><p>${esc(x.message)}</p></div>`; return; }
+    const ch = d.challenge, WXN = { clear: 'clear skies', fair: 'fair weather', scattered: 'scattered cloud', broken: 'broken cloud', overcast: 'low overcast', hazy: 'haze', gusty: 'a gusty crosswind' };
+    const table = (b, empty) => b?.rows?.length ? `<ol class="c-board">${b.rows.map(r => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>${pilotTag(r.by)}<small>${esc(r.aircraft || '')}</small><b>${r.score}</b></li>`).join('')}</ol>${b.me && b.me.rank > b.rows.length ? `<p class="hint">You’re #${b.me.rank} with ${b.me.score}.</p>` : ''}` : `<p class="hint">${empty}</p>`;
+    const KN = { short: 'Short final', long: 'Long final', circuit: 'Circuit' };
+    $('[data-cbx]').innerHTML = `<div class="grid">
+      <section class="tile dark span-12 c-challenge">${contours('a')}<div><span class="kicker">Daily challenge · ${esc(fmtDate(ch.date, { weekday: 'long', day: 'numeric', month: 'long' }))}</span><h2 class="display">Short final at ${esc(ch.name)}, runway ${esc(ch.runway)}</h2><p>Everyone flies the same approach today in ${esc(WXN[ch.weather] || ch.weather)}. Best landing score wins. ${isAdv() ? '' : 'It counts as one of your two free short finals.'}</p>
+        <button class="btn btn-light btn-has-spark" data-flych>Fly today’s challenge ${spark}</button></div>
+        <div class="c-today"><h3>Today’s top landings</h3>${table(d.daily, 'No one has flown it yet. Be first.')}${d.daily?.me ? `<p class="hint light">Your best today: ${d.daily.me.score} (#${d.daily.me.rank})</p>` : ''}</div></section>
+      <section class="tile span-8"><div class="tile-head"><h2>Airfield board</h2></div>
+        <form class="fields c-bform" data-cbform><label class="field"><span>Airfield</span><input name="ap" list="cb-afs" value="${esc(st.ap || '')}" placeholder="Code or name" autocomplete="off"><datalist id="cb-afs"></datalist></label>
+          <label class="field"><span>Exercise</span><select name="kind">${Object.entries(KN).map(([k, l]) => `<option value="${k}" ${st.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="field"><span>Period</span><select name="period"><option value="week" ${st.period === 'week' ? 'selected' : ''}>This week</option><option value="all" ${st.period === 'all' ? 'selected' : ''}>All time</option></select></label></form>
+        ${st.ap ? table(d.local, `No ${KN[st.kind].toLowerCase()} landings at ${esc(st.ap)} ${st.period === 'week' ? 'this week' : 'yet'}. Fly one from the Simulator’s practice section.`) : '<p class="hint">Choose an airfield.</p>'}
+        <p class="footnote">Score out of 100: touchdown rate (40), touchdown point against the aim point (25), centreline (20) and speed (15). Only practice landings in the simulator count.</p></section>
+      <aside class="span-4" style="display:grid;gap:16px;align-content:start">
+        <section class="tile"><div class="tile-head"><h2>Your bests</h2></div>${d.mine?.length ? `<div class="airports">${d.mine.map(m => `<div><span>${esc(m.ap)} · ${esc(KN[m.kind] || m.kind)}</span><b>${m.best}</b></div>`).join('')}</div>` : '<p class="hint">Land in the simulator’s practice mode and your score is posted here.</p>'}
+          <label class="sim-radio-opt" style="margin-top:14px"><input type="checkbox" data-boardson ${p.boardsOff ? '' : 'checked'}><span>Post my practice landings to the leaderboards</span></label></section>
+        <section class="tile"><div class="tile-head"><h2>Busiest this week</h2></div>${d.busy?.length ? `<div class="airports">${d.busy.map(b => `<div><button type="button" class="link" data-cbap="${esc(b.ap)}">${esc(b.ap)}</button><b>${b.pilots} pilot${b.pilots === 1 ? '' : 's'} · best ${b.best}</b></div>`).join('')}</div>` : '<p class="hint">Nothing flown yet this week.</p>'}</section>
+      </aside></div>`;
+    if (window.BoploMap && countryCodeOf(p)) BoploMap.airfields(countryCodeOf(p)).then(list => { const dl = $('#cb-afs'); if (dl) dl.innerHTML = list.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); });
+    const f = $('[data-cbform]'); f.onchange = () => { const v = Object.fromEntries(new FormData(f)); st.ap = upper(v.ap).split(/[\s·]/)[0]; st.kind = v.kind; st.period = v.period; boardsPage(); };
+    $$('[data-cbap]').forEach(b => b.onclick = () => { st.ap = b.dataset.cbap; st.kind = 'short'; boardsPage(); });
+    $('[data-flych]').onclick = () => openPractice(ch.code, ch.runway, 'short', { weather: ch.weather, challenge: true, af: ch });
+    $('[data-boardson]').onchange = async e => { try { await saveProfile({ boardsOff: !e.target.checked }); toast(e.target.checked ? 'Your landings will be posted.' : 'Your landings won’t be posted.'); } catch (x) { toast(x.message); } };
+  }
+
+  /* ---- students nearby and messages ---- */
+  async function studentsPage() {
+    const p = state.profile, st = ui.cs || (ui.cs = { chat: null });
+    if (st.chat) return chatView(st.chat);
+    shell('students', { title: 'Students nearby', sub: 'Find other student pilots at your airfield and nearby: study together, share lifts, swap notes.' }, '<div data-csx><div class="tile"><p class="hint">Loading…</p></div></div>');
+    let d, t;
+    try { [d, t] = preview ? [{ listed: false, located: true, people: [{ pid: 'a'.repeat(16), name: 'Priya', airfield: 'EGHP', licence: 'PPL(A)', school: 'Popham Flying School', bio: 'Theory exams next month. Happy to quiz each other.', km: 0, sameField: true }, { pid: 'b'.repeat(16), name: 'Tom', airfield: 'EGTF', licence: 'PPL(A)', bio: '', km: 48 }] }, { threads: [] }] : await Promise.all([cApi('people'), cApi('msgs')]); }
+    catch (x) { $('[data-csx]').innerHTML = `<div class="tile empty center"><h3>This didn’t load.</h3><p>${esc(x.message)}</p></div>`; return; }
+    $('[data-csx]').innerHTML = `<div class="grid">
+      <section class="tile span-8"><div class="tile-head"><h2>Near ${esc(upper(p.airport).split(/[\s·]/)[0] || 'you')}</h2><span class="chip">${d.people.length} pilot${d.people.length === 1 ? '' : 's'}</span></div>
+        ${d.people.length ? `<div class="c-people">${d.people.map(x => `<div class="c-person"><span class="avatar" aria-hidden="true">${esc(x.name[0])}</span><div><b>${esc(x.name)}</b><small>${esc([x.airfield, x.licence, x.school].filter(Boolean).join(' · '))}${x.km != null ? ` · ${x.sameField ? 'your airfield' : x.km + ' km away'}` : ''}</small>${x.bio ? `<p>${esc(x.bio)}</p>` : ''}</div><button type="button" class="btn btn-line btn-sm" data-msg="${esc(x.pid)}" data-name="${esc(x.name)}">Message</button></div>`).join('')}</div>`
+          : `<p class="hint">${d.listed ? 'No other students listed within 250 km yet. Share Boplo with your school.' : 'No one listed nearby yet, or you haven’t joined the directory.'}</p>`}
+      </section>
+      <aside class="span-4" style="display:grid;gap:16px;align-content:start">
+        <section class="tile"><div class="tile-head"><h2>Your listing</h2>${d.listed ? '<span class="chip ok">Visible</span>' : '<span class="chip">Hidden</span>'}</div>
+          <form data-dirf class="fields" style="grid-template-columns:1fr"><label class="sim-radio-opt"><input type="checkbox" name="dirOn" ${d.listed ? 'checked' : ''}><span><b>Show me to students nearby</b> They see your first name, home airfield, licence and school, and can message you.</span></label>
+            <label class="field"><span>A line about you <i>(optional)</i></span><input name="dirBio" maxlength="160" value="${esc(p.dirBio || '')}" placeholder="e.g. Solo done, studying for air law, flies Saturdays"></label>
+            <button class="btn btn-ink btn-sm" style="justify-self:start">Save</button></form>
+          ${!p.airport ? '<p class="form-error">Set your home airfield in your profile so nearby pilots can find you.</p>' : ''}</section>
+        <section class="tile"><div class="tile-head"><h2>Messages</h2>${t.unread ? `<span class="chip warn">${t.unread} new</span>` : ''}</div>${t.threads.length ? `<div class="c-threads">${t.threads.map(x => `<button type="button" data-thread="${esc(x.with.pid || '')}" data-name="${esc(x.with.name)}" class="${x.unread ? 'unread' : ''}"><b>${esc(x.with.name)} <small>${esc(x.with.airfield || '')}</small></b><span>${x.mine ? 'You: ' : ''}${esc(x.last)}</span><small>${esc(ago(x.at))}</small></button>`).join('')}</div>` : '<p class="hint">No messages yet.</p>'}</section>
+      </aside></div>`;
+    $$('[data-msg],[data-thread]').forEach(b => b.onclick = () => { const id = b.dataset.msg || b.dataset.thread; if (!id) return; st.chat = { pid: id, name: b.dataset.name }; studentsPage(); });
+    $('[data-dirf]').onsubmit = async e => {
+      e.preventDefault(); const v = Object.fromEntries(new FormData(e.target)), on = v.dirOn === 'on';
+      let lat = p.homeLat, lng = p.homeLng; const af = p.airport ? await anyAirfield(upper(p.airport).split(/[\s·]/)[0]) : null; if (af) { lat = af.lat; lng = af.lng; }
+      try { await saveProfile({ dirOn: on, dirBio: v.dirBio, homeLat: lat, homeLng: lng }); toast(on ? 'You’re listed for students nearby.' : 'You’re hidden from the directory.'); studentsPage(); } catch (x) { toast(x.message); }
+    };
+  }
+  async function chatView(c) {
+    shell('students', { title: esc(c.name || 'Messages'), actions: '<button class="btn btn-line" data-cback>Back</button>' }, '<div data-chat><div class="tile"><p class="hint">Loading…</p></div></div>');
+    $('[data-cback]').onclick = () => { ui.cs.chat = null; studentsPage(); };
+    let d; try { d = preview ? { with: { name: c.name }, blocked: false, messages: [] } : await cApi('msgs/' + c.pid); } catch (x) { $('[data-chat]').innerHTML = `<div class="tile empty center"><h3>${esc(x.message)}</h3></div>`; return; }
+    $('[data-chat]').innerHTML = `<section class="tile c-chat"><div class="tile-head"><div>${pilotTag(d.with)}</div><button type="button" class="link" data-block>${d.blocked ? 'Unblock' : 'Block'}</button></div>
+      <div class="c-msgs" data-msgs>${d.messages.length ? d.messages.map(m => `<div class="c-msg ${m.mine ? 'mine' : ''}"><p>${esc(m.body).replace(/\n/g, '<br>')}</p><small>${esc(ago(m.at))}</small></div>`).join('') : '<p class="hint">Say hello. Keep it friendly; never share passwords or payment details.</p>'}</div>
+      ${d.blocked ? '<p class="hint">You’ve blocked this pilot.</p>' : `<form class="c-send" data-send><textarea name="body" rows="2" maxlength="1500" placeholder="Write a message"></textarea><button class="btn btn-blue">${ico('send')}<span class="sr">Send</span></button></form>`}</section>`;
+    const box = $('[data-msgs]'); box.scrollTop = box.scrollHeight;
+    const f = $('[data-send]'); if (f) { const ta = f.querySelector('textarea'); ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } }; f.onsubmit = async e => { e.preventDefault(); const body = ta.value.trim(); if (!body) return; try { await cApi('msgs/' + c.pid, 'POST', { body }); chatView(c); } catch (x) { toast(x.message); } }; ta.focus(); }
+    $('[data-block]').onclick = async e => { if (!d.blocked && !confirmInline(e.target, 'Block them?')) return; try { await cApi('block/' + c.pid, d.blocked ? 'DELETE' : 'POST'); chatView(c); } catch (x) { toast(x.message); } };
   }
 
   function deleteAccountSheet() {
@@ -2607,7 +2760,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
