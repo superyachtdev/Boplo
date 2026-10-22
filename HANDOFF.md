@@ -98,6 +98,7 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - The sidebar was 14 items and scrolled, so pages are grouped into 5 hubs (`HUBS` in `dist/flight-app.js`): Overview · Ask Boplo · Logbook (Flights, Map, Analytics) · Training (Progress, Prepare, Study, Radio, Currency) · Flight planning (Nav log, Weather, Simulator).
 - Hubs with more than one page show pill sub-tabs (`.subnav`) above the page title. Each hub remembers the last sub-tab used (`ui.lastSub`) for the session.
 - Mobile: the 5 hubs are the bottom tabs. The topbar avatar opens `#more`, now the Account page (Profile, Plan & billing, legal links, sign out).
+- Desktop sidebar lists each section's pages underneath it. `fitNav()` folds sections (other sections bottom-up first, then the current one) only when the window is too short, so the sidebar never scrolls; the top sub-tabs show on desktop only when the current section is folded.
 - Every page keeps its own hash (`#currency`, `#sim` …), so old links still work; `#training`, `#planning` and `#account` also resolve.
 
 ## Open items

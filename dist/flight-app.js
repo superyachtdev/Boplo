@@ -358,10 +358,10 @@
       <aside class="side"><div class="side-in night">${contours('b')}
         ${brand('#overview')}
         <button class="btn btn-blue btn-has-spark log-cta" data-add>Log a flight ${spark}</button>
-        <nav aria-label="Flight desk">${HUBS.map(h => `<a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="page"' : ''}>${ico(h[2])}${h[1]}</a>`).join('')}</nav>
+        <nav aria-label="Flight desk">${HUBS.map(h => `<div class="nav-hub${hubOf(page) === h ? ' on' : ''}" data-hub="${h[0]}"><a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="' + (h[3].length > 1 ? 'true' : 'page') + '"' : ''}>${ico(h[2])}${h[1]}</a>${h[3].length > 1 ? `<div class="nav-subs">${h[3].map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(SUBLABEL[id] || (PAGES.find(x => x[0] === id) || [, id])[1])}</a>`).join('')}</div>` : ''}</div>`).join('')}</nav>
         <div class="me">
           <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small><span class="plan-badge ${isAdv() ? 'adv' : ''}">${isAdv() ? 'Advanced' : 'Free'}</span>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
-          <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><a href="#plan" ${page === 'plan' ? 'aria-current="page"' : ''}>${ico('plan')}${isAdv() ? 'Plan' : 'Upgrade'}</a><button data-logout>${ico('out')}${preview ? 'Leave' : 'Sign out'}</button></div>
+          <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><a href="#plan" ${page === 'plan' ? 'aria-current="page"' : ''}>${ico('plan')}${isAdv() ? 'Plan' : 'Upgrade'}</a><button data-logout class="me-out" aria-label="${preview ? 'Leave example desk' : 'Sign out'}" title="${preview ? 'Leave example desk' : 'Sign out'}">${ico('out')}</button></div>
         </div>
       </div></aside>
       <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#more" aria-label="Account" ${['more', 'profile', 'plan'].includes(page) ? 'aria-current="page"' : ''} style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
@@ -373,11 +373,23 @@
       </div></main>
       <nav class="tabbar" aria-label="Flight desk">${HUBS.map(h => `<a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="page"' : ''}>${ico(h[2])}${h[4]}</a>`).join('')}</nav>
     </div>`;
+    fitNav();
     $$('[data-add]').forEach(b => b.onclick = () => { if (!isAdv() && state.flights.length >= B().limits.flights) return upgradeSheet(`The Free plan holds ${B().limits.flights} flights. Advanced gives you an unlimited logbook.`); flightSheet(); });
     $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
     $$('[data-logout]').forEach(b => b.onclick = logout);
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
   }
+
+  // show every section's pages in the sidebar; when the window is too short, fold the other sections (bottom first), then this one, so the sidebar never scrolls
+  function fitNav() {
+    const nav = $('.side nav'); if (!nav || !nav.offsetParent) return;
+    const hubs = [...nav.querySelectorAll('.nav-hub')].filter(x => x.querySelector('.nav-subs'));
+    hubs.forEach(x => x.classList.remove('folded'));
+    const over = () => nav.scrollHeight > nav.clientHeight + 1;
+    for (const x of [...hubs.filter(x => !x.classList.contains('on')).reverse(), ...hubs.filter(x => x.classList.contains('on'))]) { if (!over()) break; x.classList.add('folded'); }
+    const on = nav.querySelector('.nav-hub.on'); $('.shell')?.classList.toggle('side-subs', !!on && !on.classList.contains('folded') && !!on.querySelector('.nav-subs'));
+  }
+  let fitT; addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(fitNav, 80); });
 
   /* ---------------- pages ---------------- */
   function flightRows(list) {

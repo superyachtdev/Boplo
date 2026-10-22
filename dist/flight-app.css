@@ -840,3 +840,28 @@ details.more .fields{padding:0 16px 16px}
 .acct-links a,.acct-links .link{color:var(--ink-2);background:none;border:0;padding:0;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .topbar .icon-btn[aria-current="page"]{background:rgba(158,216,255,.16)!important}
 @media (max-width:960px){.subnav{margin:0 -16px 16px;padding:0 16px;flex-wrap:nowrap}.subnav-hub{display:none}.subnav-tabs{flex:1}.subnav-tabs a{padding:8px 13px}}
+/* sidebar: sections with their pages listed underneath */
+.side nav{gap:2px;overflow:hidden}
+.nav-hub{display:grid;gap:1px}
+.side nav .nav-hub>a[aria-current="true"]{background:transparent;color:#fff}
+.side nav .nav-hub>a[aria-current="true"] .ico{color:var(--ice)}
+.nav-subs{display:grid;gap:1px;margin:0 0 6px 26px;padding-left:14px;border-left:1px solid rgba(158,216,255,.14)}
+.side nav .nav-subs a{height:34px;padding:0 12px;font-size:14px;border-radius:10px;color:rgba(222,233,255,.58)}
+.side nav .nav-subs a:hover{color:#fff}
+.side nav .nav-subs a[aria-current="page"]{color:#fff;background:rgba(158,216,255,.12)}
+.nav-hub.folded .nav-subs{display:none}
+@media (max-height:760px){.side nav .nav-subs a{height:31px;font-size:13.5px}}
+@media (min-width:961px){.shell.side-subs .subnav{display:none}}
+.me-actions{flex-wrap:nowrap}
+.me-actions .me-out{flex:0 0 34px;padding:0}
+.me{gap:10px;padding:12px}
+.side nav>.nav-hub>a{height:42px}
+.side nav .nav-subs a{height:32px}
+.nav-subs{margin-bottom:4px}
+@media (max-height:760px){.side nav>.nav-hub>a{height:38px}.side nav .nav-subs a{height:30px;font-size:13.5px}}
+.side .me-actions a{flex:1 1 0;min-width:0;padding:0 6px}
+.side .me-actions .me-out{flex:0 0 34px;width:34px;padding:0}
+.side-in{gap:16px}
+.side .me-actions{gap:6px;min-width:0}
+.side .me-actions a .ico{display:none}
+.side .me,.side .me>*{min-width:0}
