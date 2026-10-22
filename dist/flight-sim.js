@@ -786,7 +786,7 @@ window.BoploSim = (() => {
       if (datumFixed) return; datumFixed = true;
       const shift = groundHere - g0; if (Math.abs(shift) < 2 || Math.abs(shift) > 150) return;
       if (O.fromElevFt != null) geoN = groundHere - O.fromElevFt * FT;
-      g0 += shift; g1 += shift; planCruise(); planGates(); fs.alt += shift; lastG += shift; if (!rwSampled) shiftRunways(shift);
+      g0 += shift; g1 += shift; planCruise(); planGates(); lastG += shift; if (!rwSampled) shiftRunways(shift); if (fs.ground) { fs.alt = groundAt(fs.x, fs.z); fs.v[1] = 0; } else fs.alt += shift;
       // and try again for proper runway heights now the scenery has loaded
       if (!rwSampled && rwPts.length) mostDetailed(rwPts).then(v => { if (alive && shapeRunways([null, null, ...v])) { rwSampled = true; drawRunways(); } });
     }
