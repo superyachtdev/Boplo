@@ -120,7 +120,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
         const res = await fetcher('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: exam ? 700 : 900, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
+          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: exam ? 1500 : 900, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
         });
         if (!res.ok || !res.body) { const t = await res.text().catch(() => ''); console.error('Claude error', res.status, t.slice(0, 300)); throw new Error(res.status === 529 || res.status === 503 ? 'Boplo is very busy right now. Try again in a moment.' : 'Boplo couldn’t answer just now. Try again in a moment.'); }
         await bump(env, user.id);

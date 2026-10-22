@@ -214,7 +214,7 @@ test('mock checkride is Advanced-only and adds the examiner brief',async()=>{
  const msgs=[];for(let i=0;i<20;i++){msgs.push({role:'user',content:'a'+i});msgs.push({role:'assistant',content:'q'+i});}msgs.push({role:'user',content:'[END]'});
  const r=await ask(env,{id:'e1'},'advanced',{mode:'examiner',setup:{focus:'weather',style:'strict',questions:12},messages:msgs},fake);await r.response.text();await r.done;
  assert.match(sent.system[1].text,/MOCK CHECKRIDE MODE/);assert.match(sent.system[1].text,/weather theory/);assert.match(sent.system[1].text,/about 12 questions/);assert.match(sent.system[1].text,/push back/);
- assert.equal(sent.messages.length,41);assert.equal(sent.max_tokens,700);
+ assert.equal(sent.messages.length,41);assert.equal(sent.max_tokens,1500);
 });
 test('training reminders pick the right email and can be switched off',async()=>{
  const {pickNudge,runNudges,unsubToken,nudgesOff}=await import('../functions/lib/nudges.js');
