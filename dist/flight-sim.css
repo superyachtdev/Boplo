@@ -218,3 +218,19 @@
 .sim-pr{grid-template-columns:1fr!important}
 .sim-pr>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-left:3px solid transparent;padding-left:10px}
 .sim-pr .pr-great{border-color:#34C77B}.sim-pr .pr-ok{border-color:#F2B33D}.sim-pr .pr-firm{border-color:#E5484D}
+.sim-radio{position:absolute;left:50%;top:76px;transform:translateX(-50%);z-index:25;width:min(460px,calc(100% - 28px));padding:12px 14px 14px;border-radius:18px;background:rgba(8,14,32,.9);backdrop-filter:blur(12px);border:1px solid rgba(158,216,255,.22);color:#E6EEFF;display:grid;gap:6px;box-shadow:0 14px 40px rgba(0,0,0,.4)}
+.sim-radio[hidden]{display:none}
+.sr-top{display:flex;justify-content:space-between;align-items:center}.sr-k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9ED8FF;font-weight:700}
+.sr-x{background:none;border:0;color:rgba(230,238,255,.6);font:inherit;font-size:12.5px;cursor:pointer}
+.sim-radio b{font-size:16px}.sim-radio small{font-size:13px;color:rgba(230,238,255,.75)}
+.sr-atc{margin:2px 0 0;padding:8px 10px;border-radius:10px;background:rgba(10,98,255,.22);font-size:13.5px}
+.sr-said{margin:0;font-size:13px;color:#fff;font-style:italic}
+.sr-res{margin:0;padding:0;list-style:none;display:grid;gap:2px;font-size:13px}.sr-res .ok{color:#8BF0B5}.sr-res .miss{color:#FF9AA4}.sr-res .model{color:rgba(230,238,255,.75);margin-top:4px}
+.sr-row{display:flex;gap:8px;margin-top:4px}
+.sr-ptt{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:12px;border:0;background:#0A62FF;color:#fff;font:inherit;font-weight:650;cursor:pointer;touch-action:none;user-select:none}
+.sr-ptt svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}.sr-ptt kbd{font:inherit;font-size:11px;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.2)}
+.sr-ptt.live{background:#D93A4A;animation:simblink 1s steps(2,start) infinite}
+.sr-ex{height:42px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:none;color:#E6EEFF;font:inherit;cursor:pointer}
+.sr-type{display:flex;gap:6px}.sr-type[hidden]{display:none}.sr-type input{flex:1;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;padding:0 10px;font:inherit}.sr-type button{height:38px;padding:0 12px;border-radius:10px;border:0;background:#0A62FF;color:#fff;font:inherit}
+.sim-radio.done .sr-row{opacity:.4;pointer-events:none}
+.sim-rh{margin:14px 0 8px;font-size:15px}

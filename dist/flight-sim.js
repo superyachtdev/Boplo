@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=7'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=8'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -426,6 +426,15 @@ window.BoploSim = (() => {
         </div>
       </header>
       <div class="sim-warn" data-warn role="status" aria-live="assertive"></div>
+      <div class="sim-radio" data-radio hidden role="region" aria-label="Radio" aria-live="polite">
+        <div class="sr-top"><span class="sr-k" data-rk>Radio · your call</span><button type="button" class="sr-x" data-rskip aria-label="Skip this call">Skip</button></div>
+        <b data-rtitle></b><small data-rhint></small>
+        <p class="sr-atc" data-ratc hidden></p>
+        <p class="sr-said" data-rsaid hidden></p>
+        <ul class="sr-res" data-rres hidden></ul>
+        <div class="sr-row"><button type="button" class="sr-ptt" data-rptt><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><span>Hold to talk</span><kbd>N</kbd></button><button type="button" class="sr-ex" data-rex>Example</button></div>
+        <form class="sr-type" data-rtype hidden><input data-rin placeholder="Type your call and press Enter" autocomplete="off"><button>Send</button></form>
+      </div>
       <div class="sim-set" data-set hidden role="dialog" aria-label="Control settings">
         <div class="sim-set-h"><b>Controls</b><button type="button" class="sim-b" data-setx aria-label="Close"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
         <label class="sim-set-r"><span>Sensitivity curve <small>more curve = finer control near centre</small></span><input type="range" min="0" max="85" data-cs="expo"></label>
@@ -1004,6 +1013,8 @@ window.BoploSim = (() => {
     const trimStep = d => { if (replay) return; fc.trim = clamp(fc.trim + d, -1, 1); };
     on(window, 'keydown', e => {
       if (!alive) return; const k = e.key.toLowerCase();
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (k === 'n') { e.preventDefault(); if (!e.repeat) radioPTT(true); return; }
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'pageup', 'pagedown', 'home', 'end', 'f6', 'f7'].includes(k)) e.preventDefault();
       if (e.repeat && [' ', 'c', 'p', 'm', 'v', '[', ']', 'f6', 'f7', 'i', 'u', 'h', 'j'].includes(k)) return;
       if (k === ' ') { togglePause(); return; }
@@ -1026,7 +1037,7 @@ window.BoploSim = (() => {
       if (/^[0-9]$/.test(k) && !replay) { thrTarget = k === '0' ? 1 : +k / 10; return; }
       keys.add(k);
     });
-    on(window, 'keyup', e => keys.delete(e.key.toLowerCase()));
+    on(window, 'keyup', e => { const k = e.key.toLowerCase(); if (k === 'n') radioPTT(false); keys.delete(k); });
     on(window, 'blur', () => keys.clear());
     // touch stick (elevator and ailerons) and rudder slider
     const stick = $('[data-stick]'), knob = $('[data-knob]');
@@ -1284,7 +1295,7 @@ window.BoploSim = (() => {
     /* ---- ready card ---- */
     const ctrlHelp = coarse
       ? `<li><b>Stick</b> bottom left: pull back to raise the nose, push to lower it, sideways to bank. <b>Rudder</b> slider underneath.</li><li><b>Power</b> slider on the right; <b>Flaps</b>, <b>Trim</b>, <b>Brake</b> and <b>Park</b> buttons beside it. Or turn on <b>Tilt to steer</b>.</li>`
-      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
+      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings · <b>N</b> hold to talk on the radio</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${PR ? PRT : replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>${PRF ? 'Glidepath' : PR?.kind === 'takeoff' ? 'Climb to' : 'Planned height'}</span><b>${PRF ? '3°' : PR?.kind === 'takeoff' ? '1,000 ft AAL' : Math.round((cruise - geoN) / FT / 100) * 100 + ' ft'}</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
@@ -1336,12 +1347,83 @@ window.BoploSim = (() => {
         ${kind === 'crash' ? `<p>${esc(st.crash)}</p>` : ld ? `<p>Touchdown at ${Math.abs(Math.round(touch.fpm / 10) * 10)} fpm with ${Math.abs(Math.round(touch.bank))}° of bank.</p>` : ''}
         <div class="sim-facts"><div><span>Time</span><b>${mmss(t)}</b></div><div><span>Flown</span><b>${(score.dist / NM).toFixed(1)} NM</b></div><div><span>Highest</span><b>${Math.round((score.maxAlt - geoN) / FT / 10) * 10} ft</b></div>
         ${replay ? '' : `<div><span>On the route</span><b>${tube}%</b></div><div><span>Average off track</span><b>${xte < .1 ? Math.round(xte * NM) + ' m' : xte.toFixed(2) + ' NM'}</b></div><div><span>Your best</span><b>${best != null ? Math.max(best, kind === 'crash' ? 0 : tube) + '%' : (kind === 'crash' ? '—' : tube + '%')}</b></div>`}</div>
-        ${practiceFacts(kind)}
+        ${practiceFacts(kind)}${radioFacts()}
         ${replay || PR ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
         <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button>${O.noRetry ? '<button type="button" class="sim-btn" data-more>Unlimited practice</button>' : `<button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button>`}</div>`);
       wireX();
       if (O.noRetry) { $('[data-more]').onclick = () => { destroy(); O.onUpgrade && O.onUpgrade(); }; return; }
-      $('[data-again]').onclick = () => { ended = false; Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
+      $('[data-again]').onclick = () => { ended = false; if (RAD) { rPend.length = 0; RAD.calls.forEach(c => rPend.push({ ...c })); radioLog.length = 0; rStartT = 0; rBusy = false; radioHide(); } Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
+    }
+
+    /* ---- radio calls during practice: prompt, listen (or type), check the elements, then the controller replies ---- */
+    const RAD = O.radio && !replay ? O.radio : null, radioLog = [];
+    let rCur = null, rRec = null, rText = '', rBusy = false;
+    const rPend = RAD ? RAD.calls.map(c => ({ ...c })) : [];
+    const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rUI = () => $('[data-radio]');
+    const sayATC = (text, done) => {
+      const box = $('[data-ratc]'); box.hidden = false; box.textContent = `${RAD.place} ${RAD.unit}: “${text}”`;
+      try { if ('speechSynthesis' in window && !store.get('mute', false)) { const u = new SpeechSynthesisUtterance(text); u.rate = 1.12; u.pitch = .9; u.lang = RAD.lang; u.onend = () => done && done(); speechSynthesis.cancel(); speechSynthesis.speak(u); setTimeout(() => done && (done = done(), null), 9000); return; } } catch { }
+      setTimeout(() => done && done(), 2600);
+    };
+    function radioShow(call, isReadback) {
+      rCur = { ...call, isReadback }; rText = '';
+      const ui = rUI(); ui.hidden = false; ui.classList.remove('done');
+      $('[data-rk]').textContent = isReadback ? 'Radio · read back' : 'Radio · your call';
+      $('[data-rtitle]').textContent = isReadback ? call.title : call.title; $('[data-rhint]').textContent = isReadback ? 'Read back the runway and the clearance, then your callsign.' : call.hint;
+      ['[data-rsaid]', '[data-rres]'].forEach(q => { $(q).hidden = true; });
+      if (!isReadback) $('[data-ratc]').hidden = true;
+      $('[data-rex]').hidden = false; $('[data-rex]').textContent = 'Example';
+      $('[data-rtype]').hidden = !!SRc; $('[data-rptt]').hidden = !SRc;
+    }
+    function radioCheck(text) {
+      const call = rCur; if (!call || rBusy) return; rBusy = true;
+      const t = RAD.compact(text), res = call.el.map(e => ({ k: e.k, ok: e.re.some(r => r && t.includes(r)) })), score = Math.round(res.filter(r => r.ok).length / res.length * 100);
+      radioLog.push({ title: call.isReadback ? call.title : call.title, score, said: text });
+      const said = $('[data-rsaid]'); said.hidden = false; said.textContent = `You: “${text}”`;
+      const rr = $('[data-rres]'); rr.hidden = false; rr.innerHTML = res.map(r => `<li class="${r.ok ? 'ok' : 'miss'}">${r.ok ? '✓' : '✗'} ${esc(r.k)}</li>`).join('') + (score < 100 ? `<li class="model">Try: “${esc(call.model)}”</li>` : '');
+      rUI().classList.add('done');
+      const next = () => {
+        rBusy = false;
+        if (!call.isReadback && call.atc) sayATC(call.atc, () => { if (call.readback) radioShow({ ...call.readback, id: call.id + '-rb', el: call.readback.el, model: call.readback.model, title: call.readback.title }, true); else setTimeout(radioHide, 2500); });
+        else setTimeout(radioHide, 2200);
+      };
+      setTimeout(next, score === 100 ? 900 : 2200);
+    }
+    function radioHide() { if (rBusy) return; rCur = null; rUI().hidden = true; }
+    function radioPTT(down) {
+      if (!rCur || rBusy) return;
+      const b = $('[data-rptt]');
+      if (!SRc) { if (down) { $('[data-rtype]').hidden = false; $('[data-rin]').focus(); } return; }
+      if (down && !rRec) {
+        try { speechSynthesis?.cancel(); } catch { }
+        rText = ''; rRec = new SRc(); rRec.lang = RAD.lang; rRec.interimResults = true; rRec.continuous = true;
+        rRec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; rText = t; const sd = $('[data-rsaid]'); sd.hidden = false; sd.textContent = `You: “${t}”`; };
+        rRec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { $('[data-rtype]').hidden = false; $('[data-rptt]').hidden = true; } };
+        rRec.onend = () => { const t = rText.trim(); rRec = null; b.classList.remove('live'); b.querySelector('span').textContent = 'Hold to talk'; if (t) radioCheck(t); };
+        try { rRec.start(); b.classList.add('live'); b.querySelector('span').textContent = 'Listening… release to send'; } catch { rRec = null; }
+      } else if (!down && rRec) { try { rRec.stop(); } catch { } }
+    }
+    if (RAD) {
+      const b = $('[data-rptt]');
+      on(b, 'pointerdown', e => { e.preventDefault(); radioPTT(true); }); on(b, 'pointerup', () => radioPTT(false)); on(b, 'pointerleave', () => radioPTT(false)); on(b, 'pointercancel', () => radioPTT(false));
+      $('[data-rskip]').onclick = () => { if (rCur && !rBusy) { radioLog.push({ title: rCur.title, score: 0, said: '', skipped: true }); radioHide(); } };
+      $('[data-rex]').onclick = () => { if (rCur) { $('[data-rhint]').textContent = `Say: “${rCur.model}”`; $('[data-rex]').hidden = true; } };
+      $('[data-rtype]').onsubmit = e => { e.preventDefault(); const i = $('[data-rin]'), t = i.value.trim(); if (!t) return; i.value = ''; i.blur(); $('[data-rtype]').hidden = !!SRc; radioCheck(t); };
+    }
+    // where the calls happen: at the start, on the downwind leg and on final (circuit), using the path's vertices
+    const rS = { downwind: synthetic && path.P.length >= 9 ? path.S[4] + 150 : Infinity, final: synthetic && path.P.length >= 9 ? path.S[7] - 250 : Infinity };
+    let rStartT = 0;
+    function radioTick(dt, pr) {
+      if (!RAD || rCur) return;
+      rStartT += dt;
+      const due = rPend.findIndex(c => c.when === 'start' ? rStartT > 1.2 : pr.s >= rS[c.when] && !st.ground);
+      if (due >= 0) { const c = rPend.splice(due, 1)[0]; radioShow(c, false); }
+    }
+    function radioFacts() {
+      if (!RAD || !radioLog.length) return '';
+      const avg = Math.round(radioLog.reduce((a, r) => a + r.score, 0) / radioLog.length);
+      return `<h3 class="sim-rh">Radio calls · ${avg}%</h3><div class="sim-facts sim-pr">${radioLog.map(r => `<div class="pr-${r.score >= 100 ? 'great' : r.score >= 60 ? 'ok' : 'firm'}"><span>${esc(r.title)}</span><b>${r.skipped ? 'Skipped' : r.score + '%'}</b></div>`).join('')}</div>`;
     }
 
     /* ---- loop ---- */
@@ -1368,6 +1450,7 @@ window.BoploSim = (() => {
           score.t += dt; const pr = path.project(st.x, st.z); score.dist += Math.hypot(st.x - lastX, st.z - lastZ); lastX = st.x; lastZ = st.z; score.maxAlt = Math.max(score.maxAlt, st.alt);
           if (!st.ground) { score.n++; score.xteSum += pr.d; const ae = Math.abs(st.alt - prof(pr.s)); if (pr.d < (circuit ? 90 : 140) / 2 + 60 && ae < 250 * FT) score.tube++; }
           if (PR && pscore && !replay) scorePractice(pr);
+          radioTick(dt, pr);
           if (PR?.kind === 'takeoff' && !st.ground && st.agl > 1000 * FT) { finish('climb'); break; }
           if (st.crashed) { finish('crash'); break; }
           if (st.ground && st.landedOnce && st.v < 2) { finish('land'); break; }

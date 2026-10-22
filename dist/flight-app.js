@@ -64,6 +64,7 @@
     ['navlog', 'Nav log', 'navlog'],
     ['sim', 'Simulator', 'sim'],
     ['weather', 'Weather', 'weather'],
+    ['preflight', 'Preflight', 'navlog'],
     ['currency', 'Currency', 'currency'],
     ['radio', 'Radio', 'radio'],
     ['map', 'Map', 'map'],
@@ -75,7 +76,7 @@
     ['ask', 'Ask Boplo', 'ask', ['ask'], 'Ask'],
     ['logbook', 'Logbook', 'logbook', ['logbook', 'map', 'analytics'], 'Logbook'],
     ['training', 'Training', 'study', ['progress', 'budget', 'study', 'prepare', 'radio', 'currency'], 'Training'],
-    ['planning', 'Flight planning', 'navlog', ['navlog', 'weather'], 'Planning'],
+    ['planning', 'Flight planning', 'navlog', ['navlog', 'preflight', 'weather'], 'Planning'],
     ['sim', 'Simulator', 'sim', ['sim'], 'Fly']
   ];
   const SUBLABEL = { logbook: 'Flights' };
@@ -644,6 +645,37 @@
     $$('[data-range]').forEach(b => b.onclick = () => { ui.range = b.dataset.range; analytics(); });
   }
 
+  // ---- calendar: one lesson as an .ics file, or a live subscription with lessons, exams and expiry dates ----
+  function downloadICS(title, date, time, where) {
+    if (!date) { toast('Set the lesson date first.'); return; }
+    const d = date.replace(/-/g, ''), e = s => String(s || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n');
+    const [h, m] = (time || '').split(':').map(Number), timed = Number.isFinite(h);
+    const end = timed ? (h >= 22 ? '235900' : String(h + 2).padStart(2, '0') + String(m).padStart(2, '0') + '00') : '';
+    const nd = (() => { const x = new Date(date + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10).replace(/-/g, ''); })();
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Boplo//Flight desk//EN', 'BEGIN:VEVENT', `UID:lesson-${d}-${Math.random().toString(36).slice(2)}@boplo.app`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+      timed ? `DTSTART:${d}T${String(h).padStart(2, '0')}${String(m).padStart(2, '0')}00` : `DTSTART;VALUE=DATE:${d}`, timed ? `DTEND:${d}T${end}` : `DTEND;VALUE=DATE:${nd}`,
+      `SUMMARY:${e('Flying lesson' + (title ? ': ' + title : ''))}`, where ? `LOCATION:${e(where)}` : '', 'DESCRIPTION:Prepare in Boplo: https://boplo.app/flight-app.html#prepare', 'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Flying lesson tomorrow', 'TRIGGER:-PT18H', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' })); a.download = `boplo-lesson-${date}.ics`; document.body.append(a); a.click(); a.remove();
+  }
+  async function calendarSheet() {
+    const p = state.profile;
+    const show = token => {
+      const https = `${location.origin}/flight/cal/feed.ics?t=${token}`, webcal = https.replace(/^https?:/, 'webcal:');
+      sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Sync with your calendar</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+        <div class="sheet-body"><p>Your calendar subscribes to Boplo and updates by itself: your next lesson (with its time and a reminder the day before), exam dates, your licence target, and when your medical, rating and other documents expire.</p>
+        ${token ? `<div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-blue" href="${esc(webcal)}">Apple Calendar or Outlook</a><a class="btn btn-line" href="https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}" target="_blank" rel="noopener">Google Calendar</a></div>
+        <label class="field"><span>Or paste this address into any calendar app</span><div class="share-link"><input readonly value="${esc(https)}" data-calurl><button type="button" class="btn btn-line btn-sm" data-calcopy>Copy</button></div></label>
+        <p class="hint">Keep the address private: anyone with it can see these dates. Calendars refresh every few hours.</p>` : `<p class="hint">${p.calOn ? 'Sync is on. For security the address is only shown when it’s created: make a new one to add another calendar (the old address stops working).' : ''}</p>`}</div>
+        <footer class="sheet-foot">${p.calOn || token ? '<button type="button" class="btn btn-line" data-caloff>Turn sync off</button>' : ''}<div class="right" style="display:flex;gap:10px;margin-left:auto">${token ? '' : `<button type="button" class="btn btn-blue" data-calmake>${p.calOn ? 'Make a new address' : 'Turn on calendar sync'}</button>`}<button type="button" class="btn btn-line" data-close>Done</button></div></footer>`;
+      sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { sheet.close(); render(); });
+      const mk = sheet.querySelector('[data-calmake]'); if (mk) mk.onclick = async () => { if (preview) { show('0'.repeat(48)); return; } mk.disabled = true; try { const r = await api('cal', 'POST'); state.profile.calOn = true; show(r.token); } catch (x) { toast(x.message); mk.disabled = false; } };
+      const off = sheet.querySelector('[data-caloff]'); if (off) off.onclick = async () => { try { if (!preview) await api('cal', 'DELETE'); state.profile.calOn = false; toast('Calendar sync is off.'); show(''); } catch (x) { toast(x.message); } };
+      const cp = sheet.querySelector('[data-calcopy]'); if (cp) cp.onclick = () => { navigator.clipboard?.writeText(https).then(() => toast('Copied.')).catch(() => sheet.querySelector('[data-calurl]').select()); };
+      if (!sheet.open) sheet.showModal();
+    };
+    show('');
+  }
+
   function prepare() {
     const p = state.profile; let checks = parseChecks(p.checklist);
     const recent = sorted().slice(0, 3);
@@ -653,6 +685,8 @@
           <div class="fields">
             ${input('Lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"')}
             ${input('Date', 'lessonDate', p.lessonDate, 'date')}
+            ${input('Start time', 'lessonTime', p.lessonTime, 'time')}
+            <div class="field cal-add"><span>Calendar</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-icsone ${p.lessonDate ? '' : 'disabled'}>Add this lesson to my calendar</button><button type="button" class="btn btn-line btn-sm" data-calsub>${p.calOn ? 'Calendar sync is on' : 'Sync with my calendar'}</button></div></div>
           </div>
           <div class="group" style="margin-top:22px"><h3>Preparation checklist</h3>
             <div class="checklist" data-checks></div>
@@ -670,6 +704,8 @@
         </section>
       </form>`);
     const form = $('[data-prep]'), box = $('[data-checks]'), nw = $('[data-new]');
+    const one = $('[data-icsone]'); if (one) one.onclick = () => { const v = Object.fromEntries(new FormData(form)); downloadICS(v.nextLesson, v.lessonDate || p.lessonDate, v.lessonTime, p.airport); };
+    $('[data-calsub]').onclick = calendarSheet;
     const draw = () => {
       box.innerHTML = checks.length ? checks.map((c, i) => `<div class="check ${c.done ? 'done' : ''}"><input type="checkbox" ${c.done ? 'checked' : ''} data-i="${i}" aria-label="Mark as prepared"><input type="text" value="${esc(c.text)}" data-t="${i}" maxlength="200" aria-label="Checklist item"><button type="button" data-x="${i}" aria-label="Remove item">${ico('close')}</button></div>`).join('') : '<p class="hint">Nothing on the list yet.</p>';
       box.querySelectorAll('[data-i]').forEach(el => el.onchange = () => { checks[el.dataset.i].done = el.checked; draw(); });
@@ -682,7 +718,7 @@
     draw();
     form.onsubmit = async e => {
       e.preventDefault(); const btn = form.querySelector('[type=submit]'), err = $('.form-error', form); err.textContent = ''; btn.disabled = true;
-      try { const v = Object.fromEntries(new FormData(form)); ['nw'].forEach(k => delete v[k]); await saveProfile({ nextLesson: v.nextLesson, lessonDate: v.lessonDate, questions: v.questions, notes: v.notes, checklist: writeChecks(checks) }); toast('Preparation saved.'); prepare(); }
+      try { const v = Object.fromEntries(new FormData(form)); ['nw'].forEach(k => delete v[k]); await saveProfile({ nextLesson: v.nextLesson, lessonDate: v.lessonDate, lessonTime: v.lessonTime, questions: v.questions, notes: v.notes, checklist: writeChecks(checks) }); toast('Preparation saved.'); prepare(); }
       catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
   }
@@ -1099,12 +1135,30 @@
         <section class="span-8 subj-grid">${sub.map(s => `<button type="button" class="tile subj" data-subj="${s.id}"><span class="subj-top"><b>${esc(s.name)}</b>${s.score != null ? `<span class="chip ${s.score >= pm ? 'ok' : 'warn'}">${s.score}%</span>` : `<span class="chip">${s.count} questions</span>`}</span><small>${esc(s.blurb)}</small><span class="subj-bar"><i style="width:${s.ready}%"></i></span><span class="subj-meta">${s.ready}% ready · ${s.seen} of ${s.count} practised</span></button>`).join('')}</section>
         <aside class="span-4" style="display:grid;gap:16px;align-content:start">
           <section class="tile"><div class="tile-head"><h2>Focus next</h2></div>${weak.length ? `<div class="bars">${weak.slice(0, 3).map(s => `<div class="bar-row"><div><span>${esc(s.name)}</span><b>${s.score}%</b></div><div class="bar-track"><i style="width:${s.score}%;background:var(--electric)"></i></div></div>`).join('')}</div><button class="btn btn-ink btn-sm" style="margin-top:16px" data-subj="${weak[0].id}">Practise ${esc(weak[0].name)}</button>` : `<p class="hint">${sub.some(s => s.seen) ? `Every subject you’ve practised is at or above the ${pm}% pass mark.` : 'Practise a subject and the ones that need work show up here.'}</p>`}</section>
+          ${examTile()}
           <section class="tile"><div class="tile-head"><h2>Mock exams</h2><span class="chip">Pass mark ${pm}%</span></div>${mocks.length ? `<div class="airports">${mocks.map(m => `<div><span>${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b class="${m.s >= pm ? 'pass' : 'fail'}">${m.s}% ${m.s >= pm ? 'pass' : 'below pass'}</b></div>`).join('')}</div>` : '<p class="hint">16 mixed questions across all subjects, scored against the pass mark your authority uses.</p>'}</section>
         </aside>
       </div>`);
     $$('[data-subj]').forEach(b => b.onclick = () => startQuiz(b.dataset.subj));
     $$('[data-mock]').forEach(b => b.onclick = () => startQuiz(null));
     $$('[data-review]').forEach(b => b.onclick = () => startQuiz('review'));
+    wireExams(studyPage);
+  }
+  // theory exam dates with a countdown; they also appear in the calendar feed
+  const examsOf = p => { const x = readJSON(p.exams, []); return Array.isArray(x) ? x : []; };
+  function examTile() {
+    const ex = examsOf(state.profile).filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date)), up = ex.filter(e => daysUntil(e.date) >= 0);
+    return `<section class="tile"><div class="tile-head"><h2>Exam dates</h2>${up[0] ? `<span class="chip ${daysUntil(up[0].date) <= 14 ? 'warn' : ''}">${daysUntil(up[0].date) === 0 ? 'Today' : `${daysUntil(up[0].date)} days`}</span>` : ''}</div>
+      ${ex.length ? `<div class="airports exams">${ex.map((e, i) => `<div class="${daysUntil(e.date) < 0 ? 'past' : ''}"><span>${esc(e.name)}</span><b>${esc(fmtDate(e.date, { day: 'numeric', month: 'short', year: 'numeric' }))} <button type="button" class="icon-btn" data-delexam="${i}" aria-label="Remove exam">${ico('close')}</button></b></div>`).join('')}</div>` : '<p class="hint">Add your theory exam dates to count down and see them in your calendar.</p>'}
+      <form class="exam-add" data-addexam><input name="name" placeholder="Subject, e.g. Air law" maxlength="60" required><input name="date" type="date" required><button class="btn btn-line btn-sm">Add</button></form>
+      <button type="button" class="link" data-calsub2 style="margin-top:10px">${state.profile.calOn ? 'Calendar sync is on' : 'Show these in my calendar'}</button></section>`;
+  }
+  function wireExams(again) {
+    const f = $('[data-addexam]'); if (!f) return;
+    const save = async list => { try { await saveProfile({ exams: JSON.stringify(list) }); again(); } catch (x) { toast(x.message); } };
+    f.onsubmit = e => { e.preventDefault(); const v = Object.fromEntries(new FormData(f)); if (!v.name.trim() || !v.date) return; save([...examsOf(state.profile), { name: v.name.trim().slice(0, 60), date: v.date }].sort((a, b) => a.date.localeCompare(b.date)).slice(-20)); };
+    $$('[data-delexam]').forEach(b => b.onclick = () => { const ex = examsOf(state.profile).filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date)); ex.splice(+b.dataset.delexam, 1); save(ex); });
+    const c2 = $('[data-calsub2]'); if (c2) c2.onclick = calendarSheet;
   }
   function startQuiz(subject) {
     const st = studyOf(state.profile);
@@ -1302,6 +1356,210 @@
     }
     return out;
   }
+  /* ================= preflight: weight and balance, runway performance, briefing ================= */
+  const PF = () => window.BoploPreflight;
+  const pfStore = () => readJSON(state.profile.preflight, {});
+  const pfType = p => { const a = String(p.aircraft || '').toLowerCase(); return /152/.test(a) ? 'c152' : /172/.test(a) ? 'c172' : /pa-?28|warrior|archer|cherokee/.test(a) ? 'pa28' : /da-?40/.test(a) ? 'da40' : /da-?20|katana/.test(a) ? 'da20' : /p2008|tecnam/.test(a) ? 'p2008' : /dr-?400|robin/.test(a) ? 'dr400' : /sr-?20|cirrus/.test(a) ? 'sr20' : /cub/.test(a) ? 'cub' : 'c172'; };
+  const NOTAM_LINKS = { ES: ['ENAIRE NOTAM briefing (ICARO)', 'https://notampib.enaire.es/'], GB: ['NATS AIS pre-flight briefing', 'https://nats-uk.ead-it.com/cms-nats/opencms/en/Pre-flight-briefing/'], US: ['FAA NOTAM Search', 'https://notams.aim.faa.gov/notamSearch/'], FR: ['SIA NOTAM (SOFIA)', 'https://sofia-briefing.aviation-civile.gouv.fr/'], DE: ['DFS AIS', 'https://secais.dfs.de/'], IE: ['IAA NOTAM', 'https://www.airnav.ie/'], AU: ['Airservices NAIPS', 'https://www.airservicesaustralia.com/naips/'], CA: ['NAV CANADA CFPS', 'https://plan.navcanada.ca/'], NZ: ['Airways IFIS', 'https://www.ifis.airways.co.nz/'] };
+  const runwayEnds = async af => {
+    const rows = ((await fetch(`/runways/${af.cc}.json`).then(r => r.ok ? r.json() : {}).catch(() => ({}))).rows || {})[af.code] || [];
+    const brg = (a, b) => norm360(toD(Math.atan2(Math.sin(toR(b[1] - a[1])) * Math.cos(toR(b[0])), Math.cos(toR(a[0])) * Math.sin(toR(b[0])) - Math.sin(toR(a[0])) * Math.cos(toR(b[0])) * Math.cos(toR(b[1] - a[1])))));
+    if (rows.length) return rows.flatMap(r => [{ id: r[0], hdg: brg([r[2], r[3]], [r[4], r[5]]), len: r[6], lda: r[6] - (r[10] || 0), surf: r[8], disp: r[10] || 0, trueHdg: true }, { id: r[1], hdg: brg([r[4], r[5]], [r[2], r[3]]), len: r[6], lda: r[6] - (r[11] || 0), surf: r[8], disp: r[11] || 0, trueHdg: true }]).filter(e => e.id);
+    return (af.runways || []).flatMap(r => String(r[0] || '').split('/').map(id => ({ id, hdg: (parseInt(id, 10) || 0) * 10, len: r[1], lda: r[1], surf: r[2] }))).filter(e => e.id && /^\d/.test(e.id));
+  };
+  const PAVED_RE = /asp|con|pav|bit|tar|pem|cop/i;
+  async function preflightPage() {
+    if (!PF()) { shell('preflight', { title: 'Preflight' }, '<div class="tile empty center"><h3>Loading the preflight tools…</h3></div>'); await loadScript('/flight-preflight.js?v=1', () => !!window.BoploPreflight).catch(() => { }); if (!PF()) return; }
+    const p = state.profile, S = pfStore(), P = PF();
+    S.ac = S.ac || pfType(p); S.mine = S.mine || {}; S.loads = S.loads || {}; S.fuel = S.fuel || {}; S.mins = S.mins || { wind: 15, gust: 20, cross: 10, visKm: 8, ceil: 1500 }; S.cond = S.cond || {};
+    S.ap = S.ap || upper(p.airport).split(/[\s·]/)[0] || '';
+    const mine = S.mine[S.ac] = S.mine[S.ac] || {}, A0 = P.TYPES[S.ac], au = A0.units === 'lb' ? 'in' : 'm', wu = A0.units;
+    const num = (n, v, extra = '') => `<input name="${n}" type="number" step="any" inputmode="decimal" value="${esc(v ?? '')}" ${extra}>`;
+    const envTxt = (mine.envelope || A0.envelope || []).map(([x, y]) => `${x},${y}`).join('  ');
+    shell('preflight', { title: 'Preflight', sub: 'Weight and balance, runway performance and a weather go/no-go for your next flight, on one page.', actions: '<button class="btn btn-ink" data-pfprint>Print briefing</button>' },
+      `<p class="callout warn">A training aid. Use your aircraft’s own weight and balance report and POH, check every figure, and get an official briefing before you fly.</p>
+      <div class="grid" style="margin-top:16px">
+        <section class="tile span-5 pf-in"><div class="tile-head"><h2>Aircraft and loading</h2></div>
+          <form class="fields" data-pfac novalidate>
+            <label class="field"><span>Aircraft type</span><select name="ac">${Object.entries(P.TYPES).map(([k, t]) => `<option value="${k}" ${S.ac === k ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+            <label class="field"><span>Registration</span><input name="reg" value="${esc(mine.reg || p.registration || '')}" maxlength="12" placeholder="e.g. G-ABCD" autocapitalize="characters"></label>
+            ${A0.stations.map(s => `<label class="field"><span>${esc(s.label)} (${wu})${s.max ? ` <i>max ${s.max}</i>` : ''}</span>${num('l_' + s.id, S.loads[s.id], 'min="0"')}</label>`).join('')}
+            <label class="field"><span>Fuel at start (${esc(A0.fuel.unit)})${A0.fuel.usable ? ` <i>max ${A0.fuel.usable}</i>` : ''}</span>${num('fuelStart', S.fuel.start, 'min="0"')}</label>
+            <label class="field"><span>Flight time (min)</span>${num('mins', S.fuel.mins, 'min="0" placeholder="e.g. 60"')}</label>
+          </form>
+          <details class="more pf-mine" ${A0.needsArms && !mine.emptyW ? 'open' : ''}><summary>Your aircraft’s figures ${mine.emptyW ? '<span class="chip ok">Entered</span>' : `<span class="chip ${A0.needsArms ? 'warn' : ''}">${A0.needsArms ? 'Needed' : 'Using typical figures'}</span>`}</summary>
+            <p class="hint" style="padding:0 16px">From the aircraft’s weight and balance report and POH. Arms in ${au}, weights in ${wu}. ${A0.source ? `Defaults: typical ${esc(A0.source)} figures.` : ''}</p>
+            <form class="fields" data-pfmine novalidate>
+              <label class="field"><span>Basic empty weight (${wu})</span>${num('emptyW', mine.emptyW, `placeholder="${A0.empty[0] || ''}"`)}</label>
+              <label class="field"><span>Empty CG arm (${au})</span>${num('emptyArm', mine.emptyArm, `placeholder="${A0.empty[1] || ''}"`)}</label>
+              <label class="field"><span>Max take-off weight (${wu})</span>${num('mtow', mine.mtow, `placeholder="${A0.mtow || ''}"`)}</label>
+              <label class="field"><span>Fuel burn (${esc(A0.fuel.unit)}/h)</span>${num('burn', mine.burn, `placeholder="${A0.fuel.burn || ''}"`)}</label>
+              <label class="field"><span>Fuel arm (${au})</span>${num('fuelArm', mine.fuelArm, `placeholder="${A0.fuel.arm ?? ''}"`)}</label>
+              <label class="field"><span>Usable fuel (${esc(A0.fuel.unit)})</span>${num('fuelUsable', mine.fuelUsable, `placeholder="${A0.fuel.usable || ''}"`)}</label>
+              ${A0.stations.map(s => `<label class="field"><span>${esc(s.label)} arm (${au})</span>${num('arm_' + s.id, mine.arms?.[s.id], `placeholder="${s.arm ?? ''}"`)}</label>`).join('')}
+              <label class="field full"><span>CG envelope corners <i>arm,weight pairs, clockwise</i></span><input name="envelope" value="${esc(envTxt)}" placeholder="e.g. 35,1500  35,1950  41,2550  47.3,2550  47.3,1500"></label>
+              <label class="field"><span>Take-off to 50 ft (m) <i>POH, sea level, max weight</i></span>${num('to50', mine.perf?.to50, `placeholder="${A0.perf.to50 || ''}"`)}</label>
+              <label class="field"><span>Landing from 50 ft (m)</span>${num('ld50', mine.perf?.ld50, `placeholder="${A0.perf.ld50 || ''}"`)}</label>
+            </form></details>
+        </section>
+        <section class="tile span-7"><div class="tile-head"><h2>Weight and balance</h2><span data-wbchip></span></div><div data-wb></div></section>
+        <section class="tile span-12"><div class="tile-head"><h2>Runway performance</h2><span data-pfchip></span></div>
+          <form class="fields pf-cond" data-pfcond novalidate>
+            <label class="field"><span>Airfield</span><input name="ap" list="pf-afs" value="${esc(S.ap)}" placeholder="Code or name" autocomplete="off"><datalist id="pf-afs"></datalist></label>
+            <label class="field"><span>Runway</span><select name="rw" data-pfrw><option value="">Loading…</option></select></label>
+            <label class="field"><span>Surface</span><select name="surface">${Object.entries(P.SURF).map(([k, v]) => `<option value="${k}" ${S.cond.surface === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+            <label class="field"><span>Slope (% uphill)</span>${num('slope', S.cond.slope ?? 0)}</label>
+            <label class="field"><span>Temperature (°C)</span>${num('oat', S.cond.oat)}</label>
+            <label class="field"><span>QNH (hPa)</span>${num('qnh', S.cond.qnh)}</label>
+            <label class="field"><span>Wind from (°)</span>${num('wdir', S.cond.wdir)}</label>
+            <label class="field"><span>Wind (kt)</span>${num('wspd', S.cond.wspd)}</label>
+          </form>
+          <div class="nav-tools"><button type="button" class="btn btn-line btn-sm" data-pfmetar>Use the live METAR</button><span class="hint" data-pfmnote></span></div>
+          <div data-perf></div>
+        </section>
+        <section class="tile span-12"><div class="tile-head"><h2>Weather go / no-go</h2><span data-gochip></span></div>
+          <form class="fields pf-mins" data-pfmins novalidate>
+            <label class="field"><span>Max wind (kt)</span>${num('wind', S.mins.wind)}</label>
+            <label class="field"><span>Max gust (kt)</span>${num('gust', S.mins.gust)}</label>
+            <label class="field"><span>Max crosswind (kt)</span>${num('cross', S.mins.cross)}</label>
+            <label class="field"><span>Min visibility (km)</span>${num('visKm', S.mins.visKm)}</label>
+            <label class="field"><span>Min ceiling (ft)</span>${num('ceil', S.mins.ceil)}</label>
+          </form>
+          <p class="hint">Your personal minimums. Agree them with your instructor; they’re checked against the latest METAR for the airfield above.</p>
+          <div data-brief></div>
+        </section>
+      </div>`);
+    if (window.BoploMap && countryCodeOf(p)) BoploMap.airfields(countryCodeOf(p)).then(list => { const dl = $('#pf-afs'); if (dl) dl.innerHTML = list.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); });
+    let af = null, ends = [], wx = null, saveT = 0;
+    const save = () => { clearTimeout(saveT); saveT = setTimeout(() => saveProfile({ preflight: JSON.stringify(S) }).catch(() => { }), 900); };
+    const A = () => P.aircraft(S.ac, mine);
+    const fuelUsed = () => { const a = A(); return (+S.fuel.mins || 0) / 60 * (a.fuel.burn || 0); };
+    const fmtW = v => `${Math.round(v).toLocaleString('en-GB')} ${wu}`, fmtArm = v => Number.isFinite(v) ? `${v.toFixed(au === 'm' ? 3 : 1)} ${au}` : '—';
+    const envSVG = (a, r) => {
+      const env = a.envelope || []; if (env.length < 3) return '<p class="hint">Add the CG envelope from your POH to see the chart.</p>';
+      const xs = env.map(e => e[0]).concat([r.cg, r.lcg]).filter(Number.isFinite), ys = env.map(e => e[1]).concat([r.W, r.lw]).filter(Number.isFinite);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), px = (x1 - x0) * .08 || 1, py = (y1 - y0) * .08 || 1;
+      const W = 520, H = 316, L = 54, B = 44, sx = x => L + (x - (x0 - px)) / ((x1 - x0) + 2 * px) * (W - L - 12), sy = y => H - B - (y - (y0 - py)) / ((y1 - y0) + 2 * py) * (H - B - 12);
+      const ticks = (a0, a1, n) => Array.from({ length: n + 1 }, (_, i) => a0 + (a1 - a0) * i / n);
+      return `<svg class="pf-env" viewBox="0 0 ${W} ${H}" role="img" aria-label="CG envelope chart">
+        ${ticks(y0, y1, 4).map(t => `<line x1="${L}" x2="${W - 12}" y1="${sy(t)}" y2="${sy(t)}" class="g"/><text x="${L - 8}" y="${sy(t) + 4}" text-anchor="end">${Math.round(t)}</text>`).join('')}
+        ${ticks(x0, x1, 4).map(t => `<text x="${sx(t)}" y="${H - B + 17}" text-anchor="middle">${t.toFixed(au === 'm' ? 2 : 1)}</text>`).join('')}
+        <polygon points="${env.map(([x, y]) => `${sx(x)},${sy(y)}`).join(' ')}" class="env"/>
+        <line x1="${sx(r.cg)}" y1="${sy(r.W)}" x2="${sx(r.lcg)}" y2="${sy(r.lw)}" class="burn"/>
+        <circle cx="${sx(r.cg)}" cy="${sy(r.W)}" r="7" class="pt ${r.toIn ? '' : 'bad'}"/><text x="${sx(r.cg) + 11}" y="${sy(r.W) - 8}" class="lab">Take-off</text>
+        <circle cx="${sx(r.lcg)}" cy="${sy(r.lw)}" r="6" class="pt ld ${r.ldIn ? '' : 'bad'}"/><text x="${sx(r.lcg) + 10}" y="${sy(r.lw) + 16}" class="lab">Landing</text>
+        <text x="${(L + W) / 2}" y="${H - 4}" text-anchor="middle" class="ax">CG arm (${au})</text><text x="12" y="${H / 2}" transform="rotate(-90 12 ${H / 2})" text-anchor="middle" class="ax">Weight (${wu})</text></svg>`;
+    };
+    function drawWB() {
+      const a = A(), r = P.wb(a, S.loads, { start: S.fuel.start, burn: fuelUsed() });
+      $('[data-wbchip]').innerHTML = r.ok ? '<span class="chip ok">Within limits</span>' : r.issues.some(i => i.bad) ? '<span class="chip warn">Out of limits</span>' : '<span class="chip">Needs figures</span>';
+      $('[data-wb]').innerHTML = `<div class="pf-wb">
+        <div class="table-wrap"><table><thead><tr><th>Item</th><th class="r">Weight</th><th class="r">Arm</th><th class="r">Moment</th></tr></thead>
+          <tbody>${r.rows.filter(x => x.w || x.id === 'empty').map(x => `<tr><td>${esc(x.label)}</td><td class="r">${fmtW(x.w)}</td><td class="r">${fmtArm(x.arm)}</td><td class="r">${Number.isFinite(x.m) ? Math.round(x.m).toLocaleString('en-GB') : '—'}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td>Take-off</td><td class="r">${fmtW(r.W)}</td><td class="r"><b>${fmtArm(r.cg)}</b></td><td class="r">${Math.round(r.M).toLocaleString('en-GB')}</td></tr>
+            <tr><td>Landing <small>after ${(+fuelUsed()).toFixed(1)} ${esc(a.fuel.unit)}</small></td><td class="r">${fmtW(r.lw)}</td><td class="r"><b>${fmtArm(r.lcg)}</b></td><td></td></tr></tfoot></table></div>
+        ${envSVG(a, r)}</div>
+        ${r.issues.length ? `<ul class="pf-issues">${r.issues.map(i => `<li class="${i.bad ? 'bad' : ''}">${esc(i.t)}</li>`).join('')}</ul>` : ''}
+        <p class="footnote">Max take-off weight ${a.mtow ? fmtW(a.mtow) : '—'}. ${a.mtow ? `Useful load left: ${fmtW(Math.max(0, a.mtow - r.W))}.` : ''} ${mine.emptyW ? '' : 'Using typical empty weight and arm for the type until you enter your aircraft’s figures.'}</p>`;
+      return r;
+    }
+    let lastPerf = null;
+    function drawPerf() {
+      const a = A(), r = P.wb(a, S.loads, { start: S.fuel.start, burn: fuelUsed() }), e = ends.find(x => x.id === S.cond.rw) || ends[0];
+      const box = $('[data-perf]');
+      if (!a.perf?.to50) { box.innerHTML = '<p class="hint">Add your POH take-off and landing distances under “Your aircraft’s figures”.</p>'; return; }
+      const c = P.components(e?.hdg || 0, +S.cond.wdir, +S.cond.wspd || 0);
+      const pf = P.performance(a, { elevFt: af?.elev || 0, qnh: S.cond.qnh, oat: S.cond.oat, surface: S.cond.surface, slope: +S.cond.slope || 0, head: c.head, weight: (Object.values(S.loads).some(v => +v > 0) || +S.fuel.start > 0) ? r.W : a.mtow }); lastPerf = { pf, e, c };
+      const bar = (req, avail) => { if (!avail) return ''; const pct = Math.min(100, req / avail * 100); return `<div class="pf-bar ${req > avail ? 'bad' : req > avail * .85 ? 'warn' : ''}"><i style="width:${pct}%"></i></div><small>${Math.round(req)} m needed of ${Math.round(avail)} m available (${Math.round(avail - req)} m ${req > avail ? 'short' : 'spare'})</small>`; };
+      const rowsOf = s => s.steps.filter(([, f]) => Math.abs(f - 1) > .005).map(([l, f]) => `<li>${esc(l)} <b>×${f.toFixed(2)}</b></li>`).join('');
+      const toOK = e?.len ? pf.to.req <= e.len : null, ldOK = e?.lda ? pf.ld.req <= e.lda : null;
+      $('[data-pfchip]').innerHTML = toOK == null ? '' : toOK && ldOK ? '<span class="chip ok">Runway long enough</span>' : '<span class="chip warn">Runway too short</span>';
+      box.innerHTML = `<div class="pf-perf">
+        <div class="pf-atm"><div><span>Pressure altitude</span><b>${Math.round(pf.pa).toLocaleString('en-GB')} ft</b></div><div><span>Density altitude</span><b>${Math.round(pf.da).toLocaleString('en-GB')} ft</b></div><div><span>Runway ${esc(e?.id || '—')} wind</span><b>${c.head >= 0 ? Math.round(c.head) + ' kt head' : Math.round(-c.head) + ' kt TAIL'} · ${Math.round(c.cross)} kt cross${c.from ? ' from the ' + c.from : ''}</b></div></div>
+        <div class="pf-two">
+          <div><h3>Take-off</h3><div class="pf-nums"><div><span>Ground roll</span><b>${Math.round(pf.to.roll)} m</b></div><div><span>To 50 ft</span><b>${Math.round(pf.to.d50)} m</b></div><div><span>With safety factor ×${pf.sf.to}</span><b>${Math.round(pf.to.req)} m</b></div></div>${bar(pf.to.req, e?.len)}<ul class="pf-steps">${rowsOf(pf.to)}</ul></div>
+          <div><h3>Landing</h3><div class="pf-nums"><div><span>Ground roll</span><b>${Math.round(pf.ld.roll)} m</b></div><div><span>From 50 ft</span><b>${Math.round(pf.ld.d50)} m</b></div><div><span>With safety factor ×${pf.sf.ld}</span><b>${Math.round(pf.ld.req)} m</b></div></div>${bar(pf.ld.req, e?.lda)}<ul class="pf-steps">${rowsOf(pf.ld)}</ul></div>
+        </div>
+        <p class="footnote">Corrections from the UK CAA’s Safety Sense 7 (altitude, temperature, surface, slope and the recommended safety factors), weight by (weight ÷ max weight)², wind by the usual POH rule: 10% less per 9 kt headwind, 10% more per 2 kt tailwind. ${pf.approx ? 'This type uses approximate distances: enter the figures from your POH. ' : ''}Always check against your POH charts.</p></div>`;
+    }
+    function drawBrief() {
+      const box = $('[data-brief]'), chip = $('[data-gochip]');
+      if (!wx) { box.innerHTML = `<p class="hint">${af ? 'Fetching the weather…' : 'Choose an airfield above.'}</p>`; chip.innerHTML = ''; return; }
+      const st = wx.stations?.[0]; if (!st) { box.innerHTML = '<p class="hint">No weather report found near this airfield.</p>'; chip.innerHTML = ''; return; }
+      const f = P.metarFacts(st), e = ends.find(x => x.id === S.cond.rw) || ends[0];
+      const xw = e ? P.components(e.hdg, f.wdir, Math.max(f.wspd, f.gust || 0)).cross : null, mm = P.minimums(S.mins, f, xw);
+      const word = { go: 'Within your minimums', caution: 'Close to your minimums', nogo: 'Outside your minimums' };
+      chip.innerHTML = mm.worst ? `<span class="chip go-${mm.worst}">${word[mm.worst]}</span>` : '';
+      const s = af ? P.sun(af.lat, af.lng, todayISO()) : null, t = d => d ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—';
+      const NL = NOTAM_LINKS[af?.cc] || ['EUROCONTROL EAD basic', 'https://www.ead.eurocontrol.int/'];
+      const allEnds = ends.length ? ends.map(x => { const k = P.components(x.hdg, f.wdir, f.wspd), kg = f.gust ? P.components(x.hdg, f.wdir, f.gust) : null; return `<tr${x.id === e?.id ? ' class="on"' : ''}><td>${esc(x.id)}</td><td class="r">${k.head >= 0 ? Math.round(k.head) : '<b class="bad">' + Math.round(-k.head) + ' tail</b>'}</td><td class="r">${Math.round(k.cross)}${kg ? ` <small>(G ${Math.round(kg.cross)})</small>` : ''}${k.from ? ' ' + k.from[0].toUpperCase() : ''}</td><td class="r">${x.len ? Math.round(x.len) + ' m' : '—'}</td></tr>`; }).join('') : '';
+      box.innerHTML = `<div class="pf-brief">
+        <div class="pf-go">${mm.rows.map(r => `<div class="go-${r.state}"><span>${esc(r.label)}</span><b>${esc(r.value)}</b><small>limit ${esc(r.limit)}</small></div>`).join('')}</div>
+        <div class="pf-two">
+          <div><h3>${esc(st.id)}${st.id !== af?.code ? ` <small>nearest report, ${esc(st.dist)} NM away</small>` : ''}</h3><p class="mono">${esc(st.raw)}</p>${st.taf ? `<p class="mono small">${esc(st.taf)}</p>` : ''}<p><a class="link" href="#weather" data-pfwx>Decode it on the Weather page</a></p></div>
+          <div><h3>Runway winds</h3>${allEnds ? `<div class="table-wrap"><table><thead><tr><th>Rwy</th><th class="r">Head</th><th class="r">Cross</th><th class="r">Length</th></tr></thead><tbody>${allEnds}</tbody></table></div>` : '<p class="hint">No runway data for this airfield.</p>'}</div>
+        </div>
+        <div class="pf-atm"><div><span>Sunrise</span><b>${t(s?.rise)}</b></div><div><span>Sunset</span><b>${t(s?.set)}</b></div><div><span>End of civil twilight</span><b>${t(s?.dusk)}</b></div><div><span>NOTAMs</span><b><a class="link" href="${esc(NL[1])}" target="_blank" rel="noopener">${esc(NL[0])}</a></b></div></div>
+        <p class="footnote">Times are your device’s local time for today. Check NOTAMs, the TAF and any airfield restrictions in your official briefing.</p></div>`;
+      const wl = $('[data-pfwx]'); if (wl) wl.onclick = () => { ui.wxq = st.id; };
+      return { st, f, mm, s, NL };
+    }
+    async function loadAf() {
+      const code = upper($('[name=ap]').value).split(/[\s·]/)[0]; S.ap = code; af = code ? await anyAirfield(code) : null; ends = af ? await runwayEnds(af) : []; wx = null;
+      const sel = $('[data-pfrw]'); sel.innerHTML = ends.length ? ends.map(e => `<option value="${esc(e.id)}" ${S.cond.rw === e.id ? 'selected' : ''}>${esc(e.id)} · ${Math.round(e.len || 0)} m ${PAVED_RE.test(e.surf || '') ? '' : esc((e.surf || '').toLowerCase())}</option>`).join('') : '<option value="">No runway data</option>';
+      if (ends.length && !ends.some(e => e.id === S.cond.rw)) S.cond.rw = ends[0].id;
+      const e = ends.find(x => x.id === S.cond.rw); if (e && !S.cond.surfaceSet) { S.cond.surface = PAVED_RE.test(e.surf || '') ? 'paved' : 'grass'; $('[name=surface]').value = S.cond.surface; }
+      drawPerf(); drawBrief();
+      if (af) { try { wx = preview ? EX_WX : await api(`weather?ids=${encodeURIComponent(af.code)}&lat=${af.lat}&lng=${af.lng}`); } catch { wx = { stations: [] }; } drawBrief(); }
+    }
+    // inputs
+    $('[data-pfac]').oninput = e => {
+      const fm = Object.fromEntries(new FormData($('[data-pfac]')));
+      if (e.target.name === 'ac') { S.ac = fm.ac; save(); preflightPage(); return; }
+      mine.reg = fm.reg; A0.stations.forEach(s => { S.loads[s.id] = fm['l_' + s.id]; }); S.fuel.start = fm.fuelStart; S.fuel.mins = fm.mins;
+      drawWB(); drawPerf(); save();
+    };
+    $('[data-pfmine]').oninput = () => {
+      const fm = Object.fromEntries(new FormData($('[data-pfmine]')));
+      ['emptyW', 'emptyArm', 'mtow', 'burn', 'fuelArm', 'fuelUsable'].forEach(k => { mine[k] = fm[k]; });
+      mine.arms = Object.fromEntries(A0.stations.map(s => [s.id, fm['arm_' + s.id]]));
+      const env = String(fm.envelope || '').trim().split(/\s+|;/).map(t => t.split(',').map(Number)).filter(x => x.length === 2 && x.every(Number.isFinite));
+      mine.envelope = env.length >= 3 ? env : undefined;
+      mine.perf = { ...(mine.perf || {}), to50: fm.to50, ld50: fm.ld50 };
+      if (mine.perf.to50 && A0.perf.to50) mine.perf.toRoll = +fm.to50 * A0.perf.toRoll / A0.perf.to50; if (mine.perf.ld50 && A0.perf.ld50) mine.perf.ldRoll = +fm.ld50 * A0.perf.ldRoll / A0.perf.ld50;
+      drawWB(); drawPerf(); save();
+    };
+    const cond = $('[data-pfcond]');
+    cond.oninput = e => {
+      const fm = Object.fromEntries(new FormData(cond));
+      if (e.target.name === 'surface') S.cond.surfaceSet = true;
+      Object.assign(S.cond, { rw: fm.rw, surface: fm.surface, slope: fm.slope, oat: fm.oat, qnh: fm.qnh, wdir: fm.wdir, wspd: fm.wspd });
+      drawPerf(); if (e.target.name === 'rw') drawBrief(); save();
+    };
+    cond.querySelector('[name=ap]').onchange = () => { S.cond.surfaceSet = false; loadAf().then(save); };
+    $('[data-pfmins]').oninput = () => { Object.assign(S.mins, Object.fromEntries(new FormData($('[data-pfmins]')))); drawBrief(); save(); };
+    $('[data-pfmetar]').onclick = () => {
+      const st = wx?.stations?.[0], note = $('[data-pfmnote]'); if (!st) { note.textContent = 'No METAR loaded for this airfield yet.'; return; }
+      const f = P.metarFacts(st);
+      if (f.temp != null) S.cond.oat = f.temp; if (f.qnh != null) S.cond.qnh = Math.round(f.qnh); if (Number.isFinite(f.wdir)) S.cond.wdir = f.wdir; S.cond.wspd = f.wspd;
+      ['oat', 'qnh', 'wdir', 'wspd'].forEach(k => { const i = cond.querySelector(`[name=${k}]`); if (i) i.value = S.cond[k] ?? ''; });
+      note.textContent = `From ${st.id}: ${st.raw.split(' ').slice(1, 6).join(' ')}`; drawPerf(); save();
+    };
+    $('[data-pfprint]').onclick = () => {
+      const a = A(), r = P.wb(a, S.loads, { start: S.fuel.start, burn: fuelUsed() }), b = drawBrief(), L = lastPerf;
+      printDoc('Preflight briefing', `<h1>Preflight briefing · ${esc(af?.code || '')} ${esc(af?.name || '')}</h1><p class="meta">${esc(p.name || '')} · ${esc(a.name)} ${esc(mine.reg || '')} · ${esc(fmtDate(todayISO(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</p>
+        <h3>Weight and balance ${r.ok ? '(within limits)' : '(CHECK: not within limits or figures missing)'}</h3>
+        <table><thead><tr><th>Item</th><th>Weight</th><th>Arm</th><th>Moment</th></tr></thead><tbody>${r.rows.filter(x => x.w || x.id === 'empty').map(x => `<tr><td>${esc(x.label)}</td><td>${fmtW(x.w)}</td><td>${fmtArm(x.arm)}</td><td>${Math.round(x.m)}</td></tr>`).join('')}</tbody><tfoot><tr><td>Take-off</td><td>${fmtW(r.W)}</td><td>${fmtArm(r.cg)}</td><td>${Math.round(r.M)}</td></tr><tr><td>Landing</td><td>${fmtW(r.lw)}</td><td>${fmtArm(r.lcg)}</td><td></td></tr></tfoot></table>
+        ${r.issues.length ? `<p>${r.issues.map(i => esc(i.t)).join('<br>')}</p>` : ''}
+        ${L ? `<h3>Runway ${esc(L.e?.id || '')} performance</h3><table><tbody><tr><td>Pressure / density altitude</td><td>${Math.round(L.pf.pa)} ft / ${Math.round(L.pf.da)} ft</td></tr><tr><td>Wind component</td><td>${Math.round(L.c.head)} kt head, ${Math.round(L.c.cross)} kt cross</td></tr><tr><td>Take-off to 50 ft (×${L.pf.sf.to} factored)</td><td>${Math.round(L.pf.to.d50)} m (${Math.round(L.pf.to.req)} m) of ${Math.round(L.e?.len || 0)} m</td></tr><tr><td>Landing from 50 ft (×${L.pf.sf.ld} factored)</td><td>${Math.round(L.pf.ld.d50)} m (${Math.round(L.pf.ld.req)} m) of ${Math.round(L.e?.lda || 0)} m</td></tr></tbody></table>` : ''}
+        ${b ? `<h3>Weather: ${esc({ go: 'within personal minimums', caution: 'close to personal minimums', nogo: 'OUTSIDE personal minimums' }[b.mm.worst] || '')}</h3><p style="font-family:monospace">${esc(b.st.raw)}</p>${b.st.taf ? `<p style="font-family:monospace">${esc(b.st.taf)}</p>` : ''}<table><tbody>${b.mm.rows.map(x => `<tr><td>${esc(x.label)}</td><td>${esc(x.value)}</td><td>limit ${esc(x.limit)}</td><td>${x.state.toUpperCase()}</td></tr>`).join('')}</tbody></table>
+        <p>Sunrise ${b.s?.rise ? b.s.rise.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'} · sunset ${b.s?.set ? b.s.set.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'} · end of civil twilight ${b.s?.dusk ? b.s.dusk.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—'}</p><p>NOTAMs: check ${esc(b.NL[0])} (${esc(b.NL[1])})</p>` : ''}
+        <p class="small">Prepared with Boplo Flight as a training aid. Not an official briefing. Check all figures against the aircraft’s weight and balance report, POH and an official briefing.</p>`);
+    };
+    // initial values into the loading form
+    drawWB(); loadAf();
+  }
+
   const navStore = () => readJSON(state.profile.navlogs, { logs: [] });
   function navPage() {
     const p = state.profile;
@@ -1465,7 +1723,8 @@
   function importSheet() {
     sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Import flights</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
       <div class="sheet-body"><p>Upload a CSV from a spreadsheet or another logbook app. Boplo looks for columns named <b>date</b>, <b>from</b>, <b>to</b>, <b>aircraft</b>, <b>registration</b>, <b>role</b>, <b>duration</b> (h:mm or decimal hours) or <b>minutes</b>, <b>landings</b> and <b>remarks</b>.</p>
-      <label class="btn btn-line" style="justify-self:start">Choose a CSV file<input type="file" accept=".csv,text/csv" data-file hidden></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><label class="btn btn-line">Choose a CSV file<input type="file" accept=".csv,text/csv" data-file hidden></label><label class="btn btn-blue btn-has-spark">Scan paper logbook pages ${spark}<input type="file" accept="image/*" multiple data-scan hidden></label></div>
+      <p class="hint">Scanning: photograph each page flat, in good light, with the whole page in view. Boplo reads the rows and you check them before anything is saved.</p>
       <div data-prev></div><p class="form-error" role="alert"></p></div>
       <footer class="sheet-foot"><span class="hint" data-count></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-go disabled>Import</button></div></footer>`;
     sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
@@ -1479,6 +1738,36 @@
       sheet.querySelector('[data-prev]').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Aircraft</th><th>Role</th><th class="r">Time</th><th class="r">Ldg</th></tr></thead><tbody>${rows.slice(0, 6).map(r => `<tr><td>${esc(r.date)}</td><td class="route">${esc(upper(r.departure))} → ${esc(upper(r.arrival))}</td><td>${esc(r.aircraft || r.registration)}</td><td>${esc(roleName(r.role))}</td><td class="r">${hm(r.minutes)}</td><td class="r">${r.landings}</td></tr>`).join('')}</tbody></table></div>`;
       sheet.querySelector('[data-count]').textContent = `${good.length} of ${rows.length} rows look complete.`;
       rows = good; go.disabled = !good.length; go.textContent = `Import ${good.length} flight${good.length === 1 ? '' : 's'}`;
+    };
+    // paper logbook pages: shrink each photo, read it on the server, then show every row for checking and editing
+    const shrink = file => new Promise((res, rej) => { const img = new Image(); img.onload = () => { const k = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', .82)); }; img.onerror = () => rej(new Error('That photo couldn’t be opened. Try a JPEG or PNG.')); img.src = URL.createObjectURL(file); });
+    let scanned = [];
+    const hmIn = m => m ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}` : '';
+    const drawScan = notes => {
+      sheet.querySelector('[data-prev]').innerHTML = `${notes ? `<p class="callout">${esc(notes)}</p>` : ''}<div class="table-wrap scan-table"><table><thead><tr><th></th><th>Date</th><th>From</th><th>To</th><th>Aircraft</th><th>Reg</th><th>Role</th><th>Time</th><th>Ldg</th></tr></thead><tbody>${scanned.map((r, i) => `<tr class="${r.confidence && r.confidence < .6 ? 'low' : ''}" data-row="${i}"><td><input type="checkbox" data-k="use" ${r.use ? 'checked' : ''} aria-label="Import this row"></td><td><input type="date" data-k="date" value="${esc(r.date)}"></td><td><input data-k="departure" value="${esc(r.departure)}"></td><td><input data-k="arrival" value="${esc(r.arrival)}"></td><td><input data-k="aircraft" value="${esc(r.aircraft)}"></td><td><input data-k="registration" value="${esc(r.registration)}"></td><td><select data-k="role">${['dual', 'solo', 'pic'].map(x => `<option value="${x}" ${r.role === x ? 'selected' : ''}>${esc(roleName(x))}</option>`).join('')}</select></td><td><input data-k="time" value="${hmIn(r.minutes)}" placeholder="h:mm" inputmode="numeric"></td><td><input data-k="landings" type="number" min="0" value="${r.landings || 0}"></td></tr>`).join('')}</tbody></table></div>
+        <p class="hint">Rows highlighted in amber were hard to read. Check every row against your logbook, then import.</p>`;
+      const upd = () => { const good = scanned.filter(r => r.use && /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.minutes > 0 && r.departure); rows = good.map(r => ({ date: r.date, departure: r.departure, arrival: r.arrival || r.departure, aircraft: r.aircraft, registration: r.registration, role: r.role, minutes: r.minutes, landings: +r.landings || 0, nightLandings: +r.nightLandings || 0, instructor: r.instructor, lesson: '', notes: r.notes, cost: null, points: [], routeKind: 'endpoints' })); sheet.querySelector('[data-count]').textContent = `${good.length} of ${scanned.length} rows ready.`; go.disabled = !good.length; go.textContent = `Import ${good.length} flight${good.length === 1 ? '' : 's'}`; };
+      sheet.querySelectorAll('[data-row]').forEach(tr => tr.oninput = e => { const r = scanned[+tr.dataset.row], k = e.target.dataset.k; if (k === 'use') r.use = e.target.checked; else if (k === 'time') { const v = e.target.value.trim(), m = v.match(/^(\d+):(\d{1,2})$/); r.minutes = m ? +m[1] * 60 + +m[2] : Math.round((parseFloat(v.replace(',', '.')) || 0) * 60); } else r[k] = e.target.value; upd(); });
+      upd();
+    };
+    sheet.querySelector('[data-scan]').onchange = async e => {
+      err.textContent = ''; const files = [...e.target.files].slice(0, 10); if (!files.length) return;
+      const box = sheet.querySelector('[data-prev]'); let notes = [];
+      for (let i = 0; i < files.length; i++) {
+        box.innerHTML = `<p class="hint">Reading page ${i + 1} of ${files.length}… this takes about 20 seconds a page.</p>`;
+        try {
+          const data = await shrink(files[i]);
+          let r;
+          if (preview) r = { rows: [{ date: addDays(todayISO(), -400), departure: 'EGHP', arrival: 'EGHP', aircraft: 'PA-28', registration: 'G-BOPL', minutes: 65, role: 'dual', landings: 4, confidence: .9 }, { date: addDays(todayISO(), -393), departure: 'EGHP', arrival: 'EGTF', aircraft: 'PA-28', registration: 'G-BOPL', minutes: 80, role: 'dual', landings: 1, confidence: .5 }], notes: 'Example scan in the example desk.' };
+          else {
+            const res = await fetch('/flight/flights/scan', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image: data, type: 'image/jpeg', regime: regimeOf(state.profile) }), signal: AbortSignal.timeout ? AbortSignal.timeout(75000) : undefined });
+            r = await res.json().catch(() => ({})); if (res.status === 402) { sheet.close(); upgradeSheet(r.error); return; } if (!res.ok) throw new Error(r.error || 'The page couldn’t be read.');
+          }
+          scanned = scanned.concat((r.rows || []).map(x => ({ ...x, use: true }))); if (r.notes) notes.push(r.notes);
+        } catch (x) { err.textContent = `Page ${i + 1}: ${x.name === 'TimeoutError' ? 'took too long to read. Try again.' : x.message}`; }
+      }
+      if (!scanned.length) { box.innerHTML = '<p class="hint">No flights were found on those pages.</p>'; return; }
+      drawScan(notes.join(' '));
     };
     go.onclick = async () => {
       go.disabled = true; err.textContent = '';
@@ -1538,6 +1827,40 @@
     ];
     return { S, cs, faa, reg };
   }
+  // radio calls for simulator practice: what to say at each point, what the controller replies, and what gets checked
+  function simRadio(kind, af, endId, wind) {
+    const p = state.profile, faa = regimeOf(p) === 'faa';
+    const reg = upper(p.registration || (faa ? 'N123AB' : 'G-ABCD')).replace(/\s/g, ''), cs = spell(reg), type = (p.aircraft || (faa ? 'Cessna' : '')).split(/\s/)[0];
+    const abbr = faa ? `${type} ${spell(reg.slice(-3))}`.trim() : `${spell(reg[0])} ${spell(reg.slice(-2))}`;
+    const place = String(af?.name || 'the airfield').replace(/\s+(International\s+)?(Airfield|Airport|Aerodrome)$/i, '').replace(/\s+Airport.*$/i, '');
+    const towered = af && (af.type === 'L' || af.type === 'M'), unit = towered ? 'Tower' : faa ? 'Traffic' : 'Radio';
+    const rwN = String(endId || '').replace(/^0/, '0'), rwSay = String(endId || '').split('').map(c => /\d/.test(c) ? DIGIT[+c].toLowerCase() : c === 'L' ? 'left' : c === 'R' ? 'right' : c === 'C' ? 'centre' : '').join(' ');
+    const windSay = wind?.spd ? `${String(Math.round(wind.dir / 10) * 10).padStart(3, '0').split('').map(c => DIGIT[+c].toLowerCase()).join(' ')} degrees ${wind.spd} knots` : 'calm';
+    const csEl = { k: 'Your callsign', re: [compact(cs), compact(abbr), compact(reg), faa ? compact(reg.slice(-3)) : compact(reg[0] + reg.slice(-2))] };
+    const rwEl = { k: `Runway ${endId}`, re: ['runway' + compact(rwSay), compact(rwSay), 'runway' + String(endId).toLowerCase()] };
+    const stEl = { k: `Who you’re calling (${place} ${unit})`, re: [compact(place) + compact(unit), compact(unit)] };
+    const calls = [];
+    if (kind === 'takeoff' || kind === 'circuit') {
+      const ready = towered
+        ? { id: 'ready', when: 'start', title: 'Ready for departure', hint: `You’re at the holding point for runway ${endId}. Tell the tower you’re ready.`, model: `${place} Tower, ${cs}, holding point runway ${rwSay}, ready for departure.`, el: [stEl, csEl, rwEl, { k: 'Ready for departure', re: ['readyfordeparture', 'readyfortakeoff', 'ready'] }],
+          atc: `${abbr}, runway ${rwSay}, cleared for take-off, surface wind ${windSay}.`, readback: { title: 'Read back the take-off clearance', model: `Runway ${rwSay}, cleared for take-off, ${abbr}.`, el: [rwEl, { k: 'Cleared for take-off', re: ['clearedfortakeoff', 'clearedtotakeoff'] }, csEl] } }
+        : { id: 'ready', when: 'start', title: faa ? 'Departure call' : 'Lining up', hint: faa ? `Announce you’re departing runway ${endId}.` : `Tell ${place} Radio you’re lining up on runway ${endId}.`, model: faa ? `${place} traffic, ${type} ${spell(reg.slice(-3))}, departing runway ${rwSay}${kind === 'circuit' ? ', remaining in the pattern' : ''}, ${place}.` : `${place} Radio, ${cs}, lining up runway ${rwSay}.`, el: faa ? [{ k: `${place} traffic`, re: [compact(place) + 'traffic', 'traffic'] }, csEl, rwEl, { k: 'Departing', re: ['departing', 'takingoff', 'departure'] }] : [stEl, csEl, rwEl, { k: 'Lining up', re: ['liningup', 'lineup', 'readyfordeparture'] }],
+          atc: faa ? '' : `${abbr}, surface wind ${windSay}, take off at your discretion.` };
+      calls.push(ready);
+    }
+    if (kind === 'circuit') calls.push(faa && !towered
+      ? { id: 'downwind', when: 'downwind', title: 'Downwind call', hint: 'Announce your position on the downwind leg.', model: `${place} traffic, ${type} ${spell(reg.slice(-3))}, left downwind runway ${rwSay}, full stop, ${place}.`, el: [{ k: `${place} traffic`, re: [compact(place) + 'traffic', 'traffic'] }, csEl, { k: 'Downwind', re: ['downwind'] }, rwEl] }
+      : { id: 'downwind', when: 'downwind', title: 'Downwind call', hint: 'You’re on the downwind leg, planning to land.', model: `${abbr}, downwind to land.`, el: [csEl, { k: 'Downwind', re: ['downwind'] }, { k: 'Your intentions (to land)', re: ['toland', 'land', 'fullstop', 'touchandgo'] }], atc: towered ? `${abbr}, number one, report final.` : '' });
+    if (kind === 'circuit' || kind === 'long' || kind === 'short') {
+      const fin = kind === 'long' ? 'long final' : 'final';
+      calls.push(faa && !towered
+        ? { id: 'final', when: kind === 'circuit' ? 'final' : 'start', title: 'Final call', hint: `Announce you’re on ${fin}.`, model: `${place} traffic, ${type} ${spell(reg.slice(-3))}, ${fin} runway ${rwSay}, full stop, ${place}.`, el: [{ k: `${place} traffic`, re: [compact(place) + 'traffic', 'traffic'] }, csEl, { k: 'Final', re: ['final'] }, rwEl] }
+        : { id: 'final', when: kind === 'circuit' ? 'final' : 'start', title: kind === 'long' ? 'Long final call' : 'Final call', hint: `You’re on ${fin} for runway ${endId}.`, model: towered && kind !== 'circuit' ? `${place} Tower, ${cs}, ${fin} runway ${rwSay}.` : `${abbr}, ${fin}.`, el: kind !== 'circuit' && towered ? [stEl, csEl, { k: 'Final', re: ['final'] }, rwEl] : [csEl, { k: 'Final', re: ['final'] }],
+            atc: towered ? `${abbr}, runway ${rwSay}, cleared to land, surface wind ${windSay}.` : `${abbr}, runway ${rwSay}, surface wind ${windSay}, land at your discretion.`,
+            readback: towered ? { title: 'Read back the landing clearance', model: `Runway ${rwSay}, cleared to land, ${abbr}.`, el: [rwEl, { k: 'Cleared to land', re: ['clearedtoland'] }, csEl] } : null });
+    }
+    return { calls, compact, cs, abbr, unit, place, lang: navigator.language || 'en-GB' };
+  }
   function radioPage(id) {
     if (!isAdv()) { shell('radio', { title: 'Radio practice', sub: 'Say your calls out loud and get them checked.' }, paywall('Sound confident on the radio.', 'Practise real scenarios with your own callsign. Boplo listens and checks every element of your call.')); return; }
     const { S, cs, faa, reg } = radioScenarios(), best = readJSON(state.profile.radio, {});
@@ -1577,7 +1900,7 @@
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=15', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=16', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -1619,7 +1942,7 @@
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), noRetry: !!src.freeTry, onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
+        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry, onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
         depAirport: dep && !PRfin ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
     } catch (x) { toast(x.message); }
@@ -1680,6 +2003,7 @@
           <label class="pr-f"><span>Airfield</span><input type="text" list="pr-afs" data-prap value="${esc(ui.sim.prAp || upper(state.profile.airport).split(/[\s·]/)[0] || '')}" placeholder="Search by code or name" autocomplete="off" spellcheck="false"><datalist id="pr-afs" data-prlist></datalist></label>
           <label class="pr-f"><span>Runway</span><select data-prrw><option value="">Longest runway</option></select></label>
         </div>
+        <label class="sim-radio-opt"><input type="checkbox" data-prradio ${ui.sim.radio !== false ? 'checked' : ''}> <span><b>Radio calls</b> Make your calls out loud as you fly (or type them) and get each one checked, with the controller’s replies. Advanced.</span></label>
         <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap']].map(([k, l, d]) => `<button type="button" class="pr-kind" data-prk="${k}"><span class="pr-tag" hidden></span><b>${l}</b><small>${d}</small></button>`).join('')}</div>
       </section>
       <section class="ac-pick" aria-labelledby="ac-h"><div class="ac-head"><div><h2 class="section-h" id="ac-h">Aircraft</h2><p class="hint" data-acnote></p></div><button type="button" class="ac-auto-btn" data-acauto aria-pressed="false">${ico('logbook')}Match my logbook</button></div><div class="ac-grid" data-acgrid><p class="hint">Loading aircraft…</p></div></section>
@@ -1710,6 +2034,7 @@
       };
       if (window.BoploMap && cc) BoploMap.airfields(cc).then(l => { afs = l.map(a => ({ ...a, cc })); dl.innerHTML = afs.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); fillRw(); });
       inp.onchange = fillRw; sel.onchange = () => { ui.sim.prRw = sel.value; };
+      const rr = $('[data-prradio]'); if (rr) rr.onchange = () => { ui.sim.radio = rr.checked; };
       paintFree(); if (!isAdv() && !preview) api('sim/usage').then(r => { if (!r.unlimited) { simFreeLeft = r.left; paintFree(); } }).catch(() => { });
       $$('[data-prk]').forEach(b => b.onclick = () => { const c = upper(inp.value).split(/[\s·]/)[0]; if (!c) { inp.focus(); toast('Pick an airfield first.'); return; } openPractice(c, sel.value, b.dataset.prk); }); }
     $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
@@ -2282,7 +2607,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 

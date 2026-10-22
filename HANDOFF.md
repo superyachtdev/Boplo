@@ -146,6 +146,12 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - flight-sim.js: O.practice forces the runway end, flies finals straight in on a 3° glidepath, starts configured (flaps, trim, power from BoploPhysics.approachPower, which flies a throwaway copy of the aircraft to find the power for a 3° descent), ends a take-off at 1,000 ft AAL, and the debrief grades glidepath, speed, centreline and touchdown point (or roll centreline, lift-off and Vy for take-offs).
 - Gotcha: path.project() is stateful (search cursor); don't call it for setup maths, use path.S / path.P.
 
+## Preflight, calendar, logbook scan, sim radio (2026-10-22, Claude)
+- Preflight page (Planning hub, #preflight): dist/flight-preflight.js (BoploPreflight, pure maths, checked by scripts/preflight-check.cjs) has W&B type data (C152, C172S, PA-28-161, DA40 with typical POH figures; DA20, P2008, DR400, SR20, Cub and Other need the pilot's arms), envelope check, CAA Safety Sense 7 performance factors, NOAA sun times, METAR facts and personal-minimums go/no-go. State in profile.preflight (JSON). Print briefing uses printDoc.
+- Calendar: profile.lessonTime and profile.exams (JSON list). POST/DELETE /flight/cal makes or revokes a feed token (hash stored as profile.calHash, like shareHash); GET /flight/cal/feed.ics?t= is public and returns lessons, exams, document expiries and the target date. Prepare page also downloads a single .ics.
+- Logbook scan: Import sheet "Scan paper logbook pages". POST /flight/flights/scan (Advanced, 40 a day, up to ~7 MB body) sends the photo to Claude (ANTHROPIC_API_KEY, SCAN_MODEL or AI_MODEL) or Gemini as fallback and returns rows; the pilot edits them before the normal import.
+- Sim radio: practice sessions pass O.radio from simRadio() in flight-app.js (calls per exercise with elements to check, ATC replies and readbacks; tower for large/medium airfields, Radio/Traffic otherwise). flight-sim.js shows the radio card, push-to-talk (button or hold N) with SpeechRecognition or typing, speaks replies with speechSynthesis, and adds a radio score to the debrief.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
