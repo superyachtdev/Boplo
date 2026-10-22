@@ -164,3 +164,39 @@
   .sim.is-replay .sim-credits{bottom:auto;top:calc(env(safe-area-inset-top) + 54px);right:10px;transform:none;text-align:right}
   .sim-card{padding:20px;border-radius:22px}
 }
+
+/* ===== controls, systems, instrument panel, autopilot modes ===== */
+.sim-panel{grid-template-areas:"ias adi alt thr" "hdg hdg hdg thr" "cdi cdi cdi thr" "sys sys sys sys"}
+.sim-sys{grid-area:sys;display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.sim-trim{display:flex;align-items:center;gap:5px;margin-right:4px}
+.sim-trim span{font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:#9ED8FF}
+.sim-trim div{position:relative;width:8px;height:26px;border-radius:4px;background:rgba(2,6,17,.6);box-shadow:inset 0 0 0 1px rgba(158,216,255,.2)}
+.sim-trim i{position:absolute;left:-3px;right:-3px;height:4px;border-radius:2px;background:#FFD24A;transform:translateY(50%);bottom:50%}
+.sim-ind{font-size:9.5px;font-weight:750;letter-spacing:.06em;padding:3px 6px;border-radius:6px;color:rgba(222,233,255,.4);background:rgba(2,6,17,.45)}
+.sim-ind.on{color:#050B1F}.sim-ind[data-ind="park"].on{background:#E0362D;color:#fff}.sim-ind[data-ind="brake"].on{background:#E8B923}.sim-ind[data-ind="carb"].on{background:#3FA2FF}.sim-ind[data-ind="rud"].on{background:#22B35A}
+.sim-rpm{font-size:11px;color:rgba(222,233,255,.7);margin-left:4px;font-variant-numeric:tabular-nums}.sim-rpm b{color:#fff;font-weight:650}
+.sim-six{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 14px);transform:translateX(-50%);width:min(1060px,calc(100vw - 24px));height:clamp(120px,14vw,178px);display:none;pointer-events:none;filter:drop-shadow(0 10px 28px rgba(0,0,0,.45))}
+.sim.six-on .sim-six{display:block}
+.sim.six-on .sim-panel{display:none}
+.sim.six-on.is-replay .sim-six{bottom:calc(env(safe-area-inset-bottom) + 76px)}
+.sim.is-cockpit .sim-six{bottom:0;width:100%;height:clamp(150px,24vh,230px);filter:none;background:linear-gradient(180deg,#22262E 0%,#15181E 12%,#0F1116 100%);border-radius:34px 34px 0 0;box-shadow:0 -14px 30px rgba(0,0,0,.35),inset 0 2px 0 rgba(255,255,255,.06)}
+.sim.is-cockpit .sim-vig{opacity:0}
+.sim-apbar{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 74px);transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:6px;border-radius:16px;background:rgba(4,12,34,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 0 0 1px rgba(158,216,255,.18)}
+.sim-apbar[hidden]{display:none}
+.sim-apbar button{height:30px;min-width:30px;padding:0 9px;border:0;border-radius:9px;background:rgba(158,216,255,.1);color:#DCE8FF;font:700 12px/1 var(--font,'Archivo',sans-serif);letter-spacing:.04em;cursor:pointer}
+.sim-apbar button[aria-pressed="true"]{background:#22B35A;color:#04140B}
+.sim-apv{display:flex;align-items:center;gap:3px;padding-left:6px;border-left:1px solid rgba(158,216,255,.18)}
+.sim-apv b{min-width:62px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;color:#fff}
+.sim-apbar ~ .sim-tip{top:calc(env(safe-area-inset-top) + 122px)}
+/* touch */
+.sim-rud{position:absolute;left:calc(env(safe-area-inset-left) + 18px);bottom:calc(env(safe-area-inset-bottom) + 14px);width:148px;height:34px;border-radius:17px;background:rgba(4,12,34,.5);box-shadow:inset 0 0 0 1.5px rgba(158,216,255,.3);pointer-events:auto;touch-action:none}
+.sim-rud i{position:absolute;top:4px;left:50%;width:44px;height:26px;margin-left:-22px;border-radius:13px;background:radial-gradient(circle at 35% 30%,#5B9BFF,#0A62FF)}
+.sim-rud span{position:absolute;left:50%;top:-16px;transform:translateX(-50%);font-size:10px;color:rgba(222,233,255,.6)}
+.sim-touch .sim-stick{bottom:calc(env(safe-area-inset-bottom) + 70px)}
+.sim-touch .sim-tilt{bottom:calc(env(safe-area-inset-bottom) + 242px);display:grid;gap:6px}
+.sim-tbtns{display:grid;grid-template-columns:repeat(2,auto);gap:5px}
+.sim-tbtns .sim-b{height:32px;font-size:11.5px;padding:0 9px;background:rgba(4,12,34,.62)}
+.sim-tbtns .sim-b.on,.sim-tbtns .sim-b:active{background:#E8B923;color:#050B1F}
+.sim.is-touch.six-on .sim-six{top:calc(env(safe-area-inset-top) + 60px);bottom:auto;height:min(44vw,240px)}
+@media (max-height:520px){.sim-touch .sim-tilt{left:auto;right:calc(env(safe-area-inset-right) + 92px);bottom:calc(env(safe-area-inset-bottom) + 18px)}.sim-tbtns{grid-template-columns:repeat(3,auto)}}
+@media (max-width:760px){.sim-apbar{top:calc(env(safe-area-inset-top) + 56px);flex-wrap:wrap;justify-content:center;width:calc(100vw - 20px)}.sim-apv b{min-width:50px;font-size:12px}}

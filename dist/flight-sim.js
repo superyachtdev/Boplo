@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=3'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=4'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -291,6 +291,91 @@ window.BoploSim = (() => {
     return { glb: out, S, hub, wheelDrop: .55 * S, tips: { left: [1.63 * S, .055 * S, .2 * S], right: [-1.63 * S, .055 * S, .2 * S], tail: [0, .66 * S, -1.55 * S] } };
   }
 
+  /* ---------------- six-pack instrument panel, drawn on one canvas ---------------- */
+  function drawSixPack(cv, d) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const wide = W / H > 3.2, cols = wide ? 6 : 3, rows = wide ? 1 : 2, side = wide ? Math.min(150, W * .16) : 0;
+    const cell = Math.min((W - side - 16) / cols, (H - 8) / rows), r = cell * .46;
+    const x0 = (W - side - cell * cols) / 2, y0 = (H - cell * rows) / 2;
+    const at = i => [x0 + (i % cols + .5) * cell, y0 + (Math.floor(i / cols) + .5) * cell];
+    const A = a => (a - 90) * D2R; // degrees clockwise from 12 o'clock → canvas radians
+    const font = (px, w = 600) => `${w} ${Math.max(7, px)}px Archivo, "Helvetica Neue", Arial, sans-serif`;
+    function bezel(cx, cy) {
+      g.save(); g.beginPath(); g.arc(cx, cy, r * 1.06, 0, 7); const bz = g.createLinearGradient(cx, cy - r, cx, cy + r); bz.addColorStop(0, '#2B313D'); bz.addColorStop(1, '#0B0E14'); g.fillStyle = bz; g.fill();
+      g.beginPath(); g.arc(cx, cy, r * .97, 0, 7); g.fillStyle = '#0D1017'; g.fill(); g.restore();
+    }
+    const tick = (cx, cy, a, r1, r2, w = 1.4, col = '#E8ECF2') => { g.beginPath(); g.moveTo(cx + Math.cos(A(a)) * r1, cy + Math.sin(A(a)) * r1); g.lineTo(cx + Math.cos(A(a)) * r2, cy + Math.sin(A(a)) * r2); g.strokeStyle = col; g.lineWidth = w; g.stroke(); };
+    const label = (cx, cy, a, rr, txt, px) => { g.fillStyle = '#E8ECF2'; g.font = font(px); g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, cx + Math.cos(A(a)) * rr, cy + Math.sin(A(a)) * rr); };
+    const needle = (cx, cy, a, len, w, col = '#F4F6FA', tail = .18) => { g.save(); g.translate(cx, cy); g.rotate(A(a) + Math.PI / 2); g.beginPath(); g.moveTo(-w / 2, len * tail); g.lineTo(-w * .32, -len * .82); g.lineTo(0, -len); g.lineTo(w * .32, -len * .82); g.lineTo(w / 2, len * tail); g.closePath(); g.fillStyle = col; g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 3; g.fill(); g.restore(); };
+    const hub = (cx, cy) => { g.beginPath(); g.arc(cx, cy, r * .07, 0, 7); g.fillStyle = '#20252F'; g.fill(); };
+    const title = (cx, cy, t, dy = .38) => { g.fillStyle = '#8B96A8'; g.font = font(r * .13, 650); g.textAlign = 'center'; g.fillText(t, cx, cy + r * dy); };
+    const arc = (cx, cy, rr, a1, a2, col, w) => { g.beginPath(); g.arc(cx, cy, rr, A(a1), A(a2)); g.strokeStyle = col; g.lineWidth = w; g.stroke(); };
+
+    // 1 airspeed
+    { const [cx, cy] = at(0); bezel(cx, cy); const mx = Math.ceil((d.vne + 25) / 20) * 20, ang = v => 20 + clamp(v, 0, mx) / mx * 320;
+      if (d.vfe) arc(cx, cy, r * .74, ang(d.vso), ang(d.vfe), '#F2F4F7', r * .06);
+      arc(cx, cy, r * .82, ang(d.vs), ang(d.vno), '#22B35A', r * .075); arc(cx, cy, r * .82, ang(d.vno), ang(d.vne), '#E8B923', r * .075); tick(cx, cy, ang(d.vne), r * .74, r * .9, 3, '#E0362D');
+      for (let v = 0; v <= mx; v += 10) tick(cx, cy, ang(v), r * (v % 20 ? .82 : .76), r * .9, v % 20 ? 1 : 1.6);
+      for (let v = 40; v <= mx; v += 20) label(cx, cy, ang(v), r * .6, String(v), r * .15);
+      title(cx, cy, 'KNOTS', .25); needle(cx, cy, ang(d.ias), r * .86, r * .07); hub(cx, cy); }
+    // 2 attitude
+    { const [cx, cy] = at(1); bezel(cx, cy); g.save(); g.beginPath(); g.arc(cx, cy, r * .93, 0, 7); g.clip();
+      g.translate(cx, cy); g.rotate(-d.bank * D2R); const py = d.pitch * r * .035;
+      g.fillStyle = '#3D8DE8'; g.fillRect(-r * 2, -r * 3 + py, r * 4, r * 3); g.fillStyle = '#7A4F2A'; g.fillRect(-r * 2, py, r * 4, r * 3);
+      g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-r * 2, py); g.lineTo(r * 2, py); g.stroke();
+      for (let p = -20; p <= 20; p += 5) if (p) { const yy = py - p * r * .035, w = p % 10 ? r * .14 : r * .28; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-w, yy); g.lineTo(w, yy); g.stroke(); if (!(p % 10)) { g.fillStyle = '#fff'; g.font = font(r * .11); g.textAlign = 'left'; g.fillText(String(Math.abs(p)), w + 3, yy + 3); } }
+      g.restore();
+      for (const b of [-60, -45, -30, -20, -10, 0, 10, 20, 30, 45, 60]) tick(cx, cy, b, r * .8, r * (b % 30 ? .88 : .94), b ? 1.6 : 2.4);
+      g.save(); g.translate(cx, cy); g.rotate(-d.bank * D2R); g.beginPath(); g.moveTo(0, -r * .79); g.lineTo(-r * .06, -r * .68); g.lineTo(r * .06, -r * .68); g.closePath(); g.fillStyle = '#FFB22E'; g.fill(); g.restore();
+      g.strokeStyle = '#FFB22E'; g.lineWidth = r * .05; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - r * .5, cy); g.lineTo(cx - r * .16, cy); g.lineTo(cx - r * .08, cy + r * .08); g.moveTo(cx + r * .5, cy); g.lineTo(cx + r * .16, cy); g.lineTo(cx + r * .08, cy + r * .08); g.stroke(); g.lineCap = 'butt';
+      g.beginPath(); g.arc(cx, cy, r * .03, 0, 7); g.fillStyle = '#FFB22E'; g.fill(); }
+    // 3 altimeter
+    { const [cx, cy] = at(2); bezel(cx, cy); for (let i = 0; i < 50; i++) tick(cx, cy, i * 7.2, r * (i % 5 ? .84 : .76), r * .9, i % 5 ? 1 : 1.8);
+      for (let i = 0; i < 10; i++) label(cx, cy, i * 36, r * .62, String(i), r * .17);
+      const ft = Math.max(0, d.altFt); g.fillStyle = '#05070B'; g.fillRect(cx + r * .2, cy - r * .1, r * .42, r * .2); g.fillStyle = '#E8ECF2'; g.font = font(r * .12); g.textAlign = 'center'; g.fillText(d.qnh, cx + r * .41, cy + r * .045);
+      title(cx, cy, 'FEET', .3);
+      needle(cx, cy, ft / 10000 * 360, r * .35, r * .03, '#E8ECF2'); needle(cx, cy, (ft % 10000) / 10000 * 360, r * .55, r * .1); needle(cx, cy, (ft % 1000) / 1000 * 360, r * .85, r * .06); hub(cx, cy); }
+    // 4 turn coordinator
+    { const [cx, cy] = at(cols === 6 ? 3 : 3); bezel(cx, cy);
+      for (const s of [-1, 1]) { tick(cx, cy, 90 * s + 0 - 90 * s + (s > 0 ? 90 : -90) - (s > 0 ? 0 : 0), r * .72, r * .86, 2); tick(cx, cy, s > 0 ? 90 + 18 : -90 - 18, r * .72, r * .86, 2); }
+      g.fillStyle = '#E8ECF2'; g.font = font(r * .13); g.textAlign = 'center'; g.fillText('L', cx - r * .72, cy + r * .3); g.fillText('R', cx + r * .72, cy + r * .3);
+      title(cx, cy, '2 MIN', -.48);
+      g.save(); g.translate(cx, cy - r * .05); g.rotate(clamp(d.turn / 3, -1.6, 1.6) * 18 * D2R); g.fillStyle = '#F4F6FA';
+      g.fillRect(-r * .62, -r * .03, r * 1.24, r * .06); g.beginPath(); g.arc(0, 0, r * .1, 0, 7); g.fill(); g.fillRect(-r * .02, -r * .22, r * .04, r * .14); g.restore();
+      const by = cy + r * .48; g.save(); g.beginPath(); g.ellipse(cx, by, r * .46, r * .1, 0, 0, 7); g.fillStyle = '#E9E2C8'; g.fill(); g.strokeStyle = '#05070B'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - r * .1, by - r * .1); g.lineTo(cx - r * .1, by + r * .1); g.moveTo(cx + r * .1, by - r * .1); g.lineTo(cx + r * .1, by + r * .1); g.stroke();
+      g.beginPath(); g.arc(cx + clamp(d.slip / 8, -1, 1) * r * .36, by, r * .085, 0, 7); g.fillStyle = '#111'; g.fill(); g.restore(); }
+    // 5 heading (HSI): card, heading bug, course arrow and deviation bar
+    { const [cx, cy] = at(4); bezel(cx, cy); g.save(); g.translate(cx, cy); g.rotate(-d.hdg * D2R);
+      for (let h = 0; h < 360; h += 5) { g.save(); g.rotate(h * D2R); g.beginPath(); g.moveTo(0, -r * .88); g.lineTo(0, -r * (h % 10 ? .82 : .76)); g.strokeStyle = '#E8ECF2'; g.lineWidth = h % 30 ? 1 : 1.8; g.stroke();
+        if (!(h % 30)) { g.fillStyle = '#E8ECF2'; g.font = font(r * .15); g.textAlign = 'center'; g.fillText({ 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[h] || String(h / 10), 0, -r * .6); } g.restore(); }
+      if (d.bug != null) { g.save(); g.rotate(d.bug * D2R); g.fillStyle = '#FF8C2E'; g.fillRect(-r * .08, -r * .92, r * .16, r * .07); g.restore(); }
+      if (d.crs != null) { g.save(); g.rotate(d.crs * D2R); g.strokeStyle = '#F25CC8'; g.lineWidth = r * .045; g.beginPath(); g.moveTo(0, -r * .7); g.lineTo(0, -r * .36); g.moveTo(0, r * .36); g.lineTo(0, r * .7); g.stroke();
+        g.fillStyle = '#F25CC8'; g.beginPath(); g.moveTo(0, -r * .78); g.lineTo(-r * .07, -r * .66); g.lineTo(r * .07, -r * .66); g.fill();
+        for (const k of [-2, -1, 1, 2]) { g.beginPath(); g.arc(k * r * .14, 0, r * .025, 0, 7); g.fillStyle = '#E8ECF2'; g.fill(); }
+        g.strokeStyle = '#F25CC8'; g.beginPath(); g.moveTo(clamp(d.dev, -1, 1) * r * .28, -r * .32); g.lineTo(clamp(d.dev, -1, 1) * r * .28, r * .32); g.stroke(); g.restore(); }
+      g.restore();
+      g.fillStyle = '#FFB22E'; g.beginPath(); g.moveTo(cx, cy - r * .9); g.lineTo(cx - r * .06, cy - r * 1.0); g.lineTo(cx + r * .06, cy - r * 1.0); g.fill();
+      g.strokeStyle = '#FFB22E'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - r * .14, cy + r * .05); g.lineTo(cx + r * .14, cy + r * .05); g.moveTo(cx, cy - r * .12); g.lineTo(cx, cy + r * .16); g.moveTo(cx - r * .06, cy + r * .14); g.lineTo(cx + r * .06, cy + r * .14); g.stroke(); }
+    // 6 vertical speed
+    { const [cx, cy] = at(5), ang = v => -90 + clamp(v, -2000, 2000) / 2000 * 170; bezel(cx, cy);
+      for (let v = -2000; v <= 2000; v += 100) tick(cx, cy, ang(v), r * (v % 500 ? .82 : .74), r * .9, v % 500 ? 1 : 1.8);
+      for (const v of [0, 5, 10, 15, 20]) { label(cx, cy, ang(v * 100), r * .6, String(v), r * .15); if (v) label(cx, cy, ang(-v * 100), r * .6, String(v), r * .15); }
+      title(cx, cy, 'UP', -.25); title(cx, cy, 'DOWN', .32); g.fillStyle = '#8B96A8'; g.font = font(r * .1, 650); g.fillText('100 FT/MIN', cx + r * .12, cy + r * .08);
+      needle(cx, cy, ang(d.vsFpm), r * .86, r * .07); hub(cx, cy); }
+    // engine and systems column
+    if (side) {
+      const sx = W - side + 4, w = side - 12; let y = (H - 8 - cell) / 2 + 8;
+      g.fillStyle = 'rgba(13,16,23,.92)'; g.beginPath(); g.roundRect ? g.roundRect(sx, y - 4, w, cell, 10) : g.rect(sx, y - 4, w, cell); g.fill();
+      const row = (k, v, col = '#E8ECF2') => { g.font = font(cell * .085, 650); g.fillStyle = '#8B96A8'; g.textAlign = 'left'; g.fillText(k, sx + 10, y + cell * .1); g.fillStyle = col; g.textAlign = 'right'; g.font = font(cell * .1, 700); g.fillText(v, sx + w - 10, y + cell * .1); y += cell * .135; };
+      row('RPM', String(d.rpm)); row('THROTTLE', `${Math.round(d.thr * 100)}%`); row('FLAPS', d.flaps); row('TRIM', d.trim > .04 ? `${Math.round(d.trim * 100)}% UP` : d.trim < -.04 ? `${Math.round(-d.trim * 100)}% DN` : 'NEUTRAL');
+      const lamp = (t, onC, on, i) => { const bw = (w - 26) / 2, bx = sx + 10 + (i % 2) * (bw + 6), by = y + Math.floor(i / 2) * cell * .14; g.fillStyle = on ? onC : '#1C212B'; g.beginPath(); g.roundRect ? g.roundRect(bx, by, bw, cell * .11, 4) : g.rect(bx, by, bw, cell * .11); g.fill(); g.fillStyle = on ? '#0B0E14' : '#5C6678'; g.font = font(cell * .07, 750); g.textAlign = 'center'; g.fillText(t, bx + bw / 2, by + cell * .078); };
+      lamp('PARK', '#E0362D', d.park, 0); lamp('BRAKE', '#E8B923', d.brake, 1); lamp('CARB', '#3FA2FF', d.carb, 2); lamp('A-RUD', '#22B35A', d.autoRud, 3); lamp('STALL', '#E0362D', d.stall, 4); lamp('AP', '#22B35A', d.ap, 5);
+    }
+  }
+
   /* ---------------- audio ---------------- */
   function engineAudio() {
     let ac, out, eng, eng2, lp, wind, wg, horn, hg, on = false;
@@ -331,6 +416,7 @@ window.BoploSim = (() => {
         <div class="sim-chip sim-next" data-nextbox><span data-nextl>Next</span><b data-wp>—</b><small data-wpd></small></div>
         <div class="sim-btns">
           <button type="button" class="sim-b" data-cam aria-label="Change camera" title="Camera (C)"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span data-caml>Chase</span></button>
+          <button type="button" class="sim-b" data-sixb aria-pressed="false" title="Instrument panel (I)"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><span>Panel</span></button>
           <button type="button" class="sim-b" data-ap aria-pressed="false" title="Autopilot (P)"><span>AP</span></button>
           <button type="button" class="sim-b" data-gates aria-pressed="false" title="Route gates (G)"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1.5"/><rect x="9" y="9.5" width="6" height="5" rx="1"/></svg></button>
           <button type="button" class="sim-b" data-mute aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9.5h4L13 5v14l-5-4.5H4z"/><path data-wave d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
@@ -349,6 +435,19 @@ window.BoploSim = (() => {
         <div class="sim-hdg"><svg viewBox="0 0 240 30" preserveAspectRatio="none" class="sim-tape"><g data-tape>${ticks.join('')}</g></svg><b data-hdg>000°</b><i data-bugi></i></div>
         <div class="sim-cdi" data-cdi><div class="sim-cdi-scale"><i></i><i></i><i></i><i></i><i class="c"></i><i></i><i></i><i></i><i></i><span data-needle></span></div><small data-xte>On track</small></div>
         <div class="sim-thr" title="Throttle"><span>Power</span><div><i data-thr></i></div><small data-flaps>Flaps up</small></div>
+        <div class="sim-sys" aria-label="Aircraft systems">
+          <div class="sim-trim" title="Elevator trim (T / G)"><span>Trim</span><div><i data-trimi></i></div></div>
+          <span class="sim-ind" data-ind="park" title="Parking brake (Shift+B)">PARK</span><span class="sim-ind" data-ind="brake" title="Brakes (B)">BRK</span>
+          <span class="sim-ind" data-ind="carb" title="Carb heat (H)">CARB</span><span class="sim-ind" data-ind="rud" title="Auto-rudder (U)">AUTO RUD</span>
+          <span class="sim-rpm"><b data-rpm>0</b> rpm</span>
+        </div>
+      </div>
+      <canvas class="sim-six" data-six aria-hidden="true"></canvas>
+      <div class="sim-apbar" data-apbar hidden>
+        <button type="button" data-apm="nav" aria-pressed="true">NAV</button>
+        <div class="sim-apv"><button type="button" data-apm="hdg" aria-pressed="false">HDG</button><button type="button" data-apd="hdg" data-d="-5" aria-label="Heading minus 5">−</button><b data-apv="hdg">000°</b><button type="button" data-apd="hdg" data-d="5" aria-label="Heading plus 5">+</button></div>
+        <div class="sim-apv"><button type="button" data-apm="alt" aria-pressed="false">ALT</button><button type="button" data-apd="alt" data-d="-100" aria-label="Altitude minus 100 feet">−</button><b data-apv="alt">0 ft</b><button type="button" data-apd="alt" data-d="100" aria-label="Altitude plus 100 feet">+</button></div>
+        <div class="sim-apv"><button type="button" data-apm="spd" aria-pressed="false">SPD</button><button type="button" data-apd="spd" data-d="-5" aria-label="Speed minus 5 knots">−</button><b data-apv="spd">0 kt</b><button type="button" data-apd="spd" data-d="5" aria-label="Speed plus 5 knots">+</button></div>
       </div>
       <div class="sim-replay" data-replaybar hidden>
         <button type="button" class="sim-b" data-play aria-label="Play or pause"><svg viewBox="0 0 24 24"><path data-pp2 d="M8 5v14M16 5v14"/></svg></button>
@@ -358,7 +457,11 @@ window.BoploSim = (() => {
       </div>
       <div class="sim-touch" data-touch hidden>
         <div class="sim-stick" data-stick><i data-knob></i><span>Pull back to climb</span></div>
-        <div class="sim-tilt"><button type="button" class="sim-b" data-tilt>Tilt to steer</button><button type="button" class="sim-b" data-flapb>Flaps</button></div>
+        <div class="sim-rud" data-rud aria-label="Rudder"><i data-rudk></i><span>Rudder</span></div>
+        <div class="sim-tilt"><button type="button" class="sim-b" data-tilt>Tilt to steer</button>
+          <div class="sim-tbtns"><button type="button" class="sim-b" data-flapd="-1" aria-label="Flaps up">Flaps −</button><button type="button" class="sim-b" data-flapd="1" aria-label="Flaps down">Flaps +</button>
+          <button type="button" class="sim-b" data-trimb="1" aria-label="Trim nose up">Trim ▲</button><button type="button" class="sim-b" data-trimb="-1" aria-label="Trim nose down">Trim ▼</button>
+          <button type="button" class="sim-b" data-brakeb>Brake</button><button type="button" class="sim-b" data-pbrake>Park</button></div></div>
         <div class="sim-thrslider"><span>Power</span><input type="range" min="0" max="100" value="70" data-thrrange aria-label="Throttle" orient="vertical"></div>
       </div>
       <div class="sim-card-wrap" data-cardwrap><div class="sim-card" data-card><div class="sim-load"><div class="sim-spin"></div><b>Loading terrain…</b><small>Real elevation data for your route.</small></div></div></div>`;
@@ -572,15 +675,16 @@ window.BoploSim = (() => {
       return any;
     };
     let rwSampled = shapeRunways(hs);
-    const rwHeight = (x, z) => {
+    const rwAt = (x, z) => {
       for (const r of rwSt) {
         const dx = x - r.rw.A[0], dz = z - r.rw.A[1], u = dx * r.f[0] + dz * r.f[1], w = dx * r.l[0] + dz * r.l[1];
         if (u < -8 || u > r.rw.len + 8 || Math.abs(w) > r.rw.wid / 2 + 6) continue;
         const t = clamp(u / r.rw.len, 0, 1) * (r.n - 1), i = Math.min(r.n - 2, Math.floor(t)), a = t - i;
-        return r.h[i] + (r.h[i + 1] - r.h[i]) * a;
+        return { h: r.h[i] + (r.h[i + 1] - r.h[i]) * a, surf: r.rw.surf === 'concrete' || r.rw.surf === 'asphalt' || r.rw.surf === 'other' || !r.rw.surf ? 'paved' : r.rw.surf };
       }
       return null;
     };
+    const rwHeight = (x, z) => rwAt(x, z)?.h ?? null;
     // draw them: a textured strip mesh with real markings, receiving shadows. Rebuilt if the ground height is corrected later.
     const rwImg = new Map();
     function drawRunways() {
@@ -615,19 +719,19 @@ window.BoploSim = (() => {
       const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop);
       const hpr = new C.HeadingPitchRoll(C.Math.toRadians(st.hdg - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
       C.Transforms.headingPitchRollToFixedFrame(pos, hpr, C.Ellipsoid.WGS84, undefined, model.modelMatrix);
-      model.show = !st.crashed;
+      model.show = !st.crashed && !cockpit(); lights.show = !cockpit();
       // nav lights: model frame after axis conversion is x forward, y left, z up
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
       navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
       // propeller: spin the blades, fade in the disc at high rpm
-      const rpm = st.thr > .02 || st.v > 3 ? 600 + st.thr * 1900 : 0;
+      const rpm = fs.rpm || 0;
       propA = (propA + rpm / 60 * 2 * Math.PI * realDt * (rpm > 1200 ? .07 : 1)) % (Math.PI * 2);
       if (bladeNode) bladeNode.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(new C.Cartesian3(...AC.hub)), C.Matrix4.fromRotationTranslation(C.Matrix3.fromRotationZ(propA)), new C.Matrix4());
       if (discNode) discNode.show = rpm > 1200;
     }
     let propA = 0, realDt = .016, gateT = 0;
     function updateGates() {
-      const W = circuit ? 70 : 110, Hh = circuit ? 40 : 60, pr = path.project(st.x, st.z), near = showGates && camI !== 2 ? gates.filter(g => g.s > pr.s + 15).slice(0, 5) : [];
+      const W = circuit ? 70 : 110, Hh = circuit ? 40 : 60, pr = path.project(st.x, st.z), near = showGates && CAMS[camI][0] !== 'High' ? gates.filter(g => g.s > pr.s + 15).slice(0, 5) : [];
       gatePool.forEach(p => p.show = false);
       near.forEach((g, i) => {
         const d = Math.hypot(g.x - st.x, g.z - st.z), a = (i === 0 ? .85 : .45) * clamp(1 - d / (circuit ? 2400 : 6000), 0, 1) * clamp((d - 90) / 220, 0, 1);
@@ -647,14 +751,23 @@ window.BoploSim = (() => {
       const hfov = as >= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) * as);
       const [, kB, kH, depBase] = CAMS[camI];
       const B0 = clamp(5.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 70), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
-      camH += wrap180(st.hdg - camH) * Math.min(1, dt * (camI === 2 ? 1.2 : 2.6));
+      camH += wrap180(st.hdg - camH) * Math.min(1, dt * (CAMS[camI][0] === 'High' ? 1.2 : 2.6));
       camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
       camD += (depBase - camD) * Math.min(1, dt * 3);
       const dep = clamp(camD - camPitchLag * .55 + (st.ground ? 2 : 0), 2, 60);
       const ch = camH * D2R, f = [Math.sin(ch), Math.cos(ch)], ex = -f[0] * B, ez = -f[1] * B;
       let ey = Hc + AC.wheelDrop;
       const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 3);
-      camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
+      if (cockpit()) {
+        // pilot's eye in the left seat, looking along the aircraft's attitude
+        const e = AC.eye || [.25, .4, .4], F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
+        const px = st.x + F[0] * bz + U[0] * by + R[0] * bx, pz = st.z + F[2] * bz + U[2] * by + R[2] * bx, py = st.alt + F[1] * bz + U[1] * by + R[1] * bx;
+        if (camera.frustum.fov !== C.Math.toRadians(72)) { camera.frustum.fov = C.Math.toRadians(72); camera.frustum.near = .1; }
+        camera.setView({ destination: LLH(px, pz, py), orientation: { heading: st.hdg * D2R, pitch: C.Math.toRadians(st.pitch - 4), roll: st.bank * D2R } });
+      } else {
+        if (camera.frustum.fov !== C.Math.toRadians(66)) { camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5; }
+        camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
+      }
       placeAircraft();
       { const want = shadowsOK && st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
       gateT += dt; if (gateT > .2) { gateT = 0; updateGates(); }
@@ -673,53 +786,83 @@ window.BoploSim = (() => {
       if (datumFixed) return; datumFixed = true;
       const shift = groundHere - g0; if (Math.abs(shift) < 2 || Math.abs(shift) > 150) return;
       if (O.fromElevFt != null) geoN = groundHere - O.fromElevFt * FT;
-      g0 += shift; g1 += shift; planCruise(); planGates(); st.alt += shift; st.gnd += shift; if (!rwSampled) shiftRunways(shift);
+      g0 += shift; g1 += shift; planCruise(); planGates(); fs.alt += shift; lastG += shift; if (!rwSampled) shiftRunways(shift);
       // and try again for proper runway heights now the scenery has loaded
       if (!rwSampled && rwPts.length) mostDetailed(rwPts).then(v => { if (alive && shapeRunways([null, null, ...v])) { rwSampled = true; drawRunways(); } });
     }
 
-    /* ---- aircraft state ---- */
-    let flapT = 0, flareNow = false;
+    /* ---- aircraft state: a physics model (flight-physics.js) behind the same fields the HUD and scoring use ---- */
+    let flareNow = false;
     const st = { flaps: 0, x: 0, z: 0, alt: 0, hdg: 0, pitch: 0, bank: 0, v: 0, thr: 0, ground: true, crashed: false, landed: false, vs: 0, trk: 0, gs: 0, stall: false, t: 0, agl: 0, gnd: g0 };
     const wind = O.wind && O.wind.spd ? { x: -Math.sin(O.wind.dir * D2R) * O.wind.spd * KT, z: -Math.cos(O.wind.dir * D2R) * O.wind.spd * KT, dir: O.wind.dir, spd: O.wind.spd } : { x: 0, z: 0, spd: 0 };
+    const windV = [wind.x, 0, wind.z];
+    let lastG = g0;
+    // scenery not loaded under the aircraft yet: keep the last known ground while rolling, assume none in the air
+    const groundAt = (x, z) => { const r = rwAt(x, z); if (r) return lastG = r.h; const e = elevAt(x, z); if (e != null) return lastG = e; return fs?.ground ? lastG : lastG - 3000; };
+    const FM = BoploPhysics.create(O.aircraftId || 'c172', PF, { tail: AC.type?.gear?.type === 'tail', groundAtt: AC.groundAtt, parkingAtStart: O.mode !== 'replay', groundAt, surfaceAt: (x, z) => rwAt(x, z)?.surf || 'grass' });
+    const fs = FM.s, fc = FM.c;
+    const sync = () => {
+      st.x = fs.x; st.z = fs.z; st.alt = fs.alt; st.hdg = fs.hdg; st.pitch = fs.pitch; st.att = fs.pitch; st.bank = fs.bank; st.v = fs.ias; st.vs = fs.vs; st.gs = fs.gs; st.trk = fs.trk;
+      st.ground = fs.ground; st.crashed = fs.crashed; st.crash = fs.crash; st.stall = fs.stallWarn; st.thr = fs.power; st.flaps = FM.notches > 1 ? fc.flaps / (FM.notches - 1) : 0; st.agl = fs.agl ?? 0; st.gnd = fs.alt - (fs.agl ?? 0);
+      st.landed = fs.landed; if (fs.landed && fs.touch && !st.touch) { st.touch = { ...fs.touch, at: path.project(st.x, st.z).s }; st.landedOnce = true; }
+    };
     function place(s, airborne) {
-      const [x, z, h] = path.at(s); st.x = x; st.z = z; st.hdg = h * R2D; st.trk = st.hdg; st.bank = 0; st.crashed = st.landed = false;
-      st.airT = airborne ? 10 : 0; st.flaps = 0; flapT = 0; st.landedOnce = false; st.touch = null;
-      if (airborne) { st.ground = false; st.alt = Math.max(prof(s), (elevAt(x, z) ?? g0) + 150); st.v = PF.cruise * (circuit ? .82 : .92) * KT; st.thr = .72; st.pitch = 0; }
-      else { st.ground = true; st.alt = rwHeight(x, z) ?? elevAt(x, z) ?? g0; st.v = 0; st.thr = 0; st.pitch = 0; }
-      const gh = rwHeight(x, z) ?? elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0); st.gnd = gh ?? (airborne ? st.alt - 300 : st.alt);
-      path.reset(); path.seed(s);
+      const [x, z, h] = path.at(s);
+      const gh = rwHeight(x, z) ?? elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0);
+      const alt = airborne ? Math.max(prof(s), (gh ?? g0) + 150) : (gh ?? g0);
+      FM.reset({ x, z, alt, hdg: h * R2D, airborne, speed: PF.cruise * (circuit ? .82 : .92) * KT });
+      FM.ap = null; st.touch = null; st.landedOnce = false; st.airT = airborne ? 10 : 0; lastG = gh ?? g0;
+      sync(); path.reset(); path.seed(s);
     }
     const replay = O.mode === 'replay';
     place(0, !groundStart);
 
     /* ---- input ---- */
-    const keys = new Set(), ctl = { roll: 0, pitch: 0 };
+    const keys = new Set(), ctl = { roll: 0, pitch: 0, yaw: 0 };
     let showGates = !replay && store.get('gates', true);
-    let invert = store.get('invert', false), apOn = replay, paused = true, rate = replay ? store.get('rate', 4) : 1, camI = 0, tilt = null, stickV = null, thrTarget = st.thr;
-    const CAMS = [['Chase', 1, 1, 8.5], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    let invert = store.get('invert', false), apOn = replay, paused = true, rate = replay ? store.get('rate', 4) : 1, camI = 0, tilt = null, stickV = null, thrTarget = fc.throttle, rudV = null;
+    fc.autoRudder = store.get('autorudder', true);
+    let showSix = store.get('six', !coarse);
+    // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
+    const AP = { nav: true, hdg: null, alt: null, spd: null };
+    const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    const flapStep = d => { if (replay) return; fc.flaps = clamp(fc.flaps + d, 0, FM.notches - 1); tipNow = `Flaps ${FM.flapLabel()}`; tipUntil = performance.now() + 1400; };
+    const trimStep = d => { if (replay) return; fc.trim = clamp(fc.trim + d, -1, 1); };
     on(window, 'keydown', e => {
       if (!alive) return; const k = e.key.toLowerCase();
-      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'pageup', 'pagedown'].includes(k)) e.preventDefault();
-      if (e.repeat && (k === ' ' || k === 'c' || k === 'p' || k === 'm')) return;
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'pageup', 'pagedown', 'home', 'end', 'f6', 'f7'].includes(k)) e.preventDefault();
+      if (e.repeat && [' ', 'c', 'p', 'm', 'v', '[', ']', 'f6', 'f7', 'i', 'u', 'h', 'j'].includes(k)) return;
       if (k === ' ') { togglePause(); return; }
       if (k === 'c') { cycleCam(); return; }
+      if (k === 'i') { setSix(!showSix); return; }
       if (k === 'p' && !replay) { setAP(!apOn); return; }
       if (k === 'm') { toggleMute(); return; }
-      if (k === 'v' && !replay) { flapT = flapT ? 0 : 1; return; }
-      if (k === 'g') { showGates = !showGates; store.set('gates', showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
+      if ((k === 'v' && !e.shiftKey) || k === ']' || k === 'f7') { flapStep(1); return; }
+      if ((k === 'v' && e.shiftKey) || k === '[' || k === 'f6') { flapStep(-1); return; }
+      if (k === 'home' || k === 't') { trimStep(.04); return; }
+      if (k === 'end' || k === 'g') { trimStep(-.04); return; }
+      if (k === 'b' && e.shiftKey || (k === '.' && (e.ctrlKey || e.metaKey))) { if (!replay) { fc.parking = !fc.parking; tipNow = fc.parking ? 'Parking brake set' : 'Parking brake released'; tipUntil = performance.now() + 1500; } return; }
+      if (k === 'h' && !replay) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
+      if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
+      if (k === 'j') { showGates = !showGates; store.set('gates', showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
       if (/^[0-9]$/.test(k) && !replay) { thrTarget = k === '0' ? 1 : +k / 10; return; }
       keys.add(k);
     });
     on(window, 'keyup', e => keys.delete(e.key.toLowerCase()));
     on(window, 'blur', () => keys.clear());
-    // touch stick
+    // touch stick (elevator and ailerons) and rudder slider
     const stick = $('[data-stick]'), knob = $('[data-knob]');
     const stickMove = e => { const r = stick.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2 - 18; let dx = e.clientX - cx, dy = e.clientY - cy; const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; } knob.style.transform = `translate(${dx}px,${dy}px)`; stickV = { roll: dx / R, pitch: dy / R }; };
     on(stick, 'pointerdown', e => { stick.setPointerCapture(e.pointerId); stickMove(e); });
     on(stick, 'pointermove', e => { if (stickV) stickMove(e); });
     const stickEnd = () => { stickV = null; knob.style.transform = ''; };
     on(stick, 'pointerup', stickEnd); on(stick, 'pointercancel', stickEnd);
+    const rud = $('[data-rud]'), rudK = $('[data-rudk]');
+    const rudMove = e => { const r = rud.getBoundingClientRect(); const v = clamp((e.clientX - r.left) / r.width * 2 - 1, -1, 1); rudV = Math.abs(v) < .08 ? 0 : v; rudK.style.left = `${(v + 1) * 50}%`; };
+    on(rud, 'pointerdown', e => { rud.setPointerCapture(e.pointerId); rudMove(e); });
+    on(rud, 'pointermove', e => { if (rudV != null) rudMove(e); });
+    const rudEnd = () => { rudV = null; rudK.style.left = '50%'; };
+    on(rud, 'pointerup', rudEnd); on(rud, 'pointercancel', rudEnd);
     const thrRange = $('[data-thrrange]'); thrRange.oninput = () => { thrTarget = thrRange.value / 100; };
     $('[data-tilt]').onclick = async () => {
       if (tilt) { tilt = null; $('[data-tilt]').classList.remove('on'); $('[data-tilt]').textContent = 'Tilt to steer'; return; }
@@ -733,7 +876,10 @@ window.BoploSim = (() => {
       else if (ang === 270 || ang === -90) { tilt.roll = -e.beta / 28; tilt.pitch = (e.gamma - tilt.g0) / 22; }
       else { tilt.roll = e.gamma / 28; tilt.pitch = (e.beta - tilt.b0) / 22; }
     });
-    $('[data-flapb]').onclick = () => { flapT = flapT ? 0 : 1; $('[data-flapb]').classList.toggle('on', !!flapT); };
+    $$('[data-flapd]').forEach(b => b.onclick = () => flapStep(+b.dataset.flapd));
+    $$('[data-trimb]').forEach(b => { let iv = 0; const go = () => trimStep(+b.dataset.trimb * .03); b.onpointerdown = () => { go(); iv = setInterval(go, 120); }; b.onpointerup = b.onpointerleave = b.onpointercancel = () => clearInterval(iv); });
+    let touchBrake = false; const bk = $('[data-brakeb]'); bk.onpointerdown = () => { touchBrake = true; bk.classList.add('on'); }; bk.onpointerup = bk.onpointerleave = bk.onpointercancel = () => { touchBrake = false; bk.classList.remove('on'); };
+    $('[data-pbrake]').onclick = () => { fc.parking = !fc.parking; };
     $('[data-touch]').hidden = replay || !coarse;
     root.classList.toggle('is-replay', replay); root.classList.toggle('is-touch', coarse && !replay);
 
@@ -741,97 +887,64 @@ window.BoploSim = (() => {
       const k = a => a.some(x => keys.has(x));
       let r = (k(['arrowright', 'd']) ? 1 : 0) - (k(['arrowleft', 'a']) ? 1 : 0);
       let p = (k(['arrowdown', 's']) ? 1 : 0) - (k(['arrowup', 'w']) ? 1 : 0);
+      let y = (k(['e', 'x']) ? 1 : 0) - (k(['q', 'z']) ? 1 : 0);
       if (k(['=', '+', 'pageup', 'r', 'shift'])) thrTarget = clamp(thrTarget + dt * .6, 0, 1);
       if (k(['-', '_', 'pagedown', 'f', 'control'])) thrTarget = clamp(thrTarget - dt * .6, 0, 1);
+      let brake = k(['b', '.']) || touchBrake ? 1 : 0;
       const pad = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null;
-      if (pad) { const ax = pad.axes; if (Math.abs(ax[0]) > .08) r = ax[0]; if (Math.abs(ax[1]) > .08) p = ax[1]; const up = pad.buttons[7]?.value || 0, dn = pad.buttons[6]?.value || 0; if (up || dn) thrTarget = clamp(thrTarget + (up - dn) * dt * .7, 0, 1); }
+      if (pad) {
+        const ax = pad.axes, bt = i => pad.buttons[i]?.pressed;
+        if (Math.abs(ax[0]) > .08) r = ax[0]; if (Math.abs(ax[1]) > .08) p = ax[1]; if (ax.length > 2 && Math.abs(ax[2]) > .12) y = ax[2];
+        const up = pad.buttons[7]?.value || 0, dn = pad.buttons[6]?.value || 0; if (up || dn) thrTarget = clamp(thrTarget + (up - dn) * dt * .7, 0, 1);
+        if (bt(0)) brake = 1;
+        padEdge('fu', bt(5), () => flapStep(1)); padEdge('fd', bt(4), () => flapStep(-1)); padEdge('ap', bt(3), () => setAP(!apOn)); padEdge('cam', bt(2), cycleCam);
+        if (bt(12)) trimStep(dt * .5); if (bt(13)) trimStep(-dt * .5);
+      }
       if (stickV) { r = stickV.roll; p = stickV.pitch; }
       if (tilt) { if (Math.abs(tilt.roll) > .06) r = clamp(tilt.roll, -1, 1); if (Math.abs(tilt.pitch) > .06) p = clamp(tilt.pitch, -1, 1); }
+      if (rudV != null) y = rudV;
       if (invert) p = -p;
       if (apOn && !replay && (Math.abs(r) > .35 || Math.abs(p) > .35)) { setAP(false); tipNow = 'Autopilot off: you have control'; tipUntil = performance.now() + 2500; }
       // keyboard input ramps for smoothness; analogue inputs pass straight through
-      const ramp = (cur, tgt) => cur + clamp(tgt - cur, -dt * 5, dt * 5);
-      ctl.roll = stickV || pad || tilt ? r : ramp(ctl.roll, r); ctl.pitch = stickV || pad || tilt ? p : ramp(ctl.pitch, p);
+      const ramp = (cur, tgt, rr = 4) => cur + clamp(tgt - cur, -dt * rr, dt * rr);
+      const analog = stickV || pad || tilt;
+      ctl.roll = analog ? r : ramp(ctl.roll, r); ctl.pitch = analog ? p : ramp(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? y : ramp(ctl.yaw, y, 3);
+      if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       if (Math.abs(thrRange.value / 100 - thrTarget) > .02 && document.activeElement !== thrRange) thrRange.value = Math.round(thrTarget * 100);
     }
+    const padPrev = {}; function padEdge(id, down, fn) { if (down && !padPrev[id]) fn(); padPrev[id] = down; }
 
-    /* ---- autopilot (replay and AP) ---- */
+    /* ---- autopilot: works out targets from the route, then flies the controls (BoploPhysics.pilot) ---- */
     function autopilot(dt) {
       const pr = path.project(st.x, st.z), vk = st.v / KT, remain = L - pr.s;
-      const look = clamp(st.v * 7, 180, 900), [tx, tz] = path.at(pr.s + look);
-      let des = Math.atan2(tx - st.x, tz - st.z) * R2D;
-      if (st.ground) {
-        // take-off or landing roll: steer along the route, keep the wings level
-        ctl.roll = clamp(wrap180(des - st.hdg) / 20, -1, 1);
-        if (st.landedOnce) { thrTarget = 0; ctl.pitch = 0; return; }
-        thrTarget = 1; ctl.pitch = vk > PF.vr + 3 ? .8 : 0; return;
-      }
-      const lowWings = st.agl < 15 && landEnd && remain < (circuit ? 1500 : 5000), err = wrap180(des - st.trk), desBank = clamp(err * 1.4, lowWings ? -4 : -30, lowWings ? 4 : 30);
-      ctl.roll = clamp((desBank - st.bank) * .09, -1, 1);
-      const agl = st.agl, approach = landEnd && remain < (circuit ? 1500 : 5000);
-      let ta = prof(pr.s + st.v * 5);
-      flapT = approach && vk < PF.appr + 35 ? 1 : 0;
+      const look = clamp(st.gs * 7, 180, 900), [tx, tz] = path.at(pr.s + look);
+      const routeTrk = Math.atan2(tx - st.x, tz - st.z) * R2D;
+      const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.hdg == null && AP.alt == null));
+      const t = { phase: st.ground ? (st.landedOnce ? 'rollout' : 'takeoff') : 'air', trk: routeTrk, bankMax: st.agl < 60 && approach ? 6 : 25, approach };
+      if (st.ground) { const [ax, az] = path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
+      if (!replay && AP.hdg != null && !st.ground) { t.trk = AP.hdg; t.useHdg = true; }
+      // vertical: route profile, or the selected altitude
+      let ta = prof(pr.s + Math.max(st.v, 20) * 5);
       if (approach && remain < 3500) ta = Math.min(ta, st.gnd + Math.max(0, remain - TDZ) * DG);
-      if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + (approach ? 0 : 120)); }
-      let desVS = clamp((ta - st.alt) * .22, -3.8, 4.2);
-      if (approach && remain < TDZ + 50) desVS = Math.min(desVS, -1.6); // past the aim point: commit to landing
-      if (approach && agl < 4.5) desVS = -clamp(agl * .2, .45, .9); // flare
-      flareNow = approach && agl < 4.5;
-      let desPitch = Math.asin(clamp(desVS / Math.max(st.v, 20), -.35, .35)) * R2D + 0;
-      // speed protection: never trade airspeed below the climb speed for height
-      const vMin = approach ? (agl < 15 ? PF.appr - 10 : PF.appr - 3) : PF.vs * 1.45;
-      if (vk < vMin) desPitch = Math.min(desPitch, (vk - (vMin - PF.vs * .25)) * .7);
-      desPitch = clamp(desPitch, -10, 12);
-      ctl.pitch = clamp((desPitch - st.pitch) * .3, -1, 1);
-      const tgtV = approach ? (agl < 60 ? PF.appr : PF.appr + 10) : PF.cruise * (circuit ? .82 : .92);
-      thrTarget = flareNow ? (agl < 1.5 ? 0 : .18) : desVS > 1.5 && !approach ? 1 : clamp(.62 + (tgtV - vk) * .05 + desVS * .04, .1, 1);
+      if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + 120); }
+      if (!replay && AP.alt != null) ta = AP.alt * FT + geoN;
+      t.alt = ta;
+      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1); if (st.agl < 5) t.phase = 'flare'; }
+      else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
+      if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
+      flareNow = t.phase === 'flare';
+      BoploPhysics.pilot(FM, t, dt);
+      thrTarget = fc.throttle;
     }
 
-    /* ---- flight model (simple, game-like) ---- */
+    /* ---- flight model ---- */
     function step(dt) {
       st.t += dt;
-      st.thr += clamp(thrTarget - st.thr, -dt * .8, dt * .8);
-      st.flaps += clamp(flapT - st.flaps, -dt * .25, dt * .25);
-      let vk = st.v / KT;
-      const gr = elevAt(st.x, st.z); if (gr != null && !datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0));
-      const ge = rwHeight(st.x, st.z) ?? gr; if (ge != null) { st.gnd = ge; st.gk = true; }
+      FM.step(dt, windV);
+      if (!datumFixed) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
+      st.gk = elevAt(st.x, st.z) != null || !!rwAt(st.x, st.z);
+      sync();
       if (!st.ground) st.airT = (st.airT || 0) + dt;
-      if (st.ground) {
-        st.bank += (0 - st.bank) * Math.min(1, dt * 6);
-        st.pitch = clamp(st.pitch + ctl.pitch * 9 * dt * (vk > 40 ? 1 : 0) - (ctl.pitch <= 0 ? st.pitch * 2 * dt : 0), 0, 12);
-        const acc = PF.thrust * 1.02 * st.thr - PF.drag * vk * vk - (st.thr < .05 ? (st.landed ? 4 : 1.2) : .25);
-        vk = Math.max(0, vk + acc * dt); st.v = vk * KT;
-        st.hdg = norm360(st.hdg + ctl.roll * 18 * dt * Math.min(1, vk / 15 + .3));
-        st.alt = st.gnd; st.vs = 0;
-        if (vk > PF.vr - 3 && st.pitch >= 4) { st.ground = false; st.landed = false; st.airT = 0; st.alt += .4; }
-      } else {
-        const vsStall = PF.vs * (1 - .13 * st.flaps) / Math.sqrt(Math.max(.3, Math.cos(st.bank * D2R)));
-        st.stall = vk < vsStall;
-        st.bank = clamp(st.bank + ctl.roll * 48 * dt - (Math.abs(ctl.roll) < .05 && !apOn ? st.bank * .35 * dt : 0), -65, 65);
-        st.pitch = clamp(st.pitch + ctl.pitch * 11 * dt, -25, 25);
-        if (st.stall) { st.pitch -= 9 * dt; st.bank += Math.sin(st.t * 3) * 6 * dt; }
-        const acc = PF.thrust * st.thr - PF.drag * (1 + .9 * st.flaps) * vk * vk - 19.07 * Math.sin(st.pitch * D2R) - Math.abs(st.bank) * .004;
-        vk = clamp(vk + acc * dt, 0, PF.vmax * 1.6); st.v = vk * KT;
-        const lift = clamp((vk - PF.vs * .6) / (PF.vs * .45), 0, 1);
-        st.vs = st.v * Math.sin(st.pitch * D2R) * lift - (1 - lift) * 7;
-        st.hdg = norm360(st.hdg + G * Math.tan(st.bank * D2R) / Math.max(st.v, 15) * R2D * dt * lift);
-        st.alt += st.vs * dt;
-      }
-      const hv = st.v * Math.cos(st.pitch * D2R), gx = hv * Math.sin(st.hdg * D2R) + (st.ground ? 0 : wind.x), gz = hv * Math.cos(st.hdg * D2R) + (st.ground ? 0 : wind.z);
-      st.x += gx * dt; st.z += gz * dt; st.gs = Math.hypot(gx, gz); if (st.gs > 2) st.trk = norm360(Math.atan2(gx, gz) * R2D); else st.trk = st.hdg;
-      st.agl = st.alt - st.gnd;
-      // what the pilot sees: flight path plus angle of attack, which grows as the aircraft slows
-      const aoa = st.ground ? 0 : clamp(1.5 + 6 * ((PF.appr / Math.max(st.v / KT, PF.vs * .8)) ** 2 - 1) - st.flaps * 1.5, -1, 13);
-      // tailwheel aircraft sit nose-up and lift the tail as they gather speed
-      const tailUp = AC.groundAtt ? AC.groundAtt * (1 - clamp((st.v / KT - PF.vr * .45) / (PF.vr * .35), 0, 1)) : 0;
-      st.att = (st.ground ? Math.max(st.pitch, tailUp) : st.pitch + aoa);
-      if (!st.gk && !st.ground) st.agl = Math.max(st.agl, 300); // scenery under us not loaded yet
-      if (!st.ground && st.agl <= .3 && (st.airT || 0) < 2.5) { st.alt = st.gnd + .3; st.agl = .3; st.vs = Math.max(st.vs, 0); }
-      else if (!st.ground && st.agl <= .3) {
-        const fpm = st.vs / FT * 60;
-        if (fpm > -800 && Math.abs(st.bank) < 14 && st.pitch > -5 && st.v / KT < PF.vmax * .85) { st.ground = true; st.landed = true; st.landedOnce = true; st.alt = st.gnd; st.touch = { fpm, bank: st.bank, at: path.project(st.x, st.z).s, t: st.t }; st.pitch = Math.max(0, st.pitch); }
-        else { st.crashed = true; st.alt = st.gnd; st.crash = fpm <= -800 ? 'You hit the ground descending too fast.' : Math.abs(st.bank) >= 14 ? 'A wing touched the ground. Level the wings before landing.' : 'The aircraft hit the ground nose-first.'; }
-      }
     }
 
     /* ---- score (fly mode) ---- */
@@ -841,7 +954,8 @@ window.BoploSim = (() => {
     let camH = st.hdg, camD = 8.5, camPitchLag = 0;
 
     /* ---- HUD ---- */
-    const H = { ias: $('[data-ias]'), alt: $('[data-alt]'), vs: $('[data-vs]'), hdg: $('[data-hdg]'), tape: $('[data-tape]'), hor: $('[data-hor]'), bp: $('[data-bankptr]'), thr: $('[data-thr]'), flaps: $('[data-flaps]'), wp: $('[data-wp]'), wpd: $('[data-wpd]'), warn: $('[data-warn]'), needle: $('[data-needle]'), xte: $('[data-xte]'), bug: $('[data-bugi]'), time: $('[data-time]'), scrub: $('[data-scrub]') };
+    let apT = 0;
+    const H = { six: $('[data-six]'), trim: $('[data-trimi]'), rpm: $('[data-rpm]'), ind: Object.fromEntries($$('[data-ind]').map(e => [e.dataset.ind, e])), ias: $('[data-ias]'), alt: $('[data-alt]'), vs: $('[data-vs]'), hdg: $('[data-hdg]'), tape: $('[data-tape]'), hor: $('[data-hor]'), bp: $('[data-bankptr]'), thr: $('[data-thr]'), flaps: $('[data-flaps]'), wp: $('[data-wp]'), wpd: $('[data-wpd]'), warn: $('[data-warn]'), needle: $('[data-needle]'), xte: $('[data-xte]'), bug: $('[data-bugi]'), time: $('[data-time]'), scrub: $('[data-scrub]') };
     const wpts = (O.waypoints || []).map(w => ({ ...w, s: path.project(...F.to(w.lat, w.lng), true).s })); path.seed(0);
     let warnText = '', tipText = '', tipNow = '', tipUntil = 0;
     const tipEl = document.createElement('div'); tipEl.className = 'sim-tip'; tipEl.setAttribute('role', 'status'); $('[data-warn]').after(tipEl);
@@ -854,7 +968,9 @@ window.BoploSim = (() => {
       H.tape.setAttribute('transform', `translate(${120 - (st.hdg + 180) * 4} 0)`);
       H.hor.setAttribute('transform', `rotate(${-st.bank}) translate(0 ${(st.att ?? st.pitch) * 2.2})`); H.bp.setAttribute('transform', `rotate(${-st.bank})`);
       H.thr.style.height = `${Math.round(st.thr * 100)}%`;
-      H.flaps.textContent = st.flaps > .95 ? 'Flaps down' : st.flaps < .05 ? 'Flaps up' : 'Flaps…'; H.flaps.classList.toggle('on', st.flaps > .05);
+      H.trim.style.bottom = `${50 + fc.trim * 46}%`; H.rpm.textContent = fs.rpm;
+      const lamp = (k, v) => H.ind[k]?.classList.toggle('on', !!v); lamp('park', fc.parking); lamp('brake', fc.brake > .05); lamp('carb', fc.carbHeat); lamp('rud', fc.autoRudder);
+      H.flaps.textContent = FM.notches > 1 ? `Flaps ${FM.flapLabel()}` : 'No flaps'; H.flaps.classList.toggle('on', fc.flaps > 0);
       // next waypoint
       let next = wpts.find(w => w.s > pr.s + 80);
       const endS = L, [nx, nz] = next ? F.to(next.lat, next.lng) : path.at(endS);
@@ -869,14 +985,23 @@ window.BoploSim = (() => {
       // warnings
       let w = '';
       if (st.crashed) w = 'Crashed';
-      else if (st.stall) w = 'Stall';
+      else if (st.stall) w = fs.stalled ? 'Stall' : 'Stall warning';
       else if (!st.ground && st.agl < 100 && st.vs < -4 && !(landEnd && L - pr.s < 2500)) w = 'Pull up';
       else if (!st.ground && vk > PF.vmax * 1.25) w = 'Overspeed';
       if (w !== warnText) { warnText = w; H.warn.textContent = w; H.warn.classList.toggle('on', !!w); }
+      if (showSix || cockpit()) {
+        const [cx2, cz2] = path.at(pr.s + 400), crs = norm360(Math.atan2(cx2 - st.x, cz2 - st.z) * R2D);
+        drawSixPack(H.six, { ias: st.v / KT, pitch: st.pitch, bank: st.bank, altFt: (st.alt - geoN) / FT, vsFpm: st.vs / FT * 60, hdg: st.hdg, turn: fs.turn || 0, slip: fs.slip || 0,
+          bug: AP.hdg != null && apOn ? AP.hdg : null, crs: replay || AP.nav ? crs : null, dev: (pr.side > 0 ? 1 : -1) * pr.d / NM / (circuit ? .5 : 2),
+          vs: FM.p.vs, vso: FM.p.vso || FM.p.vs, vfe: FM.p.vfe, vno: FM.p.vno, vne: FM.p.vne, qnh: '1013', rpm: fs.rpm, thr: fs.power, flaps: FM.notches > 1 ? FM.flapLabel() : '—', trim: fc.trim,
+          park: fc.parking, brake: fc.brake > .05, carb: fc.carbHeat, autoRud: fc.autoRudder, stall: st.stall, ap: apOn });
+      }
+      if (apOn && !replay) { apT = (apT || 0) + 1; if (apT % 10 === 0) apUI(); }
       let tip = '';
       if (performance.now() < tipUntil) tip = tipNow;
       else if (!replay && !apOn && !st.crashed) {
-        if (st.ground && !st.landedOnce && st.thr < .5) tip = coarse ? 'Push the power slider up to start your take-off roll' : 'Add power: hold R, or press 0 for full power';
+        if (st.ground && fc.parking && thrTarget > .2) tip = coarse ? 'The parking brake is on: tap Park to release it' : 'The parking brake is on: press Shift+B to release it';
+        else if (st.ground && !st.landedOnce && st.thr < .5) tip = coarse ? 'Push the power slider up to start your take-off roll' : 'Add power: hold R, or press 0 for full power';
         else if (st.ground && !st.landedOnce && vk > PF.vr - 12) tip = coarse ? 'Gently pull the stick back to lift off' : `Gently hold ↓ (or S) to lift off at about ${PF.vr} kt`;
         else if (!st.ground && st.t < 60 && st.agl < 200) tip = 'Climb towards the first gate';
         else if (!st.ground && landEnd && L - pr.s < 2500 && L - pr.s > 300) tip = 'Line up with the route, reduce power and descend gently to land';
@@ -887,10 +1012,29 @@ window.BoploSim = (() => {
     }
 
     /* ---- controls ---- */
-    function setAP(v) { apOn = v; $('[data-ap]').setAttribute('aria-pressed', String(v)); $('[data-ap]').classList.toggle('on', v); }
-    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; }
+    function apUI() {
+      const bar = $('[data-apbar]'); bar.hidden = !apOn || replay;
+      $$('[data-apm]').forEach(b => { const m = b.dataset.apm; b.setAttribute('aria-pressed', String(m === 'nav' ? AP.hdg == null && AP.alt == null : AP[m] != null)); });
+      const v = m => AP[m] ?? (m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT));
+      $('[data-apv="hdg"]').textContent = pad3(v('hdg')) + '°'; $('[data-apv="alt"]').textContent = v('alt').toLocaleString('en-GB') + ' ft'; $('[data-apv="spd"]').textContent = v('spd') + ' kt';
+    }
+    function setAP(v) { apOn = v; if (v) { FM.ap = null; } $('[data-ap]').setAttribute('aria-pressed', String(v)); $('[data-ap]').classList.toggle('on', v); apUI(); }
+    $$('[data-apm]').forEach(b => b.onclick = () => {
+      const m = b.dataset.apm;
+      if (m === 'nav') { AP.hdg = AP.alt = null; AP.nav = true; }
+      else if (AP[m] != null) AP[m] = null;
+      else AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT);
+      if (!apOn) setAP(true); FM.ap = null; apUI();
+    });
+    $$('[data-apd]').forEach(b => b.onclick = () => { const m = b.dataset.apd, dlt = +b.dataset.d; if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT); AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : Math.max(0, AP[m] + dlt); if (!apOn) setAP(true); apUI(); });
+    function setSix(v) { showSix = v; store.set('six', v); applyView(); }
+    const cockpit = () => CAMS[camI][0] === 'Cockpit';
+    function applyView() { const six = showSix || cockpit(); root.classList.toggle('six-on', six); root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); }
+    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; applyView(); }
+    $('[data-sixb]').onclick = () => setSix(!showSix);
     function toggleMute() { const m = !store.get('mute', false); store.set('mute', m); audio.mute(m); $('[data-mute]').classList.toggle('off', m); }
     function togglePause(force) { paused = force ?? !paused; audio.pause(paused); const d = paused ? 'M8 5l11 7-11 7z' : 'M8 5v14M16 5v14'; $$('[data-pp],[data-pp2]').forEach(p => p.setAttribute('d', d)); root.classList.toggle('is-paused', paused); }
+    applyView();
     $('[data-ap]').onclick = () => setAP(!apOn); $('[data-cam]').onclick = cycleCam; $('[data-mute]').onclick = toggleMute; $('[data-pause]').onclick = () => togglePause(); $('[data-play]').onclick = () => togglePause();
     $('[data-mute]').classList.toggle('off', store.get('mute', false));
     $('[data-gates]').setAttribute('aria-pressed', String(showGates)); $('[data-gates]').onclick = () => { showGates = !showGates; store.set('gates', showGates); $('[data-gates]').setAttribute('aria-pressed', String(showGates)); };
@@ -902,12 +1046,12 @@ window.BoploSim = (() => {
 
     /* ---- ready card ---- */
     const ctrlHelp = coarse
-      ? `<li><b>Stick</b> bottom left: pull back to climb, push to descend, sideways to bank.</li><li><b>Power</b> slider on the right. Or turn on <b>Tilt to steer</b>.</li>`
-      : `<li><b>↑ ↓</b> or <b>W S</b>: nose down / nose up (pull back to climb)</li><li><b>← →</b> or <b>A D</b>: bank left / right</li><li><b>R F</b> or <b>+ −</b>: more or less power · <b>1–0</b> set power</li><li><b>V</b> flaps (use them to slow down for landing) · <b>G</b> route gates</li><li><b>P</b> autopilot · <b>C</b> camera · <b>Space</b> pause · <b>M</b> sound</li><li>A gamepad works too.</li>`;
+      ? `<li><b>Stick</b> bottom left: pull back to raise the nose, push to lower it, sideways to bank. <b>Rudder</b> slider underneath.</li><li><b>Power</b> slider on the right; <b>Flaps</b>, <b>Trim</b>, <b>Brake</b> and <b>Park</b> buttons beside it. Or turn on <b>Tilt to steer</b>.</li>`
+      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>Space</b> pause · <b>M</b> sound</li><li>A gamepad works too: sticks fly, triggers set power, bumpers set flaps, the D-pad trims and A brakes.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round((cruise - geoN) / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
-      ${replay ? '' : `<ul class="sim-help">${ctrlHelp}</ul><label class="sim-check"><input type="checkbox" data-inv ${invert ? 'checked' : ''}> Invert pitch (push to climb)</label>`}
+      ${replay ? '' : `<p class="sim-note">${groundStart ? `Release the parking brake, add full power, keep straight with the rudder and raise the nose at about ${PF.vr} kt.` : 'You start in the air, trimmed for cruise.'} Flaps for landing; approach at about ${PF.appr} kt.</p><ul class="sim-help">${ctrlHelp}</ul><label class="sim-check"><input type="checkbox" data-inv ${invert ? 'checked' : ''}> Invert pitch (push to climb)</label>`}
       ${synthetic ? '<p class="sim-note">This flight has no recorded track, so you’ll fly a standard circuit from the departure airfield.</p>' : ''}
       <p class="sim-note">A practice toy for fun and route familiarisation, not a training device. Heights are estimated, not logged.</p>
       <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Back</button><button type="button" class="sim-btn" data-go>${replay ? 'Play replay' : 'Start flying'}</button></div>`);

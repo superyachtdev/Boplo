@@ -35,7 +35,7 @@ window.BoploAircraft = (() => {
     { id: 'da20', name: 'Diamond DA20 Katana', blurb: 'Light two-seat composite trainer with a T-tail. Glides beautifully.', span: 10.9, len: 7.2, fus: 'sleek', W: 1.02, H: 1.12, e: 2.2,
       wing: { pos: 'low', le: .5, secs: [[0, 0, 1.3], [1.1, .05, 1.25], [5.45, .4, .66]], dih: 4 }, tail: { type: 'T', stab: [[0, .85], [1.45, .6]], fin: [[0, 1.45], [1.25, .85]], finSweep: 1.05 },
       canopy: { type: 'bubble', t: [.1, .36], hh: .4 }, gear: { type: 'tri', track: 2.2, r: .19, fair: true, legLen: .5 }, livery: ['#F6F7F9', '#E2583E', '#3B1A12'],
-      perf: { vs: 42, vr: 51, appr: 60, cruise: 120, vmax: 135, climb: 1000 } },
+      perf: { vs: 45, vr: 51, appr: 60, cruise: 120, vmax: 135, climb: 1000 } },
     { id: 'p2008', name: 'Tecnam P2008', blurb: 'Modern two-seat high-wing trainer with no struts and a stabilator.', span: 9.0, len: 6.9, fus: 'sleek', W: 1.14, H: 1.3, e: 2.6,
       wing: { pos: 'high', le: .5, secs: [[0, 0, 1.45], [4.5, 0, 1.45]], dih: 1 }, tail: { type: 'conv', stab: [[0, .85], [1.45, .85]], fin: [[0, 1.55], [1.3, .8]], finSweep: .9, stabilator: true },
       canopy: { type: 'cabin', t: [.08, .4] }, gear: { type: 'tri', track: 1.9, r: .19, fair: false, legLen: .55 }, livery: ['#F4F5F7', '#1C8C5E', '#0B3324'],
@@ -120,6 +120,8 @@ window.BoploAircraft = (() => {
       loft('glass', rings, GLASS, { capStart: true, capEnd: true });
     }
 
+    // pilot's eye: left seat, a little below the top of the cabin, about mid-canopy
+    const eyeS = secAt(cv.t[0] + (cv.t[1] - cv.t[0]) * .5), eye = [T.W * .22, eyeS.cy + eyeS.h * (cv.type === 'bubble' ? .32 : .22), eyeS.z];
     // ---- wing ----
     const WG = T.wing, wf = foil(.15, .025), rootT = (FU.noseZ - WG.le) / T.len, rs = secAt(rootT);
     const rootY = WG.pos === 'high' ? rs.cy + rs.h / 2 - .1 : rs.cy - rs.h / 2 + .14;
@@ -207,7 +209,7 @@ window.BoploAircraft = (() => {
     dv.setUint32(12, jsonBytes.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jsonBytes, 20);
     let p = 20 + jsonBytes.length; dv.setUint32(p, off, true); dv.setUint32(p + 4, 0x004E4942, true); p += 8;
     for (const c of chunks) out.set(c, p), p += c.length;
-    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T };
+    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, eye, tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T };
   }
 
   // flight-model numbers from the book figures: thrust and drag that give the type's top speed and climb rate

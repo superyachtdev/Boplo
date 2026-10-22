@@ -121,6 +121,17 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - `model(id)` turns book figures (stall, rotate, approach, cruise, top speed, climb) into the sim's thrust and drag. `flight-sim.js` uses them for lift-off, stall, approach speeds, autopilot targets and overspeed. The Cub sits nose-up on its tailwheel (`groundAtt`) and raises the tail during the take-off roll.
 - The Simulator page has an Aircraft picker (`ui.sim.ac`, kept in localStorage `boplo-sim-ac`), with rendered images (`dist/aircraft/<id>.webp`, regenerate with `scripts/aircraft-renders`: serve a folder with render.html + flight-aircraft.js, run render.mjs, then `python3 composite.py r dist/aircraft`). "Match my logbook" maps the flight's aircraft text with `match()` (for example "PA-28 Warrior" → pa28), falling back to the profile aircraft and then the C172.
 
+## Simulator flight model and controls (2026-10-22, Claude)
+- `dist/flight-physics.js` (`window.BoploPhysics`) is a rigid-body flight model:
+  - aerodynamics: lift from angle of attack with a real stall, induced and parasite drag, propeller thrust η·P/√(V²+V0²) with density lapse, pitch dynamics (the elevator commands angle of attack about the trimmed one), roll and yaw dynamics with weathervane and dihedral stability, adverse yaw, prop/torque yaw at high power and low speed, sideslip
+  - flaps and engine: flaps in each type's real notches (`DATA`), elevator trim, carb heat, optional auto-rudder
+  - ground: nosewheel or tailwheel steering, rolling friction by surface, brakes, parking brake; crash checks for hard landings, wing strikes, nosewheel-first landings and prop strikes
+- Calibration comes from mass, wing area, hp and book speeds. CLmax comes from Vs/Vso, and CD0 from the top speed at full power. `scripts/sim-physics-check.cjs` reports each type's lift-off, climb, top speed, clean and full-flap stall speeds and landing; stall speeds match the book within about 1 kt.
+- `BoploPhysics.pilot()` holds the autopilot control laws: take-off, initial climb, track/heading, VS-to-pitch with an integrator and auto-trim, auto-throttle, flaps, flare and rollout braking. `scripts/sim-autopilot-check.cjs` flies a full trip per type.
+- `flight-sim.js` maps the model to the existing HUD, scoring and replay. Autopilot modes: NAV (route, lateral and vertical, with auto-throttle), HDG, ALT and SPD holds with ± buttons.
+- Controls: W/S or arrows (elevator), A/D or arrows (ailerons), Q/E (rudder), R/F (throttle), V and Shift+V or ] [ (flaps), T/G (trim), B (brakes), Shift+B (parking brake), H (carb heat), U (auto-rudder), I (panel), C (camera), J (gates). Gamepad and touch (stick, rudder slider, flap, trim and brake buttons) are covered too.
+- Six-pack canvas (`drawSixPack`): ASI with the type's arcs (Vso–Vfe white, Vs–Vno green, Vno–Vne yellow, Vne red), AI, altimeter, turn coordinator with slip ball, HSI with heading bug, route course and deviation, VSI, plus an engine and systems column. Cockpit camera uses the eye point from `BoploAircraft.build().eye`.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
