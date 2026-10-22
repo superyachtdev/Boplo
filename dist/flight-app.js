@@ -74,7 +74,8 @@
     ['ask', 'Ask Boplo', 'ask', ['ask'], 'Ask'],
     ['logbook', 'Logbook', 'logbook', ['logbook', 'map', 'analytics'], 'Logbook'],
     ['training', 'Training', 'study', ['progress', 'prepare', 'study', 'radio', 'currency'], 'Training'],
-    ['planning', 'Flight planning', 'navlog', ['navlog', 'weather', 'sim'], 'Planning']
+    ['planning', 'Flight planning', 'navlog', ['navlog', 'weather'], 'Planning'],
+    ['sim', 'Simulator', 'sim', ['sim'], 'Fly']
   ];
   const SUBLABEL = { logbook: 'Flights' };
   const hubOf = id => HUBS.find(h => h[3].includes(id));
@@ -358,7 +359,7 @@
       <aside class="side"><div class="side-in night">${contours('b')}
         ${brand('#overview')}
         <button class="btn btn-blue btn-has-spark log-cta" data-add>Log a flight ${spark}</button>
-        <nav aria-label="Flight desk">${HUBS.map(h => `<div class="nav-hub${hubOf(page) === h ? ' on' : ''}" data-hub="${h[0]}"><a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="' + (h[3].length > 1 ? 'true' : 'page') + '"' : ''}>${ico(h[2])}${h[1]}</a>${h[3].length > 1 ? `<div class="nav-subs">${h[3].map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(SUBLABEL[id] || (PAGES.find(x => x[0] === id) || [, id])[1])}</a>`).join('')}</div>` : ''}</div>`).join('')}</nav>
+        <nav aria-label="Flight desk">${HUBS.map(h => `<div class="nav-hub${hubOf(page) === h ? ' on' : ''}" data-hub="${h[0]}"><a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="' + (h[3].length > 1 ? 'true' : 'page') + '"' : ''}>${ico(h[2])}${h[1]}${h[0] === 'sim' ? '<span class="nav-tag">3D</span>' : ''}</a>${h[3].length > 1 ? `<div class="nav-subs">${h[3].map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(SUBLABEL[id] || (PAGES.find(x => x[0] === id) || [, id])[1])}</a>`).join('')}</div>` : ''}</div>`).join('')}</nav>
         <div class="me">
           <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small><span class="plan-badge ${isAdv() ? 'adv' : ''}">${isAdv() ? 'Advanced' : 'Free'}</span>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
           <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><a href="#plan" ${page === 'plan' ? 'aria-current="page"' : ''}>${ico('plan')}${isAdv() ? 'Plan' : 'Upgrade'}</a><button data-logout class="me-out" aria-label="${preview ? 'Leave example desk' : 'Sign out'}" title="${preview ? 'Leave example desk' : 'Sign out'}">${ico('out')}</button></div>
