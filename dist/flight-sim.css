@@ -215,3 +215,6 @@
 .sim-set-axes i{grid-column:1/-1;position:relative;height:4px;border-radius:3px;background:rgba(255,255,255,.1)}
 .sim-set-axes i b{position:absolute;top:-3px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#4F8BFF}
 #sim[data-tod=night]{background:linear-gradient(#04060d,#0b1222 60%,#06080c)}#sim[data-tod=golden]{background:linear-gradient(#6f86b8,#f2c08a 60%,#7a6a50)}
+.sim-pr{grid-template-columns:1fr!important}
+.sim-pr>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-left:3px solid transparent;padding-left:10px}
+.sim-pr .pr-great{border-color:#34C77B}.sim-pr .pr-ok{border-color:#F2B33D}.sim-pr .pr-firm{border-color:#E5484D}

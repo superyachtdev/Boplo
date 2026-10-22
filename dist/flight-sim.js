@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=6'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=7'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -521,6 +521,8 @@ window.BoploSim = (() => {
     const add = (p, v, k) => [p[0] + v[0] * k, p[1] + v[1] * k];
     const leftOf = v => [-v[1], v[0]];
     const windFrom = O.wind && O.wind.spd >= 5 ? O.wind.dir * D2R : null;
+    // practice mode at any airport: { kind: 'takeoff' | 'circuit' | 'long' | 'short', end: runway end ident }
+    const PR = O.practice || null, PRF = PR && (PR.kind === 'long' || PR.kind === 'short');
     async function airportRunways(ap) {
       if (!ap || !Number.isFinite(ap.lat)) return null;
       const C0 = F.to(ap.lat, ap.lng), rows = (await loadRunways(ap.cc))[ap.code] || [];
@@ -541,7 +543,7 @@ window.BoploSim = (() => {
       for (const rw of R0.list) for (const e of endsOf(rw)) {
         const head = windFrom != null ? Math.cos(windFrom - e.hdg) * O.wind.spd : 0;
         const align = want != null ? Math.cos(wrap180((want - e.hdg) * R2D) * D2R) : 0;
-        const sc = (windFrom != null ? head * 3 : 0) + align * 6 + Math.min(rw.len, 2500) / 1000 + (PAVED(rw.surf) ? 1 : 0) - (rw.approx ? .5 : 0);
+        const sc = (windFrom != null ? head * 3 : 0) + align * 6 + Math.min(rw.len, 2500) / 1000 + (PAVED(rw.surf) ? 1 : 0) - (rw.approx ? .5 : 0) + (PR?.end && e.id === PR.end ? 100 : 0);
         if (sc > bs) { bs = sc; best = e; }
       }
       return best;
@@ -571,8 +573,11 @@ window.BoploSim = (() => {
         if (arrE) {
           const f = arrE.dir, Ta = add(arrE.T, f, Math.max(arrE.disp, 0)), FA = add(Ta, f, -5500), last = out[out.length - 1];
           const inc = unit(last, FA), turn = Math.acos(clamp(inc[0] * f[0] + inc[1] * f[1], -1, 1)) * R2D;
-          if (turn > 65) { const l = leftOf(f), side = Math.sign((last[0] - Ta[0]) * l[0] + (last[1] - Ta[1]) * l[1]) || 1; out.push(add(add(Ta, f, -2500), l, side * 3200), add(add(Ta, f, -7000), l, side * 1500)); }
-          out.push(FA, Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0);
+          // already established on the extended centreline (a practice final): fly straight in
+          const back = (Ta[0] - last[0]) * f[0] + (Ta[1] - last[1]) * f[1], lat = Math.abs((last[0] - Ta[0]) * f[1] - (last[1] - Ta[1]) * f[0]);
+          if (back > 1200 && back < 6500 && lat < 400) { out.push(Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0); }
+          else { if (turn > 65) { const l = leftOf(f), side = Math.sign((last[0] - Ta[0]) * l[0] + (last[1] - Ta[1]) * l[1]) || 1; out.push(add(add(Ta, f, -2500), l, side * 3200), add(add(Ta, f, -7000), l, side * 1500)); }
+          out.push(FA, Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0); }
         } else out.push(P[P.length - 1]);
         P = out.filter((p, i, a) => !i || dist2(p, a[i - 1]) > 15);
       }
@@ -580,7 +585,7 @@ window.BoploSim = (() => {
     } else if (P.length < 2 || span < 400) { P = circuitAround(P[0], (O.runwayHdg || 0) * D2R); synthetic = true; }
     // circuits and local tracks: start along the first stretch of the route
     const path = buildPath(P);
-    const circuit = circuitLike || synthetic;
+    const circuit = (circuitLike || synthetic) && !(PR && PR.kind !== 'circuit');
     const L = path.len;
 
     /* ---- 3D scenery (CesiumJS) ---- */
@@ -912,7 +917,7 @@ window.BoploSim = (() => {
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
-    const AIM = arrE ? Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3) : 0, ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = arrE ? Math.max(120, rollEnd - AIM) : Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = circuit ? 0.06 : 330 * FT / NM;
+    const AIM = arrE ? Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3) : 0, ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = arrE ? Math.max(120, rollEnd - AIM) : Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = PRF ? Math.tan(3 * D2R) : circuit ? 0.06 : 330 * FT / NM;
     const groundStart = O.start !== 'air', landEnd = O.land !== false;
     const prof = s => { const up = groundStart ? g0 + Math.max(0, s - ROLL) * CG : cruise, dn = landEnd ? g1 + Math.max(0, L - TDZ - s) * DG : cruise; return Math.min(cruise, up, dn); };
 
@@ -957,11 +962,25 @@ window.BoploSim = (() => {
       st.ground = fs.ground; st.crashed = fs.crashed; st.crash = fs.crash; st.stall = fs.stallWarn; st.thr = fs.power; st.flaps = FM.notches > 1 ? fc.flaps / (FM.notches - 1) : 0; st.agl = fs.agl ?? 0; st.gnd = fs.alt - (fs.agl ?? 0);
       st.landed = fs.landed; if (fs.landed && fs.touch && !st.touch) { st.touch = { ...fs.touch, at: path.project(st.x, st.z).s }; st.landedOnce = true; }
     };
+    let pscore = null, apprPwr = null;
+    const PRN = PR ? ({ takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final' })[PR.kind] + (arrE?.id || depE?.id ? ' · runway ' + (arrE?.id || depE?.id) : '') : '';
+    const PRT = !PR ? '' : PR.kind === 'takeoff' ? `Line up, release the parking brake, full power, keep straight on the centreline and rotate at about ${PF.vr} kt. Climb at Vy (${Math.round(PF.vy)} kt) on the runway heading. The exercise ends at 1,000 ft above the airfield.`
+      : PR.kind === 'circuit' ? 'Take off, fly a left-hand circuit and land back on the same runway. Follow the gates.'
+      : `You’re established on a ${PR.kind === 'long' ? '6 NM' : '2 NM'} final${PR.kind === 'long' ? ' with take-off flap' : ' with landing flap'}, trimmed, at about ${PF.appr + (PR.kind === 'long' ? 12 : 3)} kt. Hold the 3° glidepath (the PAPI shows two white and two red), stay on the centreline, cross the threshold at about ${PF.appr} kt and land in the touchdown zone.`;
     function place(s, airborne) {
       const [x, z, h] = path.at(s);
       const gh = rwHeight(x, z) ?? elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0);
       const alt = airborne ? Math.max(prof(s), (gh ?? g0) + 150) : (gh ?? g0);
-      FM.reset({ x, z, alt, hdg: h * R2D, airborne, speed: PF.cruise * (circuit ? .82 : .92) * KT });
+      const spd = PRF ? PF.appr + (PR.kind === 'long' ? 12 : 3) : PF.cruise * (circuit ? .82 : .92);
+      FM.reset({ x, z, alt, hdg: h * R2D, airborne, speed: spd * KT, pitch: PRF ? -3 : 0 });
+      if (PRF && airborne) {
+        // configured for the approach: flaps, trimmed for the approach speed, power for a 3° descent
+        FM.c.flaps = PR.kind === 'short' ? FM.notches - 1 : Math.min(1, FM.notches - 1); FM.c.trim = FM.trimFor(spd * KT);
+        if (apprPwr == null) { try { apprPwr = BoploPhysics.approachPower(O.aircraftId || 'c172', PF, { tail: AC.type?.gear?.type === 'tail', groundAtt: AC.groundAtt }, spd * KT, FM.c.flaps); } catch { apprPwr = .35; } }
+        FM.c.throttle = apprPwr;
+        FM.s.power = FM.c.throttle; try { thrTarget = FM.c.throttle; } catch { } // not declared yet on the first placement const tr = $('[data-thrrange]'); if (tr) tr.value = Math.round(FM.c.throttle * 100);
+      }
+      pscore = { gsN: 0, gsSum: 0, spdSum: 0, clN: 0, clMax: 0, liftAt: null, rot: null, vySum: 0, vyN: 0 };
       FM.ap = null; st.touch = null; st.landedOnce = false; st.airT = airborne ? 10 : 0; lastG = gh ?? g0;
       sync(); path.reset(); path.seed(s);
     }
@@ -1267,7 +1286,7 @@ window.BoploSim = (() => {
       ? `<li><b>Stick</b> bottom left: pull back to raise the nose, push to lower it, sideways to bank. <b>Rudder</b> slider underneath.</li><li><b>Power</b> slider on the right; <b>Flaps</b>, <b>Trim</b>, <b>Brake</b> and <b>Park</b> buttons beside it. Or turn on <b>Tilt to steer</b>.</li>`
       : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
-      <p>${replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
+      <p>${PR ? PRT : replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round((cruise - geoN) / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
       ${replay ? '' : `<p class="sim-note">${groundStart ? `Release the parking brake, add full power, keep straight with the rudder and raise the nose at about ${PF.vr} kt.` : 'You start in the air, trimmed for cruise.'} Flaps for landing; approach at about ${PF.appr} kt.</p><ul class="sim-help">${ctrlHelp}</ul><label class="sim-check"><input type="checkbox" data-inv ${invert ? 'checked' : ''}> Invert pitch (push to climb)</label>`}
       ${synthetic ? '<p class="sim-note">This flight has no recorded track, so you’ll fly a standard circuit from the departure airfield.</p>' : ''}
@@ -1280,17 +1299,45 @@ window.BoploSim = (() => {
 
     /* ---- end card ---- */
     let ended = false;
+    // practice scoring: glidepath, speed and centreline on a final; centreline, lift-off and climb speed on a take-off
+    const sThr = arrE ? path.project(landPt[0], landPt[1]).s : 0;
+    function scorePractice(pr) {
+      const P0 = pscore, kt = st.v / KT;
+      if (PRF) {
+        if (!st.ground && !st.landedOnce && pr.s < sThr) { P0.gsN++; P0.gsSum += Math.abs(st.alt - prof(pr.s)) / FT; P0.spdSum += Math.abs(kt - (L - TDZ - pr.s > 2500 && PR.kind === 'long' ? PF.appr + 8 : PF.appr)); P0.clSum = (P0.clSum || 0) + pr.d; }
+        if (st.touch && P0.td == null) { P0.td = st.touch.at - sThr; P0.tdCl = pr.d; P0.tdKt = kt; }
+      } else if (PR.kind === 'takeoff') {
+        if (st.ground && !P0.liftAt) { P0.clMax = Math.max(P0.clMax, pr.d); if (kt > PF.vr * .95 && fc.elevator < -.1 && P0.rot == null) P0.rot = kt; }
+        if (!st.ground && P0.liftAt == null) { P0.liftAt = pr.s; P0.liftKt = kt; }
+        if (!st.ground && st.agl > 50 * FT) { P0.vyN++; P0.vySum += Math.abs(kt - PF.vy); P0.clSum = (P0.clSum || 0) + pr.d; }
+      }
+    }
+    function practiceFacts(kind) {
+      const P0 = pscore; if (!PR || !P0 || replay || kind === 'crash') return '';
+      const g = (v, ok, fine) => v <= ok ? 'great' : v <= fine ? 'ok' : 'firm', row = (l, v, cls) => `<div class="pr-${cls}"><span>${l}</span><b>${v}</b></div>`;
+      const out = [];
+      if (PRF) {
+        if (P0.gsN) { const gs = P0.gsSum / P0.gsN, sp = P0.spdSum / P0.gsN, cl = P0.clSum / P0.gsN; out.push(row('Glidepath, average error', Math.round(gs) + ' ft', g(gs, 50, 120)), row('Speed, average error', sp.toFixed(1) + ' kt', g(sp, 4, 8)), row('Centreline, average error', Math.round(cl) + ' m', g(cl, 15, 40))); }
+        if (P0.td != null) { const aim = Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3), off = P0.td - aim; out.push(row('Touchdown', P0.td < 0 ? `${Math.round(-P0.td)} m short of the runway` : `${Math.round(P0.td)} m past the threshold`, P0.td < 0 ? 'firm' : g(Math.abs(off), 120, 280)), row('Touchdown off the centreline', Math.round(P0.tdCl) + ' m', g(P0.tdCl, 4, 9)), row('Touchdown speed', Math.round(P0.tdKt) + ' kt', g(Math.abs(P0.tdKt - (FM.p.vso || PF.vs * .9) * 1.1), 5, 10))); }
+      } else if (PR.kind === 'takeoff') {
+        out.push(row('Centreline on the roll, worst', P0.clMax.toFixed(1) + ' m', g(P0.clMax, 3, 8)));
+        if (P0.liftAt != null) out.push(row('Lift-off', `${Math.round(P0.liftKt)} kt after ${Math.round(P0.liftAt)} m`, g(Math.abs(P0.liftKt - PF.vr), 5, 10)));
+        if (P0.vyN) out.push(row(`Climb speed vs Vy ${Math.round(PF.vy)} kt, average error`, (P0.vySum / P0.vyN).toFixed(1) + ' kt', g(P0.vySum / P0.vyN, 4, 8)), row('Track on the climb-out, average error', Math.round(P0.clSum / P0.vyN) + ' m', g(P0.clSum / P0.vyN, 30, 80)));
+      }
+      return out.length ? `<div class="sim-facts sim-pr">${out.join('')}</div><p class="sim-note">Green is within normal checkride standards, amber is acceptable, red needs work.</p>` : '';
+    }
     function finish(kind) {
       if (ended) return; ended = true; togglePause(true);
       const t = score.t, tube = score.n ? Math.round(score.tube / score.n * 100) : 0, xte = score.n ? score.xteSum / score.n / NM : 0;
       const touch = st.touch, ld = touch ? (touch.fpm > -250 ? ['Smooth landing', 'great'] : touch.fpm > -500 ? ['Good landing', 'ok'] : ['Firm landing', 'firm']) : null;
       const bestKey = 'best-' + (O.id || O.title), best = store.get(bestKey, null);
       if (!replay && kind !== 'crash' && (!best || tube > best)) store.set(bestKey, tube);
-      card(`<span class="sim-kicker">${kind === 'crash' ? 'Flight over' : replay ? 'Replay finished' : 'Route complete'}</span><h2>${kind === 'crash' ? 'Crashed' : ld ? ld[0] : 'Well flown'}</h2>
+      card(`<span class="sim-kicker">${kind === 'crash' ? 'Flight over' : replay ? 'Replay finished' : PR ? 'Practice · ' + PRN : 'Route complete'}</span><h2>${kind === 'crash' ? 'Crashed' : ld ? ld[0] : kind === 'climb' ? 'Climbing away' : 'Well flown'}</h2>
         ${kind === 'crash' ? `<p>${esc(st.crash)}</p>` : ld ? `<p>Touchdown at ${Math.abs(Math.round(touch.fpm / 10) * 10)} fpm with ${Math.abs(Math.round(touch.bank))}° of bank.</p>` : ''}
         <div class="sim-facts"><div><span>Time</span><b>${mmss(t)}</b></div><div><span>Flown</span><b>${(score.dist / NM).toFixed(1)} NM</b></div><div><span>Highest</span><b>${Math.round((score.maxAlt - geoN) / FT / 10) * 10} ft</b></div>
         ${replay ? '' : `<div><span>On the route</span><b>${tube}%</b></div><div><span>Average off track</span><b>${xte < .1 ? Math.round(xte * NM) + ' m' : xte.toFixed(2) + ' NM'}</b></div><div><span>Your best</span><b>${best != null ? Math.max(best, kind === 'crash' ? 0 : tube) + '%' : (kind === 'crash' ? '—' : tube + '%')}</b></div>`}</div>
-        ${replay ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
+        ${practiceFacts(kind)}
+        ${replay || PR ? '' : '<p class="sim-note">“On the route” is the share of time within the gates’ width and 250 ft of the planned height.</p>'}
         <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button><button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button></div>`);
       wireX();
       $('[data-again]').onclick = () => { ended = false; Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
@@ -1319,6 +1366,8 @@ window.BoploSim = (() => {
           // score
           score.t += dt; const pr = path.project(st.x, st.z); score.dist += Math.hypot(st.x - lastX, st.z - lastZ); lastX = st.x; lastZ = st.z; score.maxAlt = Math.max(score.maxAlt, st.alt);
           if (!st.ground) { score.n++; score.xteSum += pr.d; const ae = Math.abs(st.alt - prof(pr.s)); if (pr.d < (circuit ? 90 : 140) / 2 + 60 && ae < 250 * FT) score.tube++; }
+          if (PR && pscore && !replay) scorePractice(pr);
+          if (PR?.kind === 'takeoff' && !st.ground && st.agl > 1000 * FT) { finish('climb'); break; }
           if (st.crashed) { finish('crash'); break; }
           if (st.ground && st.landedOnce && st.v < 2) { finish('land'); break; }
           if (!landEnd && pr.s > L - 40) { finish('done'); break; }

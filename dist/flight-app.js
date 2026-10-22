@@ -1538,12 +1538,12 @@
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=3', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=11', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=12', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
     if (mode === 'fly' && !isAdv()) return upgradeSheet('Flying the simulator yourself is part of Advanced. Replays are free.');
-    const p = state.profile, isPlan = !!src.inp;
+    const p = state.profile, isPlan = !!src.inp, PRc = src.practice || null, PRfin = PRc && (PRc.kind === 'long' || PRc.kind === 'short');
     toast(mode === 'replay' ? 'Loading the replay…' : 'Loading the simulator…');
     try {
       const [Sim, dep, arr] = await Promise.all([loadSimLib(), isPlan ? anyAirfield(src.points[0]?.code) : anyAirfield(src.departure), isPlan ? anyAirfield(src.points[src.points.length - 1]?.code) : anyAirfield(src.arrival)]);
@@ -1571,19 +1571,42 @@
       else if (ui.sim.wind === 'live') {
         try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0]; if (s && Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id }; } catch { }
       }
-      const title = isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
-      const subtitle = isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
+      const title = PRc ? `${PRACTICE[PRc.kind]} · ${upper(src.departure)}${PRc.end ? ' ' + PRc.end : ''}` : isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
+      const subtitle = PRc ? (dep?.name || '') : isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
       let googleKey = state.mapsKey || '';
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
       Sim.open({
         googleKey,
-        id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
+        id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
-        fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: true, aircraftId: simAircraft(src),
-        depAirport: dep ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
+        fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
+        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src),
+        depAirport: dep && !PRfin ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
     } catch (x) { toast(x.message); }
+  }
+  const PRACTICE = { takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final' };
+  // practice at any airfield: build a short route on the chosen runway end, then fly it as a normal sim session
+  async function openPractice(code, endId, kind) {
+    if (!isAdv()) return upgradeSheet('Practising take-offs, circuits and approaches in the simulator is part of Advanced.');
+    const ap = await anyAirfield(code); if (!ap) { toast('Pick an airfield from the list.'); return; }
+    const rows = ((await fetch(`/runways/${ap.cc}.json`).then(r => r.ok ? r.json() : {}).catch(() => ({}))).rows || {})[ap.code] || [];
+    const M = 111320, cosL = Math.cos(ap.lat * Math.PI / 180);
+    const move = (pt, brg, m) => ({ lat: pt.lat + Math.cos(brg) * m / M, lng: pt.lng + Math.sin(brg) * m / (M * cosL) });
+    const brgOf = (a, b) => Math.atan2((b.lng - a.lng) * cosL, b.lat - a.lat);
+    let T = null, far = null, id = endId || '';
+    const ends = rows.flatMap(r => [{ id: r[0], T: { lat: r[2], lng: r[3] }, far: { lat: r[4], lng: r[5] }, len: r[6] }, { id: r[1], T: { lat: r[4], lng: r[5] }, far: { lat: r[2], lng: r[3] }, len: r[6] }]);
+    let e = ends.find(x => x.id === endId) || [...ends].sort((a, b) => (b.len || 0) - (a.len || 0))[0];
+    if (e) { T = e.T; far = e.far; id = e.id; }
+    else {
+      // no surveyed runway: use the published heading through the airfield's reference point
+      const ident = endId || String(ap.runways?.[0]?.[0] || '09').split('/')[0], h = (parseInt(ident, 10) || 9) * 10 * Math.PI / 180, half = Math.max(250, (ap.runways?.[0]?.[1] || 600) / 2);
+      T = move(ap, h + Math.PI, half); far = move(ap, h, half); id = ident;
+    }
+    const brg = brgOf(T, far), len = Math.hypot((far.lat - T.lat) * M, (far.lng - T.lng) * M * cosL);
+    const pts = kind === 'takeoff' ? [T, far, move(far, brg, 9000)] : kind === 'circuit' ? [T, move(T, brg, Math.min(len, 1000))]
+      : [move(T, brg + Math.PI, kind === 'long' ? 11112 : 3704), T];
+    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id }, aircraft: state.profile.aircraft }, 'fly');
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   function simPage() {
@@ -1603,6 +1626,14 @@
           <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
         </form>
       </section>
+      <section class="tile pr-box" aria-labelledby="pr-h">
+        <div class="pr-head"><div><h2 class="section-h" id="pr-h">Practise at any airfield</h2><p class="hint">Take-offs, circuits and approaches on real runways anywhere in ${esc(state.profile.country || 'your country')}. You get a debrief against checkride standards.</p></div></div>
+        <div class="pr-row">
+          <label class="pr-f"><span>Airfield</span><input type="text" list="pr-afs" data-prap value="${esc(ui.sim.prAp || upper(state.profile.airport).split(/[\s·]/)[0] || '')}" placeholder="Search by code or name" autocomplete="off" spellcheck="false"><datalist id="pr-afs" data-prlist></datalist></label>
+          <label class="pr-f"><span>Runway</span><select data-prrw><option value="">Longest runway</option></select></label>
+        </div>
+        <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap']].map(([k, l, d]) => `<button type="button" class="pr-kind" data-prk="${k}"><b>${l}</b><small>${d}</small></button>`).join('')}</div>
+      </section>
       <section class="ac-pick" aria-labelledby="ac-h"><div class="ac-head"><div><h2 class="section-h" id="ac-h">Aircraft</h2><p class="hint" data-acnote></p></div><button type="button" class="ac-auto-btn" data-acauto aria-pressed="false">${ico('logbook')}Match my logbook</button></div><div class="ac-grid" data-acgrid><p class="hint">Loading aircraft…</p></div></section>
       <p class="footnote" style="margin:10px 2px 18px">A game-like practice toy for fun and route familiarisation. It isn’t an approved training device, and its flight model is simplified.</p>
       ${list.length ? `<h2 class="section-h">Logged flights</h2><div class="sim-grid">${list.slice(0, 24).map(card).join('')}</div>` : `<div class="tile empty center"><h3>Log a flight to fly it again.</h3><p>Flights with a plotted route or a GPS track replay best. A flight from a known airfield gives you a circuit.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
@@ -1619,6 +1650,19 @@
     };
     loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
     const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; ui.sim.wx = v.wx; ui.sim.time = v.time; try { localStorage.setItem('boplo-sim-wx', v.wx); } catch { } };
+    // practice picker: airfields in the pilot's country, runway ends from the surveyed runway data
+    { const cc = countryCodeOf(state.profile), inp = $('[data-prap]'), sel = $('[data-prrw]'), dl = $('[data-prlist]');
+      let afs = [];
+      const fillRw = async () => {
+        const c = upper(inp.value).split(/[\s·]/)[0]; ui.sim.prAp = c; const ap = afs.find(a => a.code === c) || (c ? await anyAirfield(c) : null);
+        sel.innerHTML = '<option value="">Longest runway</option>'; if (!ap) return;
+        const rows = ((await fetch(`/runways/${ap.cc || cc}.json`).then(r => r.ok ? r.json() : {}).catch(() => ({}))).rows || {})[ap.code] || [];
+        const ends = rows.length ? rows.flatMap(r => [[r[0], r[6]], [r[1], r[6]]]) : (ap.runways || []).flatMap(r => String(r[0] || '').split('/').map(x => [x, r[1]]));
+        sel.innerHTML += ends.filter(x => x[0]).map(([id, l]) => `<option value="${esc(id)}" ${ui.sim.prRw === id ? 'selected' : ''}>Runway ${esc(id)}${l ? ` · ${Math.round(l)} m` : ''}</option>`).join('');
+      };
+      if (window.BoploMap && cc) BoploMap.airfields(cc).then(l => { afs = l.map(a => ({ ...a, cc })); dl.innerHTML = afs.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); fillRw(); });
+      inp.onchange = fillRw; sel.onchange = () => { ui.sim.prRw = sel.value; };
+      $$('[data-prk]').forEach(b => b.onclick = () => { const c = upper(inp.value).split(/[\s·]/)[0]; if (!c) { inp.focus(); toast('Pick an airfield first.'); return; } openPractice(c, sel.value, b.dataset.prk); }); }
     $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
     $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
     $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));

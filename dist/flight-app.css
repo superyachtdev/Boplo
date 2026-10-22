@@ -1014,3 +1014,14 @@ details.more .fields{padding:0 16px 16px}
 .ac-card.on .ac-perf span{color:var(--electric);background:rgba(10,98,255,.06);border-color:rgba(10,98,255,.15)}
 @media (max-width:960px){.ac-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ac-txt small{display:none}.ac-txt{padding:10px 12px 12px}.ac-txt b{font-size:14px}}
 .sim-wxsel{width:100%;max-width:340px;padding:10px 12px;border-radius:12px;border:1px solid var(--line,#d9e0ef);background:var(--card,#fff);color:inherit;font:inherit;font-weight:600}
+/* ===== simulator practice at any airfield ===== */
+.pr-box{margin:6px 0 14px;display:grid;gap:14px}
+.pr-head .section-h{margin-bottom:2px}.pr-head .hint{margin:0}
+.pr-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px}
+.pr-f{display:grid;gap:5px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.pr-f input,.pr-f select{height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--hair-l);background:#fff;color:var(--ink);font:inherit;font-weight:600;min-width:0}
+.pr-kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.pr-kind{display:grid;gap:4px;text-align:left;padding:14px;border-radius:16px;background:#fff;border:1px solid var(--hair-l);cursor:pointer;transition:border-color .2s,box-shadow .2s,transform .2s;font:inherit;color:var(--ink)}
+.pr-kind:hover{transform:translateY(-2px);border-color:var(--electric);box-shadow:0 10px 24px rgba(10,98,255,.1)}
+.pr-kind b{font-size:15px;font-weight:650}.pr-kind small{font-size:12.5px;color:var(--ink-3);line-height:1.35}
+@media (max-width:760px){.pr-row{grid-template-columns:1fr}.pr-kinds{grid-template-columns:1fr 1fr}}

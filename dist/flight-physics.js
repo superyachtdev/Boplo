@@ -220,6 +220,23 @@
     if (t.flaps != null) { const want = t.flaps; if (want < c.flaps || ias < (p.vfe || 999)) c.flaps = want; }
   }
 
-  const api = { create, params, DATA, KT, pilot, wrap180 };
+  // power that holds a steady descent at speed V (m/s) on a given path angle with the flaps set, trimmed hands-off.
+  // Found by flying a throwaway copy of the aircraft; used to set up practice approaches already established.
+  function approachPower(id, perf, opts, V, flaps, gammaDeg = 3) {
+    const want = -V * Math.sin(gammaDeg * Math.PI / 180);
+    const fly = thr => {
+      const fm = create(id, perf, { ...opts, groundAt: () => -1e5, surfaceAt: null, parkingAtStart: false }), { s, c } = fm;
+      fm.reset({ alt: 400, airborne: true, speed: V, pitch: -gammaDeg });
+      c.flaps = flaps; c.trim = fm.trimFor(V); c.throttle = thr; s.power = thr;
+      let sum = 0, n = 0; const dt = 1 / 30;
+      for (let i = 0; i < 30 * 90; i++) { c.aileron = Math.max(-1, Math.min(1, -s.bank * .05 - s.w[0] * .3)); fm.step(dt, [0, 0, 0]); if (i > 30 * 20) { sum += s.vs; n++; } }
+      return sum / n;
+    };
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 9; k++) { const m = (lo + hi) / 2; if (fly(m) < want) lo = m; else hi = m; }
+    return (lo + hi) / 2;
+  }
+
+  const api = { create, params, DATA, KT, pilot, wrap180, approachPower };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BoploPhysics = api;
 })(typeof window !== 'undefined' ? window : globalThis);
