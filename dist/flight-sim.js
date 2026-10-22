@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=5'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=6'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -606,6 +606,10 @@ window.BoploSim = (() => {
       const hourFor = elev => { const c = (Math.sin(elev * D2R) - Math.sin(lat) * Math.sin(dec)) / (Math.cos(lat) * Math.cos(dec)); return 12 + Math.acos(clamp(c, -1, 1)) * R2D / 15; };
       const solar = TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6;
       d.setUTCHours(0, 0, 0, 0); viewer.clock.currentTime = C.JulianDate.fromDate(new Date(d.getTime() + (solar - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false; }
+    // the sky to match: a dark, starry sky at night and a warmer, lower-contrast one at golden hour
+    try { const sa = scene.skyAtmosphere; if (sa && TOD === 'night') { sa.brightnessShift = -.86; sa.saturationShift = -.35; sa.hueShift = .04; scene.backgroundColor = C.Color.fromCssColorString('#04060d'); if (C.SkyBox.createEarthSkyBox) scene.skyBox = C.SkyBox.createEarthSkyBox(); }
+      else if (sa && TOD === 'golden') { sa.brightnessShift = -.18; sa.saturationShift = .18; sa.hueShift = -.035; } } catch (e) { console.warn('sky', e); }
+    dlg.dataset.tod = TOD;
     const LIGHT = TOD === 'night' ? [.13, .15, .24] : TOD === 'golden' ? [1, .8, .62] : [1, 1, 1];
     if (scene.shadowMap) { scene.shadowMap.size = 2048; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = true; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
@@ -872,12 +876,17 @@ window.BoploSim = (() => {
       const camName = CAMS[camI][0];
       if (cockpit() || camName === 'Wing') {
         // attitude-locked cameras: the pilot's eye in the left seat, or on the left wing looking forward along the fuselage
-        const e = camName === 'Wing' ? [AC.tips.left[0] * .82, AC.tips.left[1] + .55, AC.tips.left[2] - 1.2] : (AC.eye || [.25, .4, .4]), F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
+        const e = camName === 'Wing' ? [AC.tips.left[0] * 1.05, AC.tips.left[1] + .9, AC.tips.left[2] + 1.6] : (AC.eye || [.25, .4, .4]), F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
         const px = st.x + F[0] * bz + U[0] * by + R[0] * bx, pz = st.z + F[2] * bz + U[2] * by + R[2] * bx, py = st.alt + F[1] * bz + U[1] * by + R[1] * bx;
         const fov = C.Math.toRadians(camName === 'Wing' ? 62 : 72 / Math.max(.6, Math.min(orb.zoom, 1.6)));
         if (Math.abs(camera.frustum.fov - fov) > 1e-3) { camera.frustum.fov = fov; camera.frustum.near = .1; }
-        const yaw = orb.yaw + (camName === 'Wing' ? -18 : 0), pit = orb.pitch * -1 + (camName === 'Wing' ? -6 : -4);
-        camera.setView({ destination: LLH(px, pz, py), orientation: { heading: (st.hdg + yaw * Math.cos(st.bank * D2R)) * D2R, pitch: C.Math.toRadians(st.pitch + pit), roll: st.bank * D2R * Math.cos(yaw * D2R) } });
+        const yaw = orb.yaw + (camName === 'Wing' ? 128 : 0), pit = orb.pitch * -1 + (camName === 'Wing' ? -9 : -4);
+        // look direction built from the aircraft's body axes, so head-turns stay correct in any attitude
+        const cy = Math.cos(yaw * D2R), sy = Math.sin(yaw * D2R), cp = Math.cos(pit * D2R), sp = Math.sin(pit * D2R);
+        const dir = [0, 1, 2].map(i => F[i] * cy * cp + R[i] * sy * cp + U[i] * sp), rgt = [0, 1, 2].map(i => R[i] * cy - F[i] * sy);
+        const upv = [dir[1] * rgt[2] - dir[2] * rgt[1], dir[2] * rgt[0] - dir[0] * rgt[2], dir[0] * rgt[1] - dir[1] * rgt[0]]; // basis is east, up, north (left-handed), as in the flight model
+        const dest = LLH(px, pz, py), enu = C.Transforms.eastNorthUpToFixedFrame(dest), toW = v => C.Cartesian3.normalize(C.Matrix4.multiplyByPointAsVector(enu, new C.Cartesian3(v[0], v[2], v[1]), new C.Cartesian3()), new C.Cartesian3());
+        camera.setView({ destination: dest, orientation: { direction: toW(dir), up: toW(upv) } });
       } else if (camName === 'Tower') {
         // a fixed camera beside the nearest airport (or a fly-by point ahead on the route) that tracks and zooms onto the aircraft
         if (!towerAt || Math.hypot(st.x - towerAt[0], st.z - towerAt[1]) > 7000) {

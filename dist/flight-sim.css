@@ -214,3 +214,4 @@
 .sim-inv{display:flex;gap:4px;align-items:center;font-size:11.5px;color:rgba(222,233,255,.7)}
 .sim-set-axes i{grid-column:1/-1;position:relative;height:4px;border-radius:3px;background:rgba(255,255,255,.1)}
 .sim-set-axes i b{position:absolute;top:-3px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#4F8BFF}
+#sim[data-tod=night]{background:linear-gradient(#04060d,#0b1222 60%,#06080c)}#sim[data-tod=golden]{background:linear-gradient(#6f86b8,#f2c08a 60%,#7a6a50)}
