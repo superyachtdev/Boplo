@@ -104,6 +104,7 @@
       // roll: aileron rate with damping, dihedral effect, stall wing drop
       let rudder = c.rudder;
       if (c.autoRudder && !s.ground) rudder = clamp(rudder + beta * 5 + c.aileron * .25 * clamp(CL, 0, 1.6) / 1.6, -1, 1);
+      s.rud = rudder;
       if (stalled && !s.ground) { s.stallT += dt; if (!s.wingDrop) s.wingDrop = (Math.random() < .5 ? -1 : 1); } else { s.stallT = 0; s.wingDrop = 0; }
       let pd = 4.6 * c.aileron * qprop - 4.2 * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0);
       // yaw: rudder, weathervane stability, adverse yaw, prop effects (left-turning at high power and low speed)

@@ -1535,10 +1535,10 @@
   }
 
   /* ================= simulator ================= */
-  ui.sim = ui.sim || { wind: 'calm', start: 'ground', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
+  ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
-  const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=2', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=1', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=9', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=2', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=10', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -1552,8 +1552,22 @@
       if (!points.length) { toast('This flight has no route or known airfield to fly from.'); return; }
       const near = (a, pt) => a && pt && Math.abs(a.lat - pt.lat) < .03 && Math.abs(a.lng - pt.lng) < .04;
       const wps = isPlan ? src.points.filter(x => x.code).map(x => ({ code: x.code, lat: +x.lat, lng: +x.lng })) : [dep, arr].filter(Boolean).filter((a, i, l) => l.findIndex(b => b.code === a.code) === i).map(a => ({ code: a.code, lat: a.lat, lng: a.lng }));
-      let wind = null;
-      if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
+      let wind = null, weather = null;
+      const WXP = { clear: { visM: 40000 }, fair: { clouds: [{ cover: 'FEW', base: 3500 }], visM: 30000, turb: .12 }, scattered: { clouds: [{ cover: 'SCT', base: 2800 }], visM: 20000, turb: .25 }, broken: { clouds: [{ cover: 'BKN', base: 2200 }, { cover: 'SCT', base: 5500 }], visM: 14000, turb: .3 }, overcast: { clouds: [{ cover: 'OVC', base: 1600 }], visM: 9000, turb: .2 }, hazy: { clouds: [{ cover: 'FEW', base: 4000 }], visM: 4500, turb: .05 }, gusty: { clouds: [{ cover: 'SCT', base: 3000 }], visM: 25000, turb: .45, windRel: { off: 50, spd: 16, gust: 26 } } };
+      if (ui.sim.wx === 'live') {
+        try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0];
+          if (s) {
+            let clouds = (s.clouds || []).filter(c => c && c.cover && Number.isFinite(+c.base)).map(c => ({ cover: c.cover, base: +c.base }));
+            if (!clouds.length && s.raw) clouds = [...s.raw.matchAll(/\b(FEW|SCT|BKN|OVC|VV)(\d{3})/g)].map(m => ({ cover: m[1], base: +m[2] * 100 }));
+            const vs = String(s.visib ?? ''), sm = vs.includes('+') ? 10 : parseFloat(vs), raw4 = s.raw?.match(/\s(\d{4})\s/);
+            const visM = Number.isFinite(sm) ? (sm >= 10 ? 16000 : sm * 1609) : raw4 ? (+raw4[1] >= 9999 ? 16000 : +raw4[1]) : 16000;
+            weather = { clouds, visM, gust: +s.wgst || 0, from: s.id };
+            if (Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id };
+          } } catch { }
+        if (!weather) toast('Live weather wasn’t available, so it’s clear skies.');
+      } else weather = WXP[ui.sim.wx] || null;
+      if (wind) { } // live weather already set the wind
+      else if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
       else if (ui.sim.wind === 'live') {
         try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0]; if (s && Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id }; } catch { }
       }
@@ -1563,7 +1577,7 @@
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
       Sim.open({
         googleKey,
-        id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind,
+        id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
         runwayHdg: rwyHdg(dep), land: true, aircraftId: simAircraft(src),
@@ -1584,6 +1598,8 @@
         <div><span class="kicker">Mini flight simulator</span><h2 class="display">Your routes, flown again.</h2><p>Every route you log or plan can be replayed or flown: take off, follow the gates, and land. Works with a keyboard, a gamepad, or your phone’s touch and tilt.</p></div>
         <form class="sim-opts" data-simopts>
           <fieldset><legend>Start</legend><div class="segmented">${[['ground', 'On the runway'], ['air', 'In the air']].map(([v, l]) => `<label><input type="radio" name="start" value="${v}" ${ui.sim.start === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Weather</legend><select name="wx" class="sim-wxsel">${[['live', 'Live at departure (METAR)'], ['clear', 'Clear skies'], ['fair', 'Fair, a few cumulus'], ['scattered', 'Scattered cloud, light bumps'], ['broken', 'Broken cloud'], ['overcast', 'Low overcast'], ['hazy', 'Hazy, 4 km visibility'], ['gusty', 'Gusty crosswind (16 G26 kt)']].map(([v, l]) => `<option value="${v}" ${ui.sim.wx === v ? 'selected' : ''}>${l}</option>`).join('')}</select></fieldset>
+          <fieldset><legend>Time of day</legend><div class="segmented">${[['day', 'Day'], ['golden', 'Golden hour'], ['night', 'Night']].map(([v, l]) => `<label><input type="radio" name="time" value="${v}" ${(ui.sim.time || 'day') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
           <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
         </form>
       </section>
@@ -1602,7 +1618,7 @@
       const note = $('[data-acnote]'); if (note) note.textContent = cur === 'auto' ? 'Each flight flies in the aircraft you logged for it.' + (auto ? '' : ' Unknown types use the Cessna 172.') : `Every flight flies in the ${A.byId(cur).name}.`;
     };
     loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
-    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; };
+    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; ui.sim.wx = v.wx; ui.sim.time = v.time; try { localStorage.setItem('boplo-sim-wx', v.wx); } catch { } };
     $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
     $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
     $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));

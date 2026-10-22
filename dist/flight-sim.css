@@ -200,3 +200,17 @@
 .sim.is-touch.six-on .sim-six{top:calc(env(safe-area-inset-top) + 60px);bottom:auto;height:min(44vw,240px)}
 @media (max-height:520px){.sim-touch .sim-tilt{left:auto;right:calc(env(safe-area-inset-right) + 92px);bottom:calc(env(safe-area-inset-bottom) + 18px)}.sim-tbtns{grid-template-columns:repeat(3,auto)}}
 @media (max-width:760px){.sim-apbar{top:calc(env(safe-area-inset-top) + 56px);flex-wrap:wrap;justify-content:center;width:calc(100vw - 20px)}.sim-apv b{min-width:50px;font-size:12px}}
+.sim-set{position:absolute;right:14px;top:70px;z-index:30;width:min(380px,calc(100% - 28px));max-height:calc(100% - 90px);overflow:auto;padding:14px 16px 16px;border-radius:18px;background:rgba(8,14,32,.92);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12);color:#E6EEFF;display:grid;gap:11px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.sim-set[hidden]{display:none}
+.sim-set-h{display:flex;justify-content:space-between;align-items:center}.sim-set-h b{font-size:16px}
+.sim-set-r{display:grid;gap:5px;font-size:13.5px}.sim-set-r small,.sim-set small{display:block;color:rgba(222,233,255,.55);font-size:11.5px}
+.sim-set input[type=range]{width:100%;accent-color:#0A62FF}
+.sim-set .sim-check{align-items:flex-start;font-size:13px}.sim-set .sim-check input{flex:none;margin-top:1px}
+.sim-set-pad{display:grid;gap:7px;padding-top:9px;border-top:1px solid rgba(255,255,255,.1);font-size:13.5px}
+.sim-set-axes{display:grid;gap:8px}
+.sim-set-axes>label{display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center;font-size:12.5px}
+.sim-set-axes select{background:#121B36;color:#E6EEFF;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:4px 6px;font:inherit}
+.sim-mini{background:rgba(255,255,255,.08);color:#E6EEFF;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:4px 8px;font:inherit;font-size:12px;cursor:pointer}
+.sim-inv{display:flex;gap:4px;align-items:center;font-size:11.5px;color:rgba(222,233,255,.7)}
+.sim-set-axes i{grid-column:1/-1;position:relative;height:4px;border-radius:3px;background:rgba(255,255,255,.1)}
+.sim-set-axes i b{position:absolute;top:-3px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#4F8BFF}

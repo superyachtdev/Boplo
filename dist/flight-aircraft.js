@@ -73,7 +73,7 @@ window.BoploAircraft = (() => {
 
   function build(id) {
     const T = byId(id);
-    const parts = { paint: [], matte: [], glass: [], blades: [], disc: [] };
+    const parts = { paint: [], matte: [], glass: [], blades: [], disc: [], ailL: [], ailR: [], flapL: [], flapR: [], elev: [], rud: [] };
     const [CBASE, CACC, CTRIM] = T.livery.map(hex), CTIP = T.tips === false ? hex(T.livery[0]) : CACC, GREY = [.42, .45, .5, 1], DARK = [.07, .075, .085, 1], RUBBER = [.035, .035, .04, 1], GLASS = [.13, .19, .27, 1];
     const mesh = b => { const m = { pos: [], col: [], idx: [] }; parts[b].push(m); return m; };
     function loft(b, rings, colors, { closed = true, capStart = false, capEnd = false } = {}) {
@@ -122,20 +122,36 @@ window.BoploAircraft = (() => {
 
     // pilot's eye: left seat, a little below the top of the cabin, about mid-canopy
     const eyeS = secAt(cv.t[0] + (cv.t[1] - cv.t[0]) * .5), eye = [T.W * .22, eyeS.cy + eyeS.h * (cv.type === 'bubble' ? .32 : .22), eyeS.z];
-    // ---- wing ----
-    const WG = T.wing, wf = foil(.15, .025), rootT = (FU.noseZ - WG.le) / T.len, rs = secAt(rootT);
+    // ---- wing, with separate flaps and ailerons that the simulator can move ----
+    const WG = T.wing, rootT = (FU.noseZ - WG.le) / T.len, rs = secAt(rootT);
     const rootY = WG.pos === 'high' ? rs.cy + rs.h / 2 - .1 : rs.cy - rs.h / 2 + .14;
     const tipX = WG.secs[WG.secs.length - 1][0];
     const yAt = x => { if (WG.crank && x > WG.crank.x) return rootY + WG.crank.x * Math.tan(WG.dih * D2R) + (x - WG.crank.x) * Math.tan(WG.crank.dih * D2R); return rootY + x * Math.tan(WG.dih * D2R); };
     const secAtX = x => { const S = WG.secs; let i = 0; while (i < S.length - 2 && S[i + 1][0] < x) i++; const [x0, s0, c0] = S[i], [x1, s1, c1] = S[i + 1], k = (x - x0) / ((x1 - x0) || 1); return [WG.le - (s0 + (s1 - s0) * k), c0 + (c1 - c0) * k]; };
-    const xs = [...new Set([0, ...WG.secs.map(s => s[0]), ...(WG.crank ? [WG.crank.x] : []), tipX * .25, tipX * .5, tipX * .75, tipX - .42, tipX - .4, tipX - .05])].filter(x => x <= tipX).sort((a, b) => a - b);
+    // aerofoil as [s, v, upper?] with a helper for the surface at any chord station
+    const thick = (t, s) => 5 * t * (.2969 * Math.sqrt(s) - .126 * s - .3516 * s * s + .2843 * s ** 3 - .1036 * s ** 4), camb = (m, s) => m * (s < .4 ? (2 * .4 * s - s * s) / .16 : (1 - .8 + 2 * .4 * s - s * s) / .36);
+    const foilPts = (t, m, n = 12) => { const up = [], lo = []; for (let i = 0; i <= n; i++) { const s = (1 - Math.cos(i / n * Math.PI)) / 2; up.push([s, camb(m, s) + thick(t, s), 1]); lo.push([s, camb(m, s) - thick(t, s), 0]); } return [...up.reverse(), ...lo.slice(1, -1)]; };
+    const cutFoil = (pts, t, m, cut) => cut == null ? pts : pts.map(([s, v, u]) => s > cut ? [cut, camb(m, cut) + (u ? 1 : -1) * thick(t, cut), u] : [s, v, u]);
+    const wedge = (t, m, cut) => { const mid = cut + (1 - cut) * .5; return [[cut, camb(m, cut) + thick(t, cut)], [mid, camb(m, mid) + thick(t, mid)], [1, camb(m, 1) + .0015], [1, camb(m, 1) - .0015], [mid, camb(m, mid) - thick(t, mid)], [cut, camb(m, cut) - thick(t, cut)]]; };
+    const WT = .15, WC = .025, wf = foilPts(WT, WC);
+    const noFlaps = T.id === 'cub', x0 = rs.w * .5;
+    const REG = [...(noFlaps ? [] : [['flap', x0, tipX * .55, .74]]), ['ail', tipX * (noFlaps ? .5 : .57), tipX * .92, .75]];
+    const regAt = x => REG.find(([, a, b]) => x > a + 1e-4 && x < b - 1e-4);
+    const xs = [...new Set([0, ...WG.secs.map(s => s[0]), ...(WG.crank ? [WG.crank.x] : []), tipX * .25, tipX * .5, tipX * .75, tipX - .42, tipX - .4, tipX - .05, ...REG.flatMap(([, a, b]) => [a - .004, a + .004, b - .004, b + .004])])].filter(x => x >= 0 && x <= tipX).sort((a, b) => a - b);
     const tipCol = x => x >= tipX - .41 && T.tips !== false ? CACC : CBASE;
+    const at3 = (side, x, s, v) => { const [zLE, c] = secAtX(x), y = yAt(x); return [side * Math.max(x, rs.w * .3), y + v * c, zLE - s * c]; };
+    const surfaces = {};
     for (const side of [1, -1]) {
-      const rings = xs.map(x => { const [zLE, c] = secAtX(x), y = yAt(x); return wf.map(([s, v]) => [side * Math.max(x, rs.w * .3), y + v * c, zLE - s * c]); });
+      const rings = xs.map(x => { const rg = regAt(x); return cutFoil(wf, WT, WC, rg ? rg[3] : null).map(([s, v]) => at3(side, x, s, v)); });
       loft('paint', side > 0 ? rings : rings.map(r => r.slice().reverse()), xs.map(tipCol), { capEnd: true });
-      // flap / aileron hinge line
-      const hinge = xs.filter(x => x > rs.w * .5).map(x => { const [zLE, c] = secAtX(x), y = yAt(x) + c * .045; return [[side * x, y, zLE - c * .72 + .015], [side * x, y + .003, zLE - c * .72 - .015]]; });
-      if (hinge.length > 1) loft('matte', hinge, GREY, { closed: false });
+      for (const [kind, a, b, cut] of REG) {
+        const name = kind + (side > 0 ? 'L' : 'R'), sx = [a + .006, (a + b) / 2, b - .006];
+        if (b - a > 1.2) sx.splice(1, 1, a + (b - a) * .33, a + (b - a) * .66);
+        const wr = sx.map(x => wedge(WT, WC, cut).map(([s, v]) => at3(side, x, s, v)));
+        loft(name, side > 0 ? wr : wr.map(r => r.slice().reverse()), sx.map(tipCol), { capStart: true, capEnd: true });
+        const h0 = at3(side, a, cut, camb(WC, cut)), h1 = at3(side, b, cut, camb(WC, cut));
+        surfaces[name] = { a: side > 0 ? h0 : h1, b: side > 0 ? h1 : h0, max: kind === 'ail' ? 18 : 40, kind };
+      }
       if (WG.struts) {
         const sx = tipX * .45, [zLE, c] = secAtX(sx), ws = yAt(sx) - c * .06, fs = secAt(rootT + .02);
         tube([side * sx, ws, zLE - c * .3], [side * fs.w * .45, fs.cy - fs.h * .35, zLE - c * .3], .035, 8, CBASE, 'paint');
@@ -144,14 +160,25 @@ window.BoploAircraft = (() => {
     }
     const tipZ = secAtX(tipX), tipY = yAt(tipX);
 
-    // ---- tail ----
-    const TL = T.tail, tf = foil(.1, 0), tailS = secAt(.94), finRootZ = FU.tailZ + TL.fin[0][1] + .05, finTop = TL.fin[1][0] || 1;
-    const finH = TL.fin[1][0], finLE = h => finRootZ - h * TL.finSweep / finH * .9;
-    const fin = [0, .3, .59, .6, .85, 1].map(k => { const h = finH * k, c = TL.fin[0][1] + (TL.fin[1][1] - TL.fin[0][1]) * k; return tf.map(([s, v]) => [v * c, tailS.cy + tailS.h * .3 + h, finLE(h) - s * c]); });
-    loft('paint', fin, [CBASE, CBASE, CBASE, CTIP, CTIP, CTIP], { capEnd: true });
+    // ---- tail: rudder, and an elevator or a one-piece stabilator ----
+    const TL = T.tail, TT = .1, tf = foilPts(TT, 0, 10), tailS = secAt(.94), finRootZ = FU.tailZ + TL.fin[0][1] + .05;
+    const finH = TL.fin[1][0], finLE = h => finRootZ - h * TL.finSweep / finH * .9, RC = .62;
+    const finK = [0, .3, .59, .6, .85, 1], finC = k => TL.fin[0][1] + (TL.fin[1][1] - TL.fin[0][1]) * k, finY = k => tailS.cy + tailS.h * .3 + finH * k;
+    const finPt = (k, s, v) => [v * finC(k), finY(k), finLE(finH * k) - s * finC(k)];
+    loft('paint', finK.map(k => cutFoil(tf, TT, 0, RC).map(([s, v]) => finPt(k, s, v))), [CBASE, CBASE, CBASE, CTIP, CTIP, CTIP], { capEnd: true });
+    const rk = [.06, .3, .59, .6, .85, .98];
+    loft('rud', rk.map(k => wedge(TT, 0, RC).map(([s, v]) => finPt(k, s, v))), [CBASE, CBASE, CBASE, CTIP, CTIP, CTIP], { capStart: true, capEnd: true });
+    surfaces.rud = { a: finPt(rk[0], RC, 0), b: finPt(rk[rk.length - 1], RC, 0), max: 25, kind: 'rud' };
     const stabY = TL.type === 'T' ? tailS.cy + tailS.h * .3 + finH - .06 : tailS.cy + (T.wing.pos === 'low' ? tailS.h * .05 : 0);
-    const stabLE = TL.type === 'T' ? finLE(finH) - .05 : FU.tailZ + TL.stab[0][1] + .15;
-    for (const side of [1, -1]) { const span = TL.stab[1][0], r = [0, .5, .72, .74, 1].map(k => { const c = TL.stab[0][1] + (TL.stab[1][1] - TL.stab[0][1]) * k; return tf.map(([s, v]) => [side * Math.max(span * k, .05), stabY + v * c, stabLE - k * .12 - s * c]); }); loft('paint', side > 0 ? r : r.map(q => q.slice().reverse()), [CBASE, CBASE, CBASE, CTIP, CTIP], { capEnd: true }); }
+    const stabLE = TL.type === 'T' ? finLE(finH) - .05 : FU.tailZ + TL.stab[0][1] + .15, span = TL.stab[1][0];
+    const stK = [0, .5, .72, .74, 1], stC = k => TL.stab[0][1] + (TL.stab[1][1] - TL.stab[0][1]) * k;
+    const stPt = (side, k, s, v) => [side * Math.max(span * k, .05), stabY + v * stC(k), stabLE - k * .12 - s * stC(k)], EC = .64;
+    for (const side of [1, -1]) {
+      const main = stK.map(k => cutFoil(tf, TT, 0, TL.stabilator ? null : EC).map(([s, v]) => stPt(side, k, s, v)));
+      loft(TL.stabilator ? 'elev' : 'paint', side > 0 ? main : main.map(q => q.slice().reverse()), [CBASE, CBASE, CBASE, CTIP, CTIP], { capEnd: true });
+      if (!TL.stabilator) { const el = stK.map(k => wedge(TT, 0, EC).map(([s, v]) => stPt(side, k, s, v))); loft('elev', side > 0 ? el : el.map(q => q.slice().reverse()), [CBASE, CBASE, CBASE, CTIP, CTIP], { capEnd: true }); }
+    }
+    { const hc = TL.stabilator ? .25 : EC; surfaces.elev = { a: stPt(-1, 1, hc, 0), b: stPt(1, 1, hc, 0), max: TL.stabilator ? 14 : 24, kind: TL.stabilator ? 'stabilator' : 'elev' }; }
 
     // ---- landing gear ----
     const G = T.gear, belly = secAt(rootT).cy - secAt(rootT).h / 2, wheelY = belly - G.legLen;
@@ -188,8 +215,9 @@ window.BoploAircraft = (() => {
       ['matte', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .2, roughnessFactor: .7 }, doubleSided: true }],
       ['glass', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .85, roughnessFactor: .06 }, doubleSided: true }],
       ['blades', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .3, roughnessFactor: .5 }, doubleSided: true }],
-      ['disc', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .14], metallicFactor: 0, roughnessFactor: 1 }, alphaMode: 'BLEND', doubleSided: true }]
-    ].map(([k, mat]) => ({ name: k, geo: merge(parts[k]), mat }));
+      ['disc', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .14], metallicFactor: 0, roughnessFactor: 1 }, alphaMode: 'BLEND', doubleSided: true }],
+      ...['ailL', 'ailR', 'flapL', 'flapR', 'elev', 'rud'].map(k => [k, { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .05, roughnessFactor: .34 }, doubleSided: true }])
+    ].filter(([k]) => parts[k].length).map(([k, mat]) => ({ name: k, geo: merge(parts[k]), mat }));
     const chunks = [], views = [], accessors = []; let off = 0;
     const addView = (arr, target) => { const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength), pad = (4 - bytes.length % 4) % 4; views.push({ buffer: 0, byteOffset: off, byteLength: bytes.length, target }); chunks.push(bytes); if (pad) chunks.push(new Uint8Array(pad)); off += bytes.length + pad; return views.length - 1; };
     const meshes = prims.map((p, pi) => {
@@ -199,8 +227,8 @@ window.BoploAircraft = (() => {
       const aP = acc(addView(pos, 34962), 'VEC3', 5126, pos.length / 3, { min, max }), aN = acc(addView(nor, 34962), 'VEC3', 5126, nor.length / 3), aC = acc(addView(col, 34962), 'VEC4', 5126, col.length / 4), aI = acc(addView(idx, 34963), 'SCALAR', 5125, idx.length);
       return { name: p.name, primitives: [{ attributes: { POSITION: aP, NORMAL: aN, COLOR_0: aC }, indices: aI, material: pi }] };
     });
-    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, scene: 0, scenes: [{ nodes: [0, 1, 2, 3, 4] }],
-      nodes: [{ mesh: 0, name: 'paint' }, { mesh: 1, name: 'matte' }, { mesh: 2, name: 'glass' }, { mesh: 3, name: 'blades', translation: hub }, { mesh: 4, name: 'disc', translation: hub }],
+    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, scene: 0, scenes: [{ nodes: prims.map((_, i) => i) }],
+      nodes: prims.map((p, i) => ({ mesh: i, name: p.name, ...(p.name === 'blades' || p.name === 'disc' ? { translation: hub } : {}) })),
       meshes, materials: prims.map(p => ({ name: p.name, ...p.mat })), accessors, bufferViews: views, buffers: [{ byteLength: off }] };
     let jsonBytes = new TextEncoder().encode(JSON.stringify(json)); const jpad = (4 - jsonBytes.length % 4) % 4;
     if (jpad) { const t = new Uint8Array(jsonBytes.length + jpad); t.set(jsonBytes); t.fill(32, jsonBytes.length); jsonBytes = t; }
@@ -209,7 +237,7 @@ window.BoploAircraft = (() => {
     dv.setUint32(12, jsonBytes.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jsonBytes, 20);
     let p = 20 + jsonBytes.length; dv.setUint32(p, off, true); dv.setUint32(p + 4, 0x004E4942, true); p += 8;
     for (const c of chunks) out.set(c, p), p += c.length;
-    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, eye, tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T };
+    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, eye, surfaces: Object.fromEntries(Object.entries(surfaces).map(([k, v]) => { let { a, b } = v; const flip = v.kind === 'rud' ? b[1] < a[1] : b[0] < a[0]; if (flip) [a, b] = [b, a]; const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...d); return [k, { ...v, pivot: a, axis: d.map(x => x / l) }]; })), tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T };
   }
 
   // flight-model numbers from the book figures: thrust and drag that give the type's top speed and climb rate

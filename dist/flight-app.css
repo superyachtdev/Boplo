@@ -1013,3 +1013,4 @@ details.more .fields{padding:0 16px 16px}
 .ac-perf span{font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--well);border:1px solid var(--hair-l);border-radius:999px;padding:2px 8px;font-variant-numeric:tabular-nums}
 .ac-card.on .ac-perf span{color:var(--electric);background:rgba(10,98,255,.06);border-color:rgba(10,98,255,.15)}
 @media (max-width:960px){.ac-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ac-txt small{display:none}.ac-txt{padding:10px 12px 12px}.ac-txt b{font-size:14px}}
+.sim-wxsel{width:100%;max-width:340px;padding:10px 12px;border-radius:12px;border:1px solid var(--line,#d9e0ef);background:var(--card,#fff);color:inherit;font:inherit;font-weight:600}

@@ -132,6 +132,14 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Controls: W/S or arrows (elevator), A/D or arrows (ailerons), Q/E (rudder), R/F (throttle), V and Shift+V or ] [ (flaps), T/G (trim), B (brakes), Shift+B (parking brake), H (carb heat), U (auto-rudder), I (panel), C (camera), J (gates). Gamepad and touch (stick, rudder slider, flap, trim and brake buttons) are covered too.
 - Six-pack canvas (`drawSixPack`): ASI with the type's arcs (Vso–Vfe white, Vs–Vno green, Vno–Vne yellow, Vne red), AI, altimeter, turn coordinator with slip ball, HSI with heading bug, route course and deviation, VSI, plus an engine and systems column. Cockpit camera uses the eye point from `BoploAircraft.build().eye`.
 
+## Simulator graphics, weather and control settings (2026-10-22, Claude)
+- Aircraft GLBs (flight-aircraft.js) have separate ailL/ailR/flapL/flapR/elev/rud nodes with pivot/axis metadata; flight-sim.js placeAircraft rotates them from the control inputs (rate-limited). Beacon, nav, strobe and landing lights (L).
+- Runway lighting from buildRunwayLights(): edge lights, threshold/end lights, approach lights with a sequenced rabbit, and a 4-box PAPI (2.5–3.5°) coloured per frame from the eye angle.
+- O.time ('day' | 'golden' | 'night') tints the 3D tiles (customShader u_light) and scales lights. O.weather {clouds:[{cover,base ft AGL}], visM, gust, turb, windRel:{off,spd,gust}} drives fog, a CloudCollection ring around the aircraft, gusts and turbulence (windAt). The app's sim page has Weather (presets or Live METAR) and Time of day options.
+- Cameras: Chase, Cockpit, Wing, Tower (auto-placed beside the nearest runway, zooms on the aircraft), Wide, High. Drag to orbit/look, wheel or pinch to zoom, double-click resets.
+- Controls panel (K): sensitivity curve (expo), key rate, spring-to-centre, invert, auto-rudder, mouse yoke (Y), and joystick/yoke axis mapping with Detect, reverse and a throttle-lever axis. Saved in localStorage 'boplo-sim-ctl' style store key 'ctl'.
+- Takeoff "launch" fix: runways and the datum are never shifted while the aircraft is on them; far runways are resampled lazily when within 9 km.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

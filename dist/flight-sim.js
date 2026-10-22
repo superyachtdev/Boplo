@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=4'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=5'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -419,12 +419,26 @@ window.BoploSim = (() => {
           <button type="button" class="sim-b" data-sixb aria-pressed="false" title="Instrument panel (I)"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><span>Panel</span></button>
           <button type="button" class="sim-b" data-ap aria-pressed="false" title="Autopilot (P)"><span>AP</span></button>
           <button type="button" class="sim-b" data-gates aria-pressed="false" title="Route gates (G)"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1.5"/><rect x="9" y="9.5" width="6" height="5" rx="1"/></svg></button>
+          <button type="button" class="sim-b" data-setb aria-label="Control settings" title="Controls (K)"><svg viewBox="0 0 24 24"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
           <button type="button" class="sim-b" data-mute aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9.5h4L13 5v14l-5-4.5H4z"/><path data-wave d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
           <button type="button" class="sim-b" data-pause aria-label="Pause" title="Pause (Space)"><svg viewBox="0 0 24 24"><path data-pp d="M8 5v14M16 5v14"/></svg></button>
           <button type="button" class="sim-b sim-x" data-exit aria-label="Leave the simulator" title="Leave (Esc)"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
       </header>
       <div class="sim-warn" data-warn role="status" aria-live="assertive"></div>
+      <div class="sim-set" data-set hidden role="dialog" aria-label="Control settings">
+        <div class="sim-set-h"><b>Controls</b><button type="button" class="sim-b" data-setx aria-label="Close"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+        <label class="sim-set-r"><span>Sensitivity curve <small>more curve = finer control near centre</small></span><input type="range" min="0" max="85" data-cs="expo"></label>
+        <label class="sim-set-r"><span>Pitch and roll rate <small>how fast the keys move the controls</small></span><input type="range" min="30" max="200" data-cs="keyRate"></label>
+        <label class="sim-check"><input type="checkbox" data-cs="invert"> Invert pitch (push to climb)</label>
+        <label class="sim-check"><input type="checkbox" data-cs="autoRudder"> Auto-rudder (coordinates turns and keeps you straight on the runway)</label>
+        <label class="sim-check"><input type="checkbox" data-cs="centre"> Keys spring back to centre when released</label>
+        <label class="sim-check"><input type="checkbox" data-cs="mouse"> Mouse yoke (move the mouse to fly; Shift-drag or right-drag to look around) <small>Y</small></label>
+        <div class="sim-set-pad" data-padset>
+          <b>Joystick, yoke or gamepad</b> <small data-padname>Move a control or press a button to wake it up.</small>
+          <div class="sim-set-axes">${[['roll', 'Roll (ailerons)'], ['pitch', 'Pitch (elevator)'], ['yaw', 'Rudder'], ['thr', 'Throttle']].map(([k, l]) => `<label><span>${l}</span><select data-axis="${k}"></select><button type="button" class="sim-mini" data-detect="${k}">Detect</button><label class="sim-inv"><input type="checkbox" data-axinv="${k}"> Rev</label><i data-axbar="${k}"><b></b></i></label>`).join('')}</div>
+        </div>
+      </div>
       <div class="sim-panel" data-panel>
         <div class="sim-g"><span>Airspeed</span><b data-ias>0</b><small>kt</small></div>
         <div class="sim-adi" aria-hidden="true"><svg viewBox="-50 -50 100 100"><defs><clipPath id="adiclip"><circle r="46"/></clipPath></defs>
@@ -586,7 +600,13 @@ window.BoploSim = (() => {
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
     // a fixed mid-morning sun at the departure airfield, for good shadows and colour
-    { const d = new Date(); d.setUTCHours(0, 0, 0, 0); viewer.clock.currentTime = C.JulianDate.fromDate(new Date(d.getTime() + (10.6 - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false; }
+    // time of day: local solar time for a target sun elevation, from the date and latitude
+    const TOD = O.time || 'day';
+    { const d = new Date(), N = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5), dec = 23.44 * Math.sin(2 * Math.PI * (284 + N) / 365) * D2R, lat = startLL[1] * D2R;
+      const hourFor = elev => { const c = (Math.sin(elev * D2R) - Math.sin(lat) * Math.sin(dec)) / (Math.cos(lat) * Math.cos(dec)); return 12 + Math.acos(clamp(c, -1, 1)) * R2D / 15; };
+      const solar = TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6;
+      d.setUTCHours(0, 0, 0, 0); viewer.clock.currentTime = C.JulianDate.fromDate(new Date(d.getTime() + (solar - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false; }
+    const LIGHT = TOD === 'night' ? [.13, .15, .24] : TOD === 'golden' ? [1, .8, .62] : [1, 1, 1];
     if (scene.shadowMap) { scene.shadowMap.size = 2048; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = true; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
@@ -611,20 +631,58 @@ window.BoploSim = (() => {
       const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = coarse ? 3 : 2; g.tileCacheSize = 400; g.preloadSiblings = true; g.enableLighting = false;
     }
     root.classList.toggle('is-google', scenery === 'google');
+    // light level: tint the photo scenery (it has its own baked lighting) and the imagery for dusk and night
+    if (TOD !== 'day') {
+      try { if (tileset) tileset.customShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: new C.Cartesian3(...LIGHT) } }, fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { material.diffuse *= u_light; }' }); } catch (e) { console.warn('tint', e); }
+      if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = (LIGHT[0] + LIGHT[1] + LIGHT[2]) / 3; L0.hue = TOD === 'night' ? .02 : 0; } scene.globe.enableLighting = true; }
+    }
+    // visibility and cloud from the weather (METAR or a preset)
+    const WX = O.weather || {};
+    const visM = clamp(WX.visM || 30000, 800, 60000);
+    scene.fog.density = clamp(2.4 / visM, 5e-5, 2.2e-3); scene.fog.minimumBrightness = TOD === 'night' ? .05 : .3;
+    const cloudLayers = (WX.clouds || []).filter(c => /FEW|SCT|BKN|OVC|VV/.test(c.cover) && Number.isFinite(+c.base)).slice(0, 3);
+    let cloudCol = null; const cloudCells = [];
+    try {
+      if (cloudLayers.length && C.CloudCollection) {
+        cloudCol = scene.primitives.add(new C.CloudCollection({ noiseDetail: 16, noiseOffset: new C.Cartesian3(Math.random() * 100, 0, 0) }));
+        const R = 9000, per = { FEW: 10, SCT: 28, BKN: 60, OVC: 110, VV: 110 };
+        for (const L of cloudLayers) {
+          const n = Math.min(140, per[L.cover] || 20), base = (+L.base) * FT;
+          for (let i = 0; i < n; i++) {
+            const a = Math.random() * 2 * Math.PI, rr = Math.sqrt(Math.random()) * R, w = (L.cover === 'OVC' ? 1500 : 650) + Math.random() * 900, h = w * (.45 + Math.random() * .35);
+            cloudCells.push({ dx: Math.cos(a) * rr, dz: Math.sin(a) * rr, base, w, h, c: cloudCol.add({ position: C.Cartesian3.ZERO, scale: new C.Cartesian2(w, h), maximumSize: new C.Cartesian3(50, 14 + Math.random() * 10, 24), slice: .3 + Math.random() * .25, brightness: TOD === 'night' ? .12 : TOD === 'golden' ? .85 : 1, color: TOD === 'golden' ? C.Color.fromCssColorString('#ffd9b8') : C.Color.WHITE }) });
+          }
+        }
+        exclude.push(cloudCol);
+      }
+    } catch (e) { console.warn('clouds', e); cloudCol = null; }
+    // clouds stay in a ring around the aircraft: ones that fall behind wrap round to the far side
+    let cloudT = 99;
+    const updateClouds = () => {
+      if (!cloudCol) return; const R = 9000;
+      for (const k of cloudCells) {
+        let x = k.x ?? st.x + k.dx, z = k.z ?? st.z + k.dz; const dx = x - st.x, dz = z - st.z;
+        if (Math.abs(dx) > R) x -= Math.sign(dx) * 2 * R; if (Math.abs(dz) > R) z -= Math.sign(dz) * 2 * R;
+        if (x !== k.x || z !== k.z) { k.x = x; k.z = z; const gh = elevAt(x, z) ?? g0; k.c.position = LLH(x, z, Math.max(k.base + g0, gh + 150) + k.h * .45); }
+      }
+    };
 
     // aircraft
     const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId) : aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
     cleanups.push(() => URL.revokeObjectURL(glbUrl));
     const PF = window.BoploAircraft ? BoploAircraft.model(O.aircraftId) : { vs: 47, vr: 55, appr: 62, cruise: 98, vmax: 115, thrust: 2.645, drag: .0002 };
     AC.groundAtt = AC.groundAtt || 0;
-    let model = null, bladeNode = null, discNode = null;
+    let model = null, bladeNode = null, discNode = null; const surfNodes = {}, surfAng = {};
     try {
       model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
       scene.primitives.add(model);
-      model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); });
+      if (TOD !== 'day') { model.color = new C.Color(LIGHT[0] * 1.3, LIGHT[1] * 1.3, LIGHT[2] * 1.3, 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; }
+      model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
     const lights = scene.primitives.add(new C.PointPrimitiveCollection());
     const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
+    const beacon = lights.add({ color: C.Color.fromCssColorString('#ff2a1f'), pixelSize: 7, show: false }), landL = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false }), landR = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false });
+    let landingLights = O.mode === 'replay';
     const lines = scene.primitives.add(new C.PolylineCollection());
     const flownLine = lines.add({ positions: [], width: 2.5, material: C.Material.fromType('Color', { color: new C.Color(1, .82, .29, .65) }) });
     const gatePool = Array.from({ length: 20 }, () => lines.add({ positions: [], width: 3, show: false, material: C.Material.fromType('Color', { color: new C.Color(1, 1, 1, .5) }) }));
@@ -652,8 +710,16 @@ window.BoploSim = (() => {
     const last = landPt, sameEnd = !arrE && Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
     // runway surfaces: sample the ground along each runway (centre and both sides) so our runway sits on the scenery
     const rwSt = rwys.map(rw => { const n = Math.max(2, Math.ceil(rw.len / 80) + 1), f = unit(rw.A, rw.B), l = leftOf(f), pts = []; for (let i = 0; i < n; i++) { const c = add(rw.A, f, rw.len * i / (n - 1)); pts.push(c, add(c, l, rw.wid * .35), add(c, l, -rw.wid * .35)); } return { rw, n, f, l, pts, h: [] }; });
-    const [h0, h1] = await mostDetailed([P[0], sameEnd ? P[0] : last]);
+    let [h0, h1] = await mostDetailed([P[0], sameEnd ? P[0] : last]);
     const rwPts = rwSt.flatMap(r => r.pts), hs = [null, null, ...(rwPts.length ? await mostDetailed(rwPts) : [])];
+    if (!alive) return { close: destroy };
+    // the detailed samples can time out on slow connections: then wait (up to 25 s) for the scenery under the start
+    // and read the ground directly, so the runway and the aircraft are placed once, on the real surface
+    if (tileset && (h0 == null || rwSt.some((r, i) => !r.pts.some((_, j) => Number.isFinite(hs[2 + rwSt.slice(0, i).reduce((n, q) => n + q.pts.length, 0) + j]))))) {
+      for (let i = 0; i < 80 && alive && elevAt(P[0][0], P[0][1], true) == null; i++) await new Promise(r => setTimeout(r, 300));
+      if (h0 == null) h0 = elevAt(P[0][0], P[0][1], true);
+      let k = 2; for (const r of rwSt) for (const pt of r.pts) { if (!Number.isFinite(hs[k])) hs[k] = elevAt(pt[0], pt[1], true); k++; }
+    }
     if (!alive) return { close: destroy };
     // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
     let geoN = 0;
@@ -663,10 +729,12 @@ window.BoploSim = (() => {
     // if the detailed start height wasn't ready in time, fix the datum from the first real ground reading at the start
     let datumFixed = !(tileset && h0 == null);
     // shape each runway: robust end heights, a straight slope between them, small local variation
-    const shapeRunways = hs => { let k = 2, any = false; const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+    const shapeRunways = (hs, only = null) => { let k = 2, any = false; const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
       for (const r of rwSt) {
+        if (only && r !== only) { k += r.n * 3; continue; }
         const raw = []; for (let i = 0; i < r.n; i++, k += 3) raw.push(med([hs[k], hs[k + 1], hs[k + 2]]));
-        const ok = raw.filter(Number.isFinite), fallback = ok.length ? med(ok) : g0 - .35; if (ok.length) any = true;
+        const ok = raw.filter(Number.isFinite), fallback = ok.length ? med(ok) : (r.guess ?? g0) - .35; if (ok.length) any = true;
+        r.pending = !ok.length;
         const ha = med(raw.slice(0, 3)) ?? fallback, hb = med(raw.slice(-3)) ?? fallback;
         r.h = raw.map((v, i) => { const lin = ha + (hb - ha) * i / (r.n - 1); return Number.isFinite(v) ? lin + clamp(v - lin, -1.2, 1.2) : lin; });
         for (let i = 1; i < r.n - 1; i++) r.h[i] = (r.h[i - 1] + r.h[i] * 2 + r.h[i + 1]) / 4;
@@ -674,6 +742,7 @@ window.BoploSim = (() => {
       }
       return any;
     };
+    rwSt.forEach(r => { r.guess = arrR && arrR !== depR && arrR.list.includes(r.rw) && !(depR?.list || []).includes(r.rw) ? g1 : g0; });
     let rwSampled = shapeRunways(hs);
     const rwAt = (x, z) => {
       for (const r of rwSt) {
@@ -698,13 +767,43 @@ window.BoploSim = (() => {
           if (i < n - 1) idx.set([i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2], i * 6);
         }
         const geometry = new C.Geometry({ attributes: { position: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.DOUBLE, componentsPerAttribute: 3, values: pos }), normal: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 3, values: nor }), st: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 2, values: sts }) }, indices: idx, primitiveType: C.PrimitiveType.TRIANGLES, boundingSphere: C.BoundingSphere.fromVertices(pos) });
-        const prim = scene.primitives.add(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry }), appearance: new C.MaterialAppearance({ material: C.Material.fromType('Image', { image: rwImg.get(r.rw) || (rwImg.set(r.rw, runwayCanvas(r.rw).toDataURL('image/png')), rwImg.get(r.rw)) }), flat: true, faceForward: true, translucent: false, closed: false }), asynchronous: false, shadows: C.ShadowMode.RECEIVE_ONLY }));
+        const prim = scene.primitives.add(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry }), appearance: new C.MaterialAppearance({ material: C.Material.fromType('Image', { image: rwImg.get(r.rw) || (rwImg.set(r.rw, runwayCanvas(r.rw).toDataURL('image/png')), rwImg.get(r.rw)), color: new C.Color(LIGHT[0], LIGHT[1], LIGHT[2], 1) }), flat: true, faceForward: true, translucent: false, closed: false }), asynchronous: false, shadows: C.ShadowMode.RECEIVE_ONLY }));
         exclude.push(prim); r.prim = prim;
       } catch (e) { console.warn('runway', e); }
      }
     }
-    drawRunways();
-    const shiftRunways = d => { if (!rwSt.length || !d) return; rwSt.forEach(r => { r.h = r.h.map(v => v + d); }); drawRunways(); };
+    // airport lighting: edge, threshold and end lights on every runway; approach lights and a PAPI on the arrival runway
+    const rwLights = scene.primitives.add(new C.PointPrimitiveCollection()); exclude.push(rwLights);
+    const LS = { near: new C.NearFarScalar(150, 1.5, 9000, .45), fade: new C.NearFarScalar(4000, 1, 16000, 0) };
+    const W_ = C.Color.fromCssColorString('#FFF4D6'), GRN = C.Color.fromCssColorString('#46FF8A'), RED = C.Color.fromCssColorString('#FF3B30'), PW = C.Color.fromCssColorString('#FFFFFF');
+    let papi = [], rabbit = []; const lightScale = TOD === 'night' ? 1.6 : TOD === 'golden' ? 1.25 : 1; if (TOD === 'night') LS.fade = new C.NearFarScalar(8000, 1, 30000, 0);
+    const rwPoint = (r, u, w, dy = .25) => { const c = add(add(r.rw.A, r.f, u), r.l, w), t = clamp(u / r.rw.len, 0, 1) * (r.n - 1), i = Math.min(r.n - 2, Math.floor(t)), a = t - i, h = (r.h[i] ?? g0) + ((r.h[i + 1] ?? g0) - (r.h[i] ?? g0)) * a; return { c, h: h + dy }; };
+    function buildRunwayLights() {
+      rwLights.removeAll(); papi = []; rabbit = [];
+      const pt = (p, color, size = 5) => rwLights.add({ position: LLH(p.c[0], p.c[1], p.h), color, pixelSize: size * lightScale, scaleByDistance: LS.near, translucencyByDistance: LS.fade });
+      for (const r of rwSt) {
+        const paved = PAVED(r.rw.surf), Lr = r.rw.len, hw = r.rw.wid / 2 + 1.5; if (!paved && !r.rw.lit) continue;
+        for (let u = 0; u <= Lr + .1; u += 60) for (const sd of [1, -1]) pt(rwPoint(r, u, sd * hw), W_, 4.5);
+        const activeEnd = arrE && r.rw === arrE.rw ? (arrE.T === r.rw.A ? 'A' : 'B') : depE && r.rw === depE.rw ? (depE.T === r.rw.A ? 'A' : 'B') : null;
+        for (let w = -r.rw.wid / 2; w <= r.rw.wid / 2 + .1; w += 3) { pt(rwPoint(r, .5, w), activeEnd === 'B' ? RED : GRN, 5); pt(rwPoint(r, Lr - .5, w), activeEnd === 'A' ? RED : GRN, 5); }
+      }
+      if (arrE && PAVED(arrE.rw.surf)) {
+        const r = rwSt.find(q => q.rw === arrE.rw); if (!r) return;
+        const fromA = arrE.T === r.rw.A, dirU = fromA ? 1 : -1, uT = fromA ? Math.max(arrE.disp, 0) : r.rw.len - Math.max(arrE.disp, 0);
+        // approach lights: centreline bars out to 720 m, a crossbar at 300 m, and a sequenced flasher running towards the runway
+        if (r.rw.len > 1200) for (let d = 30; d <= 720; d += 30) {
+          const u = uT - dirU * d, bar = d === 300 ? 7 : 2;
+          for (let k = -bar; k <= bar; k++) pt(rwPoint(r, u, k * 1.6, .8 + d * .004), W_, d === 300 ? 5 : 4.5);
+          if (d >= 330) rabbit.push(rwLights.add({ position: LLH(...(p => [p.c[0], p.c[1], p.h])(rwPoint(r, u, 0, 1.6 + d * .004))), color: PW, pixelSize: 9, show: false, scaleByDistance: LS.near, translucencyByDistance: LS.fade }));
+        }
+        rabbit.reverse();
+        // PAPI on the left of the runway at the aiming point: 4 units, transition angles 2.5° … 3.5° from the outside in
+        const uA = uT + dirU * Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3), side = fromA ? 1 : -1;
+        [2.5, 2.83, 3.17, 3.5].forEach((ang, i) => { const p = rwPoint(r, uA, side * (r.rw.wid / 2 + 15 + (3 - i) * 9), .6); papi.push({ p, ang, prim: rwLights.add({ position: LLH(p.c[0], p.c[1], p.h), color: PW, pixelSize: 7, scaleByDistance: LS.near, translucencyByDistance: new C.NearFarScalar(6000, 1, 14000, 0) }) }); });
+      }
+    }
+    drawRunways(); buildRunwayLights();
+    const shiftRunways = d => { if (!rwSt.length || !d) return; rwSt.forEach(r => { r.h = r.h.map(v => v + d); }); drawRunways(); buildRunwayLights(); };
     if (rwSt.length) { const a = rwHeight(P[0][0], P[0][1]); if (a != null && depE) g0 = a; const b = rwHeight(landPt[0], landPt[1]); if (b != null && arrE) g1 = b; }
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
@@ -723,6 +822,18 @@ window.BoploSim = (() => {
       // nav lights: model frame after axis conversion is x forward, y left, z up
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
       navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
+      // beacon on the fin, landing lights in the wing leading edge
+      if (AC.surfaces?.rud) { const r = AC.surfaces.rud; beacon.position = at([0, r.pivot[1] + (r.axis[1] * 1.3), r.pivot[2] + .2]); beacon.show = (st.t % 1.1) < .14 && fs.rpm > 0; }
+      landL.show = landR.show = landingLights; if (landingLights) { landL.position = at([AC.tips.left[0] * .42, AC.tips.left[1] - .05, AC.tips.left[2] + .6]); landR.position = at([AC.tips.right[0] * .42, AC.tips.right[1] - .05, AC.tips.right[2] + .6]); }
+      // control surfaces follow the controls (TE-down is a negative rotation about each hinge axis)
+      const n = FM.p.notch[fc.flaps] || FM.p.notch[0], rud = fs.rud ?? fc.rudder;
+      const want = { flapL: -n.deg, flapR: -n.deg, ailL: -fc.aileron * 18, ailR: fc.aileron * 18, elev: fc.elevator * (AC.surfaces?.elev?.max || 22), rud: rud * 25 };
+      for (const [k, node] of Object.entries(surfNodes)) {
+        const sf = AC.surfaces[k], tgt = want[k] || 0, cur = surfAng[k] ?? 0, rate = k.startsWith('flap') ? 12 : 120;
+        const v = cur + clamp(tgt - cur, -rate * realDt, rate * realDt); if (Math.abs(v - cur) < 1e-4 && surfAng[k] != null) continue; surfAng[k] = v;
+        const p = new C.Cartesian3(...sf.pivot), q = C.Quaternion.fromAxisAngle(new C.Cartesian3(...sf.axis), v * D2R);
+        node.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(p), C.Matrix4.multiply(C.Matrix4.fromRotationTranslation(C.Matrix3.fromQuaternion(q)), C.Matrix4.fromTranslation(C.Cartesian3.negate(p, new C.Cartesian3())), new C.Matrix4()), new C.Matrix4());
+      }
       // propeller: spin the blades, fade in the disc at high rpm
       const rpm = fs.rpm || 0;
       propA = (propA + rpm / 60 * 2 * Math.PI * realDt * (rpm > 1200 ? .07 : 1)) % (Math.PI * 2);
@@ -755,15 +866,29 @@ window.BoploSim = (() => {
       camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
       camD += (depBase - camD) * Math.min(1, dt * 3);
       const dep = clamp(camD - camPitchLag * .55 + (st.ground ? 2 : 0), 2, 60);
-      const ch = camH * D2R, f = [Math.sin(ch), Math.cos(ch)], ex = -f[0] * B, ez = -f[1] * B;
-      let ey = Hc + AC.wheelDrop;
+      const ch = (camH + orb.yaw) * D2R, f = [Math.sin(ch), Math.cos(ch)], ex = -f[0] * B * orb.zoom, ez = -f[1] * B * orb.zoom;
+      let ey = Hc * (orb.zoom > 1 ? orb.zoom : 1) + AC.wheelDrop + Math.tan(orb.pitch * D2R) * B * orb.zoom;
       const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 3);
-      if (cockpit()) {
-        // pilot's eye in the left seat, looking along the aircraft's attitude
-        const e = AC.eye || [.25, .4, .4], F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
+      const camName = CAMS[camI][0];
+      if (cockpit() || camName === 'Wing') {
+        // attitude-locked cameras: the pilot's eye in the left seat, or on the left wing looking forward along the fuselage
+        const e = camName === 'Wing' ? [AC.tips.left[0] * .82, AC.tips.left[1] + .55, AC.tips.left[2] - 1.2] : (AC.eye || [.25, .4, .4]), F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
         const px = st.x + F[0] * bz + U[0] * by + R[0] * bx, pz = st.z + F[2] * bz + U[2] * by + R[2] * bx, py = st.alt + F[1] * bz + U[1] * by + R[1] * bx;
-        if (camera.frustum.fov !== C.Math.toRadians(72)) { camera.frustum.fov = C.Math.toRadians(72); camera.frustum.near = .1; }
-        camera.setView({ destination: LLH(px, pz, py), orientation: { heading: st.hdg * D2R, pitch: C.Math.toRadians(st.pitch - 4), roll: st.bank * D2R } });
+        const fov = C.Math.toRadians(camName === 'Wing' ? 62 : 72 / Math.max(.6, Math.min(orb.zoom, 1.6)));
+        if (Math.abs(camera.frustum.fov - fov) > 1e-3) { camera.frustum.fov = fov; camera.frustum.near = .1; }
+        const yaw = orb.yaw + (camName === 'Wing' ? -18 : 0), pit = orb.pitch * -1 + (camName === 'Wing' ? -6 : -4);
+        camera.setView({ destination: LLH(px, pz, py), orientation: { heading: (st.hdg + yaw * Math.cos(st.bank * D2R)) * D2R, pitch: C.Math.toRadians(st.pitch + pit), roll: st.bank * D2R * Math.cos(yaw * D2R) } });
+      } else if (camName === 'Tower') {
+        // a fixed camera beside the nearest airport (or a fly-by point ahead on the route) that tracks and zooms onto the aircraft
+        if (!towerAt || Math.hypot(st.x - towerAt[0], st.z - towerAt[1]) > 7000) {
+          const ap = [depR, arrR].filter(Boolean).map(R0 => [R0, Math.hypot(st.x - R0.C0[0], st.z - R0.C0[1])]).sort((a, b) => a[1] - b[1])[0];
+          if (ap && ap[1] < 6000) { const rw = ap[0].list[0], f2 = rw ? unit(rw.A, rw.B) : [1, 0], l2 = leftOf(f2), c0 = rw ? add(add(rw.A, f2, rw.len * .45), l2, rw.wid / 2 + 160) : ap[0].C0; towerAt = [c0[0], c0[1], (elevAt(c0[0], c0[1]) ?? st.gnd) + 28]; }
+          else { const tk = st.trk * D2R; const c0 = [st.x + Math.sin(tk) * 900 + Math.cos(tk) * 120, st.z + Math.cos(tk) * 900 - Math.sin(tk) * 120]; towerAt = [c0[0], c0[1], Math.max((elevAt(c0[0], c0[1]) ?? st.gnd) + 30, st.alt - 40)]; }
+        }
+        const dx = st.x - towerAt[0], dz = st.z - towerAt[1], dy = st.alt + AC.wheelDrop - towerAt[2], dh = Math.max(1, Math.hypot(dx, dz)), dist = Math.hypot(dh, dy);
+        const fov = clamp(2 * Math.atan(AC.type.span * 2.4 / dist / orb.zoom), .03, 1.1);
+        if (Math.abs(camera.frustum.fov - fov) > 1e-4) { camera.frustum.fov = fov; camera.frustum.near = 1; }
+        camera.setView({ destination: LLH(towerAt[0], towerAt[1], towerAt[2]), orientation: { heading: Math.atan2(dx, dz), pitch: Math.atan2(dy, dh), roll: 0 } });
       } else {
         if (camera.frustum.fov !== C.Math.toRadians(66)) { camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5; }
         camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
@@ -771,6 +896,9 @@ window.BoploSim = (() => {
       placeAircraft();
       { const want = shadowsOK && st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
       gateT += dt; if (gateT > .2) { gateT = 0; updateGates(); }
+      cloudT += dt; if (cloudT > 1) { cloudT = 0; updateClouds(); }
+      if (papi.length) { const ey = st.alt + AC.wheelDrop + 1.2; for (const u of papi) { const d = Math.hypot(st.x - u.p.c[0], st.z - u.p.c[1]), ang = Math.atan2(ey - u.p.h, Math.max(1, d)) * R2D; u.prim.color = ang > u.ang ? PW : RED; } }
+      if (rabbit.length) { const k = Math.floor((performance.now() / 1000 * 2 % 1) * rabbit.length * 1.6); rabbit.forEach((b, i) => { b.show = i === k; }); }
       viewer.resize(); viewer.render();
     }
     const flownPts = [];
@@ -786,17 +914,31 @@ window.BoploSim = (() => {
       if (datumFixed) return; datumFixed = true;
       const shift = groundHere - g0; if (Math.abs(shift) < 2 || Math.abs(shift) > 150) return;
       if (O.fromElevFt != null) geoN = groundHere - O.fromElevFt * FT;
-      g0 += shift; g1 += shift; planCruise(); planGates(); lastG += shift; if (!rwSampled) shiftRunways(shift); if (fs.ground) { fs.alt = groundAt(fs.x, fs.z); fs.v[1] = 0; } else fs.alt += shift;
+      g0 += shift; g1 += shift; planCruise(); planGates(); lastG += shift; if (!rwSampled && !rwAt(fs.x, fs.z)) shiftRunways(shift); if (fs.ground) { fs.alt = groundAt(fs.x, fs.z); fs.v[1] = 0; } else fs.alt += shift;
       // and try again for proper runway heights now the scenery has loaded
-      if (!rwSampled && rwPts.length) mostDetailed(rwPts).then(v => { if (alive && shapeRunways([null, null, ...v])) { rwSampled = true; drawRunways(); } });
+      if (!rwSampled && rwPts.length && !rwAt(fs.x, fs.z)) mostDetailed(rwPts).then(v => { if (alive && !rwAt(fs.x, fs.z) && shapeRunways([null, null, ...v])) { rwSampled = true; drawRunways(); buildRunwayLights(); } });
     }
 
     /* ---- aircraft state: a physics model (flight-physics.js) behind the same fields the HUD and scoring use ---- */
     let flareNow = false;
     const st = { flaps: 0, x: 0, z: 0, alt: 0, hdg: 0, pitch: 0, bank: 0, v: 0, thr: 0, ground: true, crashed: false, landed: false, vs: 0, trk: 0, gs: 0, stall: false, t: 0, agl: 0, gnd: g0 };
+    // a preset can ask for a crosswind relative to the departure runway
+    if (WX.windRel && depE) O.wind = { dir: norm360(depE.hdg * R2D + WX.windRel.off), spd: WX.windRel.spd };
     const wind = O.wind && O.wind.spd ? { x: -Math.sin(O.wind.dir * D2R) * O.wind.spd * KT, z: -Math.cos(O.wind.dir * D2R) * O.wind.spd * KT, dir: O.wind.dir, spd: O.wind.spd } : { x: 0, z: 0, spd: 0 };
+    const gustKt = WX.windRel?.gust || WX.gust || 0, gustK = gustKt && wind.spd ? clamp((gustKt - wind.spd) / wind.spd, 0, 2) : 0;
+    const turbI = WX.turb ?? ((cloudLayers.some(c => /SCT|BKN/.test(c.cover)) ? .35 : 0) + (wind.spd > 14 ? .3 : 0));
+    let gTarget = 0, gNow = 0; const tv = [0, 0, 0];
+    const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += Math.random(); return (u - 3) / .7071; };
+    // gusts (a slow random swing up to the reported gust) and turbulence (filtered noise, stronger low down in wind)
+    function windAt(dt) {
+      if (Math.random() < dt / 3.5) gTarget = Math.random() ** 1.5; gNow += (gTarget - gNow) * Math.min(1, dt / 1.8);
+      const lowMech = wind.spd > 10 && st.agl < 300 ? wind.spd / 25 : 0, I = (turbI + lowMech * .5) * (st.ground ? .2 : 1);
+      for (let i = 0; i < 3; i++) tv[i] += -tv[i] * dt / 1.1 + gauss() * Math.sqrt(dt) * I * 1.5;
+      const g = 1 + gNow * gustK;
+      return [wind.x * g + tv[0], tv[1] * .7, wind.z * g + tv[2]];
+    }
     const windV = [wind.x, 0, wind.z];
-    let lastG = g0;
+    let lastG = g0, rwLazyT = 0;
     // scenery not loaded under the aircraft yet: keep the last known ground while rolling, assume none in the air
     const groundAt = (x, z) => { const r = rwAt(x, z); if (r) return lastG = r.h; const e = elevAt(x, z); if (e != null) return lastG = e; return fs?.ground ? lastG : lastG - 3000; };
     const FM = BoploPhysics.create(O.aircraftId || 'c172', PF, { tail: AC.type?.gear?.type === 'tail', groundAtt: AC.groundAtt, parkingAtStart: O.mode !== 'replay', groundAt, surfaceAt: (x, z) => rwAt(x, z)?.surf || 'grass' });
@@ -820,12 +962,16 @@ window.BoploSim = (() => {
     /* ---- input ---- */
     const keys = new Set(), ctl = { roll: 0, pitch: 0, yaw: 0 };
     let showGates = !replay && store.get('gates', true);
+    const CS = Object.assign({ expo: .35, keyRate: 1, centre: true, mouse: false, axes: { roll: 0, pitch: 1, yaw: 2, thr: -1 }, axInv: { roll: false, pitch: false, yaw: false, thr: true } }, store.get('ctl', {}));
+    const saveCS = () => store.set('ctl', CS);
+    let mouseV = null;
     let invert = store.get('invert', false), apOn = replay, paused = true, rate = replay ? store.get('rate', 4) : 1, camI = 0, tilt = null, stickV = null, thrTarget = fc.throttle, rudV = null;
     fc.autoRudder = store.get('autorudder', true);
     let showSix = store.get('six', !coarse);
     // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
     const AP = { nav: true, hdg: null, alt: null, spd: null };
-    const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Tower', 0, 0, 0], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    const orb = { yaw: 0, pitch: 0, zoom: 1 }; let towerAt = null;
     const flapStep = d => { if (replay) return; fc.flaps = clamp(fc.flaps + d, 0, FM.notches - 1); tipNow = `Flaps ${FM.flapLabel()}`; tipUntil = performance.now() + 1400; };
     const trimStep = d => { if (replay) return; fc.trim = clamp(fc.trim + d, -1, 1); };
     on(window, 'keydown', e => {
@@ -842,8 +988,12 @@ window.BoploSim = (() => {
       if (k === 'home' || k === 't') { trimStep(.04); return; }
       if (k === 'end' || k === 'g') { trimStep(-.04); return; }
       if (k === 'b' && e.shiftKey || (k === '.' && (e.ctrlKey || e.metaKey))) { if (!replay) { fc.parking = !fc.parking; tipNow = fc.parking ? 'Parking brake set' : 'Parking brake released'; tipUntil = performance.now() + 1500; } return; }
+      if (k === 'l') { landingLights = !landingLights; tipNow = landingLights ? 'Landing lights on' : 'Landing lights off'; tipUntil = performance.now() + 1200; return; }
       if (k === 'h' && !replay) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
       if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
+      if (k === 'k') { openSet(); return; }
+      if (k === 'y' && !replay) { CS.mouse = !CS.mouse; saveCS(); syncSet(); tipNow = CS.mouse ? 'Mouse yoke on: move the mouse to fly' : 'Mouse yoke off'; tipUntil = performance.now() + 1800; return; }
+      if (k === 'escape' && !$('[data-set]').hidden) { $('[data-set]').hidden = true; e.stopImmediatePropagation(); return; }
       if (k === 'j') { showGates = !showGates; store.set('gates', showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
       if (/^[0-9]$/.test(k) && !replay) { thrTarget = k === '0' ? 1 : +k / 10; return; }
       keys.add(k);
@@ -894,24 +1044,62 @@ window.BoploSim = (() => {
       const pad = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null;
       if (pad) {
         const ax = pad.axes, bt = i => pad.buttons[i]?.pressed;
-        if (Math.abs(ax[0]) > .08) r = ax[0]; if (Math.abs(ax[1]) > .08) p = ax[1]; if (ax.length > 2 && Math.abs(ax[2]) > .12) y = ax[2];
+        const axv = n => { const i = CS.axes[n]; if (i == null || i < 0 || i >= ax.length) return null; return CS.axInv[n] ? -ax[i] : ax[i]; };
+        const ar = axv('roll'), ap2 = axv('pitch'), ay = axv('yaw'), at2 = axv('thr');
+        if (ar != null && Math.abs(ar) > .06) r = ar; if (ap2 != null && Math.abs(ap2) > .06) p = ap2; if (ay != null && Math.abs(ay) > .1) y = ay;
+        if (at2 != null) { if (padThr0 == null) padThr0 = at2; if (Math.abs(at2 - padThr0) > .05) { padThr0 = 9; thrTarget = clamp((at2 + 1) / 2, 0, 1); } }
         const up = pad.buttons[7]?.value || 0, dn = pad.buttons[6]?.value || 0; if (up || dn) thrTarget = clamp(thrTarget + (up - dn) * dt * .7, 0, 1);
+        if (padName !== pad.id) { padName = pad.id; const pn = $('[data-padname]'); if (pn) pn.textContent = pad.id.replace(/\(.*?\)/g, '').trim() || 'Controller connected'; fillAxes(ax.length); }
+        padAxes = ax;
         if (bt(0)) brake = 1;
         padEdge('fu', bt(5), () => flapStep(1)); padEdge('fd', bt(4), () => flapStep(-1)); padEdge('ap', bt(3), () => setAP(!apOn)); padEdge('cam', bt(2), cycleCam);
         if (bt(12)) trimStep(dt * .5); if (bt(13)) trimStep(-dt * .5);
       }
+      if (CS.mouse && mouseV && !replay) { r = mouseV.roll; p = mouseV.pitch; }
       if (stickV) { r = stickV.roll; p = stickV.pitch; }
       if (tilt) { if (Math.abs(tilt.roll) > .06) r = clamp(tilt.roll, -1, 1); if (Math.abs(tilt.pitch) > .06) p = clamp(tilt.pitch, -1, 1); }
       if (rudV != null) y = rudV;
       if (invert) p = -p;
       if (apOn && !replay && (Math.abs(r) > .35 || Math.abs(p) > .35)) { setAP(false); tipNow = 'Autopilot off: you have control'; tipUntil = performance.now() + 2500; }
       // keyboard input ramps for smoothness; analogue inputs pass straight through
-      const ramp = (cur, tgt, rr = 4) => cur + clamp(tgt - cur, -dt * rr, dt * rr);
-      const analog = stickV || pad || tilt;
-      ctl.roll = analog ? r : ramp(ctl.roll, r); ctl.pitch = analog ? p : ramp(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? y : ramp(ctl.yaw, y, 3);
+      const ramp = (cur, tgt, rr = 4) => cur + clamp(tgt - cur, -dt * rr * CS.keyRate, dt * rr * CS.keyRate);
+      // keys that don't spring back hold their deflection (like trimming the yoke by hand)
+      const hold = (cur, tgt, rr) => !CS.centre && tgt === 0 ? cur : ramp(cur, tgt, rr);
+      const analog = stickV || pad || tilt || (CS.mouse && mouseV);
+      const expo = v => { const a = Math.abs(v), e = CS.expo; return Math.sign(v) * ((1 - e) * a + e * a * a * a); };
+      ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? expo(y) : ramp(ctl.yaw, y, 3);
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       if (Math.abs(thrRange.value / 100 - thrTarget) > .02 && document.activeElement !== thrRange) thrRange.value = Math.round(thrTarget * 100);
     }
+    let padName = null, padAxes = [], padThr0 = null, detecting = null;
+    function fillAxes(n) { $$('[data-axis]').forEach(sel => { const k = sel.dataset.axis; sel.innerHTML = `<option value="-1">None</option>` + Array.from({ length: Math.max(n, 4) }, (_, i) => `<option value="${i}">Axis ${i + 1}</option>`).join(''); sel.value = String(CS.axes[k] ?? -1); }); }
+    function syncSet() {
+      const el = $('[data-set]'); if (!el) return;
+      $$('[data-cs]').forEach(i => { const k = i.dataset.cs; if (i.type === 'checkbox') i.checked = k === 'invert' ? invert : k === 'autoRudder' ? fc.autoRudder : !!CS[k]; else i.value = k === 'expo' ? Math.round(CS.expo * 100) : Math.round(CS.keyRate * 100); });
+      $$('[data-axinv]').forEach(i => { i.checked = !!CS.axInv[i.dataset.axinv]; });
+      if (!$('[data-axis] option')) fillAxes(padAxes.length || 4);
+    }
+    function openSet() { const el = $('[data-set]'); el.hidden = !el.hidden; if (!el.hidden) syncSet(); }
+    $('[data-setb]').onclick = openSet; $('[data-setx]').onclick = () => { $('[data-set]').hidden = true; };
+    $$('[data-cs]').forEach(i => i.oninput = () => { const k = i.dataset.cs;
+      if (k === 'invert') { invert = i.checked; store.set('invert', invert); }
+      else if (k === 'autoRudder') { fc.autoRudder = i.checked; store.set('autorudder', fc.autoRudder); }
+      else if (i.type === 'checkbox') CS[k] = i.checked;
+      else CS[k] = k === 'expo' ? i.value / 100 : i.value / 100;
+      saveCS(); });
+    $$('[data-axis]').forEach(sel => sel.onchange = () => { CS.axes[sel.dataset.axis] = +sel.value; if (sel.dataset.axis === 'thr') padThr0 = null; saveCS(); });
+    $$('[data-axinv]').forEach(i => i.onchange = () => { CS.axInv[i.dataset.axinv] = i.checked; saveCS(); });
+    $$('[data-detect]').forEach(b => b.onclick = () => { detecting = { k: b.dataset.detect, base: [...padAxes], b }; b.textContent = 'Move it…'; });
+    // live axis bars in the settings panel, and axis detection (the axis that moves furthest wins)
+    setInterval(() => { const el = $('[data-set]'); if (!el || el.hidden || !alive) return;
+      const pad = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null; if (!pad) return; padAxes = [...pad.axes];
+      if (detecting) { const d = padAxes.map((v, i) => Math.abs(v - (detecting.base[i] ?? 0))), i = d.indexOf(Math.max(...d)); if (d[i] > .5) { CS.axes[detecting.k] = i; saveCS(); detecting.b.textContent = 'Detect'; detecting = null; fillAxes(padAxes.length); } }
+      $$('[data-axbar]').forEach(bar => { const k = bar.dataset.axbar, i = CS.axes[k]; let v = i >= 0 ? padAxes[i] ?? 0 : 0; if (CS.axInv[k]) v = -v; bar.firstChild.style.left = `${(v + 1) * 50}%`; });
+    }, 80);
+    // mouse yoke: the pointer's position across the view is the control position (centre = neutral)
+    on($('[data-map]'), 'pointermove', e => { if (e.pointerType !== 'mouse') return; const r = $('[data-map]').getBoundingClientRect(); const dz = v => Math.abs(v) < .04 ? 0 : (v - Math.sign(v) * .04) / .96;
+      mouseV = { roll: dz(clamp(((e.clientX - r.left) / r.width * 2 - 1) * 1.6, -1, 1)), pitch: dz(clamp(((e.clientY - r.top) / r.height * 2 - 1) * 1.8, -1, 1)) }; });
+    on($('[data-map]'), 'pointerleave', () => { if (CS.mouse) mouseV = { roll: 0, pitch: 0 }; });
     const padPrev = {}; function padEdge(id, down, fn) { if (down && !padPrev[id]) fn(); padPrev[id] = down; }
 
     /* ---- autopilot: works out targets from the route, then flies the controls (BoploPhysics.pilot) ---- */
@@ -940,9 +1128,17 @@ window.BoploSim = (() => {
     /* ---- flight model ---- */
     function step(dt) {
       st.t += dt;
-      FM.step(dt, windV);
+      FM.step(dt, windAt(dt));
       if (!datumFixed) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
       st.gk = elevAt(st.x, st.z) != null || !!rwAt(st.x, st.z);
+      rwLazyT += dt;
+      if (rwLazyT > 2 && rwSt.some(r => r.pending)) { rwLazyT = 0;
+        for (const r of rwSt) { if (!r.pending || rwAt(st.x, st.z)) continue; const c = add(r.rw.A, r.f, r.rw.len / 2); if (Math.hypot(c[0] - st.x, c[1] - st.z) > 9000) continue;
+          const vals = r.pts.map(pt => elevAt(pt[0], pt[1], true)); if (vals.filter(Number.isFinite).length < r.pts.length / 2) continue;
+          const all = [null, null]; for (const q of rwSt) for (let j = 0; j < q.pts.length; j++) all.push(q === r ? vals[j] : null);
+          shapeRunways(all, r); r.pending = false; drawRunways(); buildRunwayLights();
+          if (arrE && r.rw === arrE.rw) { const b = rwHeight(landPt[0], landPt[1]); if (b != null) { g1 = b; planGates(); } } }
+      }
       sync();
       if (!st.ground) st.airT = (st.airT || 0) + dt;
     }
@@ -1030,7 +1226,20 @@ window.BoploSim = (() => {
     function setSix(v) { showSix = v; store.set('six', v); applyView(); }
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
     function applyView() { const six = showSix || cockpit(); root.classList.toggle('six-on', six); root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); }
-    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; applyView(); }
+    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; towerAt = null; applyView(); }
+    // drag the view to orbit (chase cameras) or look around (cockpit and wing); wheel or pinch to zoom; double-click to reset
+    { const mapEl = $('[data-map]'); let drag = null; const pts = new Map();
+      on(mapEl, 'contextmenu', e => e.preventDefault());
+      on(mapEl, 'pointerdown', e => { if (CS.mouse && e.pointerType === 'mouse' && e.button === 0 && !e.shiftKey) return; pts.set(e.pointerId, [e.clientX, e.clientY]); mapEl.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, d: pts.size === 2 ? Math.hypot(...[...pts.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]])) : 0 }; });
+      on(mapEl, 'pointermove', e => { if (!drag || !pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+        if (pts.size === 2) { const d = Math.hypot(...[...pts.values()].reduce((a, b) => [a[0] - b[0], a[1] - b[1]])); if (drag.d) orb.zoom = clamp(orb.zoom * drag.d / d, .35, 4); drag.d = d; return; }
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+        const lim = cockpit() || CAMS[camI][0] === 'Wing' ? [150, 60] : [180, 70];
+        orb.yaw = clamp(orb.yaw + dx * .3, -lim[0], lim[0]); if (Math.abs(orb.yaw) >= 180) orb.yaw = 0; orb.pitch = clamp(orb.pitch + dy * .25, -lim[1], lim[1]); });
+      const up = e => { pts.delete(e.pointerId); if (!pts.size) drag = null; };
+      on(mapEl, 'pointerup', up); on(mapEl, 'pointercancel', up);
+      on(mapEl, 'wheel', e => { e.preventDefault(); orb.zoom = clamp(orb.zoom * (e.deltaY > 0 ? 1.12 : 1 / 1.12), .35, 4); }, { passive: false });
+      on(mapEl, 'dblclick', () => { orb.yaw = orb.pitch = 0; orb.zoom = 1; }); }
     $('[data-sixb]').onclick = () => setSix(!showSix);
     function toggleMute() { const m = !store.get('mute', false); store.set('mute', m); audio.mute(m); $('[data-mute]').classList.toggle('off', m); }
     function togglePause(force) { paused = force ?? !paused; audio.pause(paused); const d = paused ? 'M8 5l11 7-11 7z' : 'M8 5v14M16 5v14'; $$('[data-pp],[data-pp2]').forEach(p => p.setAttribute('d', d)); root.classList.toggle('is-paused', paused); }
@@ -1042,12 +1251,12 @@ window.BoploSim = (() => {
     const rateBtns = () => $$('[data-rate]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rate === rate)));
     $$('[data-rate]').forEach(b => b.onclick = () => { rate = +b.dataset.rate; store.set('rate', rate); rateBtns(); }); rateBtns();
     H.scrub.oninput = () => { const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flownPts.length = 0; flownLine.positions = []; };
-    $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd} kt` : 'Calm'].filter(Boolean).join(' · ');
+    $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd}${gustKt ? 'G' + gustKt : ''} kt` : 'Calm', ...cloudLayers.map(c => `${c.cover}${String(Math.round(c.base / 100)).padStart(3, '0')}`), visM < 9999 ? `Vis ${(visM / 1000).toFixed(visM < 5000 ? 1 : 0)} km` : ''].filter(Boolean).join(' · ');
 
     /* ---- ready card ---- */
     const ctrlHelp = coarse
       ? `<li><b>Stick</b> bottom left: pull back to raise the nose, push to lower it, sideways to bank. <b>Rudder</b> slider underneath.</li><li><b>Power</b> slider on the right; <b>Flaps</b>, <b>Trim</b>, <b>Brake</b> and <b>Park</b> buttons beside it. Or turn on <b>Tilt to steer</b>.</li>`
-      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>Space</b> pause · <b>M</b> sound</li><li>A gamepad works too: sticks fly, triggers set power, bumpers set flaps, the D-pad trims and A brakes.</li>`;
+      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round((cruise - geoN) / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
@@ -1113,7 +1322,7 @@ window.BoploSim = (() => {
       hudT += real; if (hudT > .05) { hudT = 0; hud(); }
     }
     raf = requestAnimationFrame(loop);
-    if (store.get('debug', false)) window.__boploSim = { viewer, st, C, tileset, model, path };
+    if (store.get("debug", false)) window.__boploSim = { viewer, st, C, tileset, model, path, FM, rwAt, elevAt, AP, key: k => { keys.add(k); }, unkey: k => keys.delete(k) };
     return { close: destroy };
   }
 
