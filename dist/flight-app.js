@@ -199,6 +199,45 @@
   const R = window.BOPLO_RULES;
   const REGIME_ORDER = ['uk', 'easa', 'faa', 'tc', 'casa', 'nz', 'icao'];
   const countryCodeOf = p => p.countryCode || R.codeForName(p.country);
+  // Airfield search boxes: our own suggestion list instead of the browser's datalist popup, which is unreliable
+  // (Safari, the desktop app's web view, long lists). Any <input list="..."> becomes one when focused.
+  (() => {
+    let box = null, cur = null, items = [], hi = -1;
+    const norm = t => String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const opts = inp => { const dl = inp.dataset.combo && document.getElementById(inp.dataset.combo); return dl ? [...dl.options].filter(o => o.value).map(o => { const lab = (o.label && o.label !== o.value ? o.label : o.textContent || '').trim(), [c, ...rest] = o.value.split(' · '); return { v: o.value, c, t: lab || rest.join(' · '), n: norm(o.value + ' ' + lab) }; }) : []; };
+    const close = () => { if (box) box.hidden = true; cur = null; hi = -1; };
+    const place = inp => {
+      if (!box) return; const host = inp.closest('dialog') || document.body; if (box.parentNode !== host) host.append(box);
+      const r = inp.getBoundingClientRect(), below = innerHeight - r.bottom, up = below < 200 && r.top > below, w = Math.min(innerWidth - 16, Math.max(r.width, 280));
+      box.style.width = w + 'px'; box.style.maxHeight = Math.max(140, Math.min(320, (up ? r.top : below) - 14)) + 'px'; box.style.left = '0px'; box.style.top = '0px';
+      // a transformed sheet makes position:fixed relative to it, so measure where (0,0) lands and correct
+      const o = box.getBoundingClientRect(), h = o.height, L = Math.max(8, Math.min(r.left, innerWidth - w - 8)), T = up ? r.top - 4 - h : r.bottom + 4;
+      box.style.left = (L - o.left) + 'px'; box.style.top = (T - o.top) + 'px';
+    };
+    const paintHi = () => { box.querySelectorAll('[data-i]').forEach(b => b.classList.toggle('on', +b.dataset.i === hi)); box.querySelector('.on')?.scrollIntoView({ block: 'nearest' }); };
+    function render(inp) {
+      const q = norm(inp.value.trim().split(' · ')[0]), all = opts(inp), first = [], rest = [];
+      for (const o of all) { if (!q || norm(o.c).startsWith(q)) first.push(o); else if (o.n.includes(q)) rest.push(o); if (first.length >= 60) break; }
+      items = [...first, ...rest].slice(0, 60);
+      if (!box) { box = document.createElement('div'); box.className = 'combo-list'; box.setAttribute('role', 'listbox'); document.body.append(box); box.addEventListener('pointerdown', e => { const b = e.target.closest('[data-i]'); if (!b) return; e.preventDefault(); pick(items[+b.dataset.i]); }); }
+      if (!items.length) { box.hidden = false; box.innerHTML = `<p class="combo-none">${all.length ? 'No airfield matches that.' : 'Loading airfields…'}</p>`; place(inp); return; }
+      box.hidden = false; hi = q ? 0 : -1;
+      box.innerHTML = items.map((o, i) => `<button type="button" role="option" tabindex="-1" data-i="${i}"><b>${esc(o.c)}</b><span>${esc(o.t)}</span></button>`).join('');
+      paintHi(); place(inp);
+    }
+    function pick(o) { const inp = cur; close(); if (!inp || !o) return; inp.value = o.v; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); }
+    document.addEventListener('focusin', e => { const inp = e.target; if (!(inp instanceof HTMLInputElement)) return; if (inp.hasAttribute('list')) { inp.dataset.combo = inp.getAttribute('list'); inp.removeAttribute('list'); inp.setAttribute('autocomplete', 'off'); } if (!inp.dataset.combo) return; cur = inp; render(inp); });
+    document.addEventListener('input', e => { if (e.isTrusted && e.target === cur) render(cur); });
+    document.addEventListener('click', e => { if (e.target === cur && box?.hidden) render(cur); });
+    document.addEventListener('keydown', e => {
+      if (!box || box.hidden || e.target !== cur) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); hi = Math.max(0, Math.min(items.length - 1, hi + (e.key === 'ArrowDown' ? 1 : -1))); paintHi(); }
+      else if (e.key === 'Enter' && hi >= 0 && items[hi]) { e.preventDefault(); pick(items[hi]); }
+      else if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    }, true);
+    document.addEventListener('focusout', e => { if (e.target === cur) setTimeout(() => { if (cur && document.activeElement !== cur) close(); }, 120); });
+    addEventListener('scroll', () => { if (cur && box && !box.hidden) place(cur); }, true); addEventListener('resize', () => { if (cur) place(cur); });
+  })();
   const regimeOf = p => (p.regime && R.regimes[p.regime] ? p.regime : '') || R.legacyRegime(p.authority) || (countryCodeOf(p) ? R.regimeFor(countryCodeOf(p)) : 'uk');
   const licenceOf = p => { const r = regimeOf(p); return R.licence(r, p.licence) ? p.licence : R.licencesFor(r)[0].id; };
   const countrySelect = code => {

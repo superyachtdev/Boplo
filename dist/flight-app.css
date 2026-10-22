@@ -1025,3 +1025,11 @@ details.more .fields{padding:0 16px 16px}
 .pr-kind:hover{transform:translateY(-2px);border-color:var(--electric);box-shadow:0 10px 24px rgba(10,98,255,.1)}
 .pr-kind b{font-size:15px;font-weight:650}.pr-kind small{font-size:12.5px;color:var(--ink-3);line-height:1.35}
 @media (max-width:760px){.pr-row{grid-template-columns:1fr}.pr-kinds{grid-template-columns:1fr 1fr}}
+/* airfield search suggestions (replaces the browser datalist popup) */
+.combo-list{position:fixed;z-index:9999;overflow:auto;padding:6px;border-radius:14px;background:#fff;border:1px solid var(--hair-l);box-shadow:0 18px 50px rgba(5,11,31,.18);-webkit-overflow-scrolling:touch}
+.combo-list[hidden]{display:none}
+.combo-list button{display:flex;gap:10px;align-items:baseline;width:100%;padding:9px 10px;border:0;border-radius:10px;background:none;text-align:left;font:inherit;color:var(--ink);cursor:pointer}
+.combo-list button b{flex:none;min-width:64px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.combo-list button span{font-size:13.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo-list button:hover,.combo-list button.on{background:#EEF4FF}
+.combo-none{margin:0;padding:10px;font-size:13.5px;color:var(--ink-3)}
