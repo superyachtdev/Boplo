@@ -165,6 +165,14 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Lesson forecast: on the day before / day of a lesson, parseTAF() + lessonForecast() check the nearest TAF for the lesson window (lessonTime, or 09–17 local) against the Preflight personal minimums.
 - Lesson cancelled: scrubSheet() logs profile.scrubs (JSON) with the reason and an optional new date, then shows a grounded hour (sim exercise, theory subject, radio scenario, chair-fly) chosen from the lesson title.
 
+## Training coach, part 2 (2026-10-23, Claude)
+- Where you are (Progress): normalCheck() places total hours on the usual range for first solo (12–25 h) or the licence (1.4–1.8× the legal minimum).
+- Wins jar: flights have an optional `win` ("one thing that clicked"); winsTile() lists them on Progress, and on Overview after a rough-sounding debrief.
+- Funding runway (Budget): fundingRunway() turns budget left ÷ average lesson cost into lessons left and the hours that reaches.
+- Lesson day (Overview, on the day or the evening before): what to bring (ticks in localStorage), three reminders (recurring issue drill, last debrief, first question), Print my kneeboard (circuit diagram for the runway, speeds, frequencies, blanks for ATIS/QNH) and Chair-fly.
+- Guided chair-fly: chairflySheet() reads a 15-step circuit aloud with speechSynthesis and pauses for checks and calls (aircraft speeds from BoploPreflight, callsign from radioScenarios()).
+- Milestones: logging a flight that crosses a milestone (first solo, hours, landings, cross-country) opens a celebration with a share card.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

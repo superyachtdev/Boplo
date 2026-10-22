@@ -23,7 +23,7 @@ export function validateFlight(input) {
  f.minutes=number(input.minutes,1,1440,'duration in minutes');if(!Number.isInteger(f.minutes))fail(400,'Duration must be whole minutes.');
  f.role=text(input.role);if(!['dual','solo','pic'].includes(f.role))fail(400,'Choose a flight role.');
  f.landings=number(input.landings??0,0,100,'landing count');if(!Number.isInteger(f.landings))fail(400,'Landing count must be a whole number.');
- f.notes=text(input.notes,3000);f.nightLandings=number(input.nightLandings??0,0,100,'night landing count');if(!Number.isInteger(f.nightLandings))fail(400,'Night landings must be a whole number.');if(f.nightLandings>f.landings)fail(400,'Night landings can’t be more than total landings.');f.cost=input.cost===''||input.cost==null?null:number(input.cost,0,100000,'flight cost');
+ f.notes=text(input.notes,3000);f.win=text(input.win,200);f.nightLandings=number(input.nightLandings??0,0,100,'night landing count');if(!Number.isInteger(f.nightLandings))fail(400,'Night landings must be a whole number.');if(f.nightLandings>f.landings)fail(400,'Night landings can’t be more than total landings.');f.cost=input.cost===''||input.cost==null?null:number(input.cost,0,100000,'flight cost');
  f.points=[];
  if(input.points!=null&&!Array.isArray(input.points))fail(400,'Route coordinates must be a list.');
  if(input.points?.length>2000)fail(400,'Use at most 2,000 track points.');

@@ -521,7 +521,7 @@
     const T = window.BoploPreflight?.TYPES?.[pfType(p)], sp = T?.speeds || {}, d = rustDone(), r = recurringIssues();
     const last = sorted()[0], fix = String(last?.notes || '').split(/\n|(?<=[.!?])\s+/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(s => s && BAD_CUE.test(s)).slice(0, 3);
     const steps = [
-      ['chair', 'Chair-fly one circuit out loud', `<details class="coach-script"><summary>The script</summary><p>Lined up: checks complete, full power, keep straight on the centreline${sp.vr ? `, rotate at ${sp.vr} kt` : ''}, climb${sp.vy ? ` at ${sp.vy} kt` : ''}. At 500 ft: checks, turn crosswind. At circuit height: level off, power, trim, turn downwind and make your call. Abeam the threshold: before-landing checks. Base: power back, flap, start down. Final: on the line${sp.vref ? `, ${sp.vref} kt` : ''}, aim point fixed, landing flap. Flare: eyes to the far end, hold off, let it settle.</p></details>`],
+      ['chair', 'Chair-fly one circuit out loud', `<button type="button" class="btn btn-line btn-sm" data-chairfly>Talk me round it</button><details class="coach-script"><summary>The script</summary><p>Lined up: checks complete, full power, keep straight on the centreline${sp.vr ? `, rotate at ${sp.vr} kt` : ''}, climb${sp.vy ? ` at ${sp.vy} kt` : ''}. At 500 ft: checks, turn crosswind. At circuit height: level off, power, trim, turn downwind and make your call. Abeam the threshold: before-landing checks. Base: power back, flap, start down. Final: on the line${sp.vref ? `, ${sp.vref} kt` : ''}, aim point fixed, landing flap. Flare: eyes to the far end, hold off, let it settle.</p></details>`],
       ['sim', `Fly a short final${homeCode() ? ` at ${homeCode()}` : ''} in the simulator`, simBtn({ kind: 'short', weather: 'clear' }, 'Open the sim')],
       ['debrief', 'Re-read your last debrief', fix.length ? `<ul class="coach-mini">${fix.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : `<a class="link" href="#logbook">Open your last flight</a>`],
       ...(r.list[0] ? [['drill', `Run one drill for ${r.list[0].I.title.toLowerCase()}`, `<p class="coach-mini">${esc(r.list[0].I.drills[0])}</p>`]] : [])
@@ -632,7 +632,7 @@
       P.sim ? ['sim', P.simT, '20 min', simBtn(P.sim, 'Open the sim')] : ['nav', 'Re-plan the route in the Nav log and mark a feature every 5 minutes', '20 min', '<a class="btn btn-line btn-sm" href="#navlog">Open the Nav log</a>'],
       ['study', `Theory: ${subj ? subj.name : 'today’s review'}`, '15 min', `<button type="button" class="btn btn-line btn-sm" data-costudy="${esc(P.study)}">Start</button>`],
       ['radio', 'Radio: say the calls for this lesson out loud', '10 min', `<button type="button" class="btn btn-line btn-sm" data-coradio="${esc(P.radio)}">Practise</button>`],
-      ['chair', 'Chair-fly the lesson from start to finish', '10 min', '']
+      ['chair', 'Chair-fly the lesson from start to finish', '10 min', '<button type="button" class="btn btn-line btn-sm" data-chairfly>Talk me round it</button>']
     ];
   }
   function scrubSheet() {
@@ -656,8 +656,164 @@
       sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { sheet.close(); render(); });
       sheet.querySelectorAll('[data-cosim]').forEach(b => b.onclick = () => { sheet.close(); const [kind, wx, radio] = b.dataset.cosim.split('|'); if (!homeCode()) { toast('Set your home airfield in your profile first.'); return; } if (radio === '1') ui.sim.radio = true; openPractice(homeCode(), '', kind, { weather: wx || undefined }); });
       sheet.querySelectorAll('[data-costudy]').forEach(b => b.onclick = () => { sheet.close(); if (!isAdv()) return upgradeSheet('Theory practice is part of Advanced.'); location.hash = '#study'; setTimeout(() => startQuiz(b.dataset.costudy), 60); });
+      sheet.querySelectorAll('[data-chairfly]').forEach(b => b.onclick = () => { sheet.close(); setTimeout(chairflySheet, 50); });
       sheet.querySelectorAll('[data-coradio]').forEach(b => b.onclick = () => { sheet.close(); if (!isAdv()) return upgradeSheet('Radio practice is part of Advanced.'); location.hash = '#radio'; setTimeout(() => radioPage(b.dataset.coradio), 60); });
     };
+  }
+
+  /* ---- you're normal: where you are against how long students really take ---- */
+  // typical ranges: first solo 15–25 h (often 10–30), licence usually well above the legal minimum
+  function normalCheck() {
+    const p = state.profile, fl = state.flights, h = totalMin() / 60, faa = regimeOf(p) === 'faa', solo = fl.some(f => f.role === 'solo');
+    const lic = R.licence(regimeOf(p), p.licence), min = lic?.minHours || (faa ? 40 : 45), typ = [Math.round(min * 1.4), Math.round(min * 1.8)];
+    const stage = !solo ? { name: 'first solo', range: [12, 25], wide: [8, 35] } : { name: 'your licence', range: typ, wide: [min, Math.round(min * 2.2)] };
+    const max = Math.max(stage.wide[1], h * 1.1), pos = x => Math.min(100, x / max * 100);
+    let line;
+    if (!fl.length) line = 'Log a flight and Boplo shows where you are against how long students usually take.';
+    else if (h < stage.range[0]) line = `You’re at ${h.toFixed(1)} h. Most students reach ${stage.name} somewhere between ${stage.range[0]} and ${stage.range[1]} hours, so you’re right on track.`;
+    else if (h <= stage.range[1]) line = `You’re at ${h.toFixed(1)} h, right in the usual range for ${stage.name} (${stage.range[0]}–${stage.range[1]} h). This is where most students are.`;
+    else line = `You’re at ${h.toFixed(1)} h. Plenty of students take longer than ${stage.range[1]} hours to reach ${stage.name}: weather, gaps between lessons, aircraft and instructor changes all add hours. It isn’t a verdict on your ability.`;
+    return { h, stage, line, pos, max, min, solo };
+  }
+  function normalTile(cls = 'span-12') {
+    const n = normalCheck(); if (!state.flights.length) return '';
+    return `<section class="tile ${cls} nrm"><div class="tile-head"><h2>Where you are</h2><span class="chip">Toward ${esc(n.stage.name)}</span></div>
+      <div class="nrm-bar" role="img" aria-label="${esc(n.line)}"><span class="nrm-wide" style="left:${n.pos(n.stage.wide[0])}%;width:${n.pos(n.stage.wide[1]) - n.pos(n.stage.wide[0])}%"></span><span class="nrm-band" style="left:${n.pos(n.stage.range[0])}%;width:${n.pos(n.stage.range[1]) - n.pos(n.stage.range[0])}%"></span><i style="left:${n.pos(n.h)}%"><b>You</b></i></div>
+      <div class="nrm-scale"><span>0 h</span><span>Usual range ${n.stage.range[0]}–${n.stage.range[1]} h</span><span>${Math.round(n.max)} h</span></div>
+      <p>${esc(n.line)}</p>
+      <p class="footnote">Typical ranges from flight-training norms; ${n.solo ? `the legal minimum for your licence is ${n.min} h, and most students finish well above it` : 'first solo depends a lot on how often you fly'}. Every student and airfield is different.</p></section>`;
+  }
+
+  /* ---- wins jar: one good moment from each lesson, shown when a lesson went badly ---- */
+  const winsOf = () => sorted().filter(f => String(f.win || '').trim()).map(f => ({ t: f.win.trim(), d: f.date }));
+  const roughLesson = f => { if (!f) return false; const t = String(f.notes || ''); const bad = (t.match(/\b(frustrat|awful|terrible|bad lesson|rough|struggl|disappoint|gave up|useless|not getting|hopeless|worst|nervous|anxious)/gi) || []).length; return bad > 0 || (t.split(/\n|(?<=[.!?])\s+/).filter(s => BAD_CUE.test(s)).length >= 4 && !String(f.win || '').trim()); };
+  function winsTile(cls = 'span-12') {
+    const w = winsOf(), last = sorted()[0]; if (!w.length && !roughLesson(last)) return '';
+    const rough = roughLesson(last), show = w.filter(x => !last || x.d !== last.date || !rough).slice(0, rough ? 4 : 3);
+    return `<section class="tile ${cls} wins ${rough ? 'rough' : ''}"><div class="tile-head"><h2>${rough ? 'Tough lesson? Remember these' : 'Wins jar'}</h2><span class="chip">${w.length} saved</span></div>
+      ${rough ? '<p class="hint">Bad days are part of every pilot’s training. Here’s what you’ve already got right:</p>' : ''}
+      ${show.length ? `<ul class="wins-list">${show.map(x => `<li><span>“${esc(x.t)}”</span><small>${esc(fmtDate(x.d, { day: 'numeric', month: 'short' }))}</small></li>`).join('')}</ul>` : '<p class="hint">Add “one thing that clicked” when you log a flight, and your wins show up here on the harder days.</p>'}</section>`;
+  }
+
+  /* ---- funding runway: how many more lessons the budget covers, and where that gets you ---- */
+  function fundingRunway() {
+    const fc = forecast(), p = state.profile, fl = sorted().slice(0, 6);
+    if (!fc.budget || !fc.hasRates) return null;
+    const avgMin = fl.length ? fl.reduce((a, f) => a + f.minutes, 0) / fl.length : 60, perLesson = fc.perHour * avgMin / 60;
+    const left = fc.budget - fc.spent - fc.extrasPaid - fc.extrasDue; if (!(perLesson > 0)) return null;
+    const lessons = Math.max(0, Math.floor(left / perLesson)), hoursAt = totalMin() / 60 + lessons * avgMin / 60, n = normalCheck();
+    const reach = !n.solo && hoursAt >= n.stage.range[0] ? 'enough to get you to the usual first-solo range' : n.solo && hoursAt >= n.stage.range[0] ? 'enough to reach the usual range for finishing your licence' : hoursAt >= (n.min || 45) ? 'enough for the legal minimum hours, though most students need more' : '';
+    return { lessons, perLesson, avgMin, hoursAt, left, reach, fast: fc.fast };
+  }
+  function runwayTile(cls = 'span-12') {
+    const r = fundingRunway(); if (!r) return '';
+    return `<section class="tile ${cls} fund"><div class="tile-head"><h2>Funding runway</h2><span class="chip ${r.lessons <= 3 ? 'warn' : ''}">${r.lessons} lesson${r.lessons === 1 ? '' : 's'} left</span></div>
+      <p class="fund-big"><b>${r.lessons}</b> more lesson${r.lessons === 1 ? '' : 's'} of about ${Math.round(r.avgMin)} min at ${esc(money(r.perLesson))} each, taking you to about <b>${r.hoursAt.toFixed(0)} h</b>${r.reach ? `, ${r.reach}` : ''}.</p>
+      ${r.fast ? `<p class="hint">Booking lessons closer together is the cheapest way through: students flying twice a week usually need about ${r.fast.saveH} fewer hours${r.fast.save ? `, around ${esc(money(r.fast.save))} saved` : ''}. Block-book the next few if your school offers it.</p>` : '<p class="hint">You’re flying often enough to keep re-learning to a minimum. Keep it up.</p>'}</section>`;
+  }
+
+  /* ---- the morning of a lesson: what to bring, three things to remember, and a kneeboard ---- */
+  const BRING = faa => ['Headset', faa ? 'Student pilot certificate and photo ID' : 'Licence or student documents, and photo ID', 'Medical certificate', 'Logbook', 'Kneeboard, pen and a chart', 'Sunglasses and water', faa ? 'Your endorsements (if flying solo)' : 'Your instructor’s sign-off (if flying solo)'];
+  const remindersFor = () => {
+    const out = [], top = recurringIssues().list[0]; if (top) out.push(top.I.drills[0]);
+    const last = sorted()[0]; String(last?.notes || '').split(/\n|(?<=[.!?])\s+/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(s => s && BAD_CUE.test(s)).slice(0, 2).forEach(s => out.push(s));
+    const q = String(state.profile.questions || '').split('\n').map(s => s.trim()).filter(Boolean)[0]; if (q) out.push(`Ask: ${q}`);
+    return [...new Set(out)].slice(0, 3);
+  };
+  const bringKey = () => 'boplo-bring-' + (state.profile.lessonDate || '');
+  function lessonDayTile(cls = 'span-12') {
+    const p = state.profile, d = p.lessonDate ? daysUntil(p.lessonDate) : null, evening = new Date().getHours() >= 17;
+    if (!(d === 0 || (d === 1 && evening))) return '';
+    let got = {}; try { got = JSON.parse(localStorage.getItem(bringKey()) || '{}'); } catch { }
+    const rem = remindersFor(), bring = BRING(regimeOf(p) === 'faa');
+    return `<section class="tile dark ${cls} lday">${contours('a')}<div class="lday-in">
+      <div><span class="kicker">${d === 0 ? 'Lesson day' : 'Tomorrow'}${p.lessonTime ? ' · ' + esc(p.lessonTime) : ''}</span><h2 class="display">${esc(p.nextLesson || 'Your lesson')}</h2>
+        ${rem.length ? `<h3>Three things to remember</h3><ol class="lday-rem">${rem.map(t => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+        <div class="lday-acts"><button type="button" class="btn btn-light btn-has-spark" data-kneeboard>Print my kneeboard ${spark}</button><button type="button" class="btn btn-line-light" data-chairfly>Chair-fly the circuit</button></div></div>
+      <div class="lday-bring"><h3>Bring</h3>${bring.map((b, i) => `<label><input type="checkbox" data-bring="${i}" ${got[i] ? 'checked' : ''}><span>${esc(b)}</span></label>`).join('')}</div></div></section>`;
+  }
+  async function printKneeboard() {
+    const p = state.profile, code = homeCode(), af = code ? await anyAirfield(code) : null, P = window.BoploPreflight, T = P?.TYPES?.[pfType(p)], sp = T?.speeds || {};
+    const ends = af ? await runwayEnds(af).catch(() => []) : [], S = pfStore(), e = ends.find(x => x.id === S.cond?.rw) || ends[0];
+    const hdg = e ? Math.round(e.hdg) : 0, left = true, elev = af?.elev ?? null, faa = regimeOf(p) === 'faa', tpa = faa ? 1000 : 1000;
+    const freqs = (af?.freqs || []).slice(0, 6).map(f => `<tr><td>${esc(f[0])}</td><td>${esc(f[1] || '')}</td><td><b>${esc(String(f[2]))}</b></td></tr>`).join('');
+    // a circuit diagram drawn for the runway heading, left-hand unless the pilot's school says otherwise
+    const rot = hdg - 90, circuit = `<svg viewBox="-130 -130 260 260" width="240" height="240" style="border:1px solid #ccc;border-radius:8px"><text x="0" y="-116" text-anchor="middle" font-size="11" font-family="Arial">N ↑</text><g transform="rotate(${rot})">
+      <rect x="-45" y="-6" width="90" height="12" fill="#222"/><text x="-40" y="4" fill="#fff" font-size="9" font-family="Arial">${esc(e?.id || '')}</text>
+      <path d="M45 0 H85 V${left ? -70 : 70} H-85 V0 H-45" fill="none" stroke="#0A62FF" stroke-width="3"/>
+      <path d="M6 ${left ? -76 : 64} L-6 ${left ? -70 : 70} L6 ${left ? -64 : 76} Z" fill="#0A62FF"/><text x="0" y="${left ? -78 : 86}" text-anchor="middle" font-size="9" font-family="Arial" fill="#0A62FF">downwind</text></g></svg>
+      <p style="margin:6px 0 0;font-size:11px">Runway ${esc(e?.id || '—')} · ${left ? 'left' : 'right'}-hand · circuit ${tpa} ft above the field${elev != null ? ` (${elev + tpa} ft QNH)` : ''}</p>`;
+    const rem = remindersFor(), cs = radioScenarios();
+    printDoc('Kneeboard', `<h1>${esc(af?.name || code || 'Airfield')} ${code ? `(${esc(code)})` : ''}</h1><p class="meta">${esc(p.nextLesson || 'Lesson')} · ${esc(p.lessonDate ? fmtDate(p.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' }) : '')} · ${esc(T?.name || p.aircraft || '')} ${esc(p.registration || '')} · callsign ${esc(cs.cs)}</p>
+      <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap"><div>${circuit}</div>
+      <table style="width:auto;min-width:240px"><tbody><tr><th colspan="2">Speeds (check your POH)</th></tr><tr><td>Rotate</td><td>${sp.vr || '—'} kt</td></tr><tr><td>Best rate climb (Vy)</td><td>${sp.vy || '—'} kt</td></tr><tr><td>Approach</td><td>${sp.vref ? sp.vref + 5 : '—'} kt</td></tr><tr><td>Threshold</td><td>${sp.vref || '—'} kt</td></tr><tr><td>Field elevation</td><td>${elev != null ? elev + ' ft' : '—'}</td></tr><tr><td>Runway ${esc(e?.id || '')}</td><td>${e?.len ? Math.round(e.len) + ' m' : '—'}</td></tr></tbody></table></div>
+      ${freqs ? `<h3>Frequencies</h3><table><tbody>${freqs}</tbody></table>` : ''}
+      <h3>Weather</h3><table><tbody><tr><td style="width:25%">ATIS / info</td><td></td></tr><tr><td>Wind</td><td></td></tr><tr><td>QNH</td><td></td></tr><tr><td>Runway in use</td><td></td></tr></tbody></table>
+      ${rem.length ? `<h3>Remember</h3><ol>${rem.map(t => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+      <h3>Notes</h3><div style="height:120px;border:1px solid #999"></div>
+      <p class="small">Prepared with Boplo Flight. Circuit direction and heights vary by airfield: follow the published procedures and your instructor.</p>`);
+  }
+
+  /* ---- guided chair-fly: a spoken walk-through of the circuit, with pauses to say each call ---- */
+  function chairflyScript() {
+    const p = state.profile, faa = regimeOf(p) === 'faa', T = window.BoploPreflight?.TYPES?.[pfType(p)], sp = T?.speeds || { vr: 55, vy: 75, vref: 65 }, S = pfStore();
+    const rw = S.cond?.rw || '', rwT = rw ? rw.split('').map(c => /\d/.test(c) ? ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'][+c] : c === 'L' ? 'left' : c === 'R' ? 'right' : '').join(' ') : '', RW = rwT ? `runway ${rwT}` : 'the runway', place = String(p.airport || '').split('·')[1]?.trim().replace(/\s+(Airfield|Airport|Aerodrome)$/i, '') || 'the airfield', rs = radioScenarios();
+    const abbr = faa ? `${(p.aircraft || 'Cessna').split(/\s/)[0]} ${rs.cs.split(' ').slice(-3).join(' ')}` : rs.cs.split(' ').filter((_, i, a) => i === 0 || i >= a.length - 2).join(' ');
+    return [
+      { t: 'Holding point', say: `You’re at the holding point for ${RW}. Hands on the controls. Do your power checks and pre take-off checks now, out loud.`, wait: 14 },
+      { t: 'Ready call', say: 'Make your ready for departure call.', call: faa ? `${place} traffic, ${abbr}, departing ${RW}, remaining in the pattern, ${place}.` : `${abbr}, ready for departure.`, wait: 7 },
+      { t: 'Line up', say: `Line up on the centreline. Look along the runway. Final checks: lights, transponder, fuel pump.`, wait: 6 },
+      { t: 'Take-off roll', say: `Full power. Engine instruments in the green. Airspeed alive. Keep it straight with your feet.${sp.vr ? ` At ${sp.vr} knots, ease back and rotate.` : ''}`, wait: 7 },
+      { t: 'Climb', say: `Pitch for the climb attitude${sp.vy ? ` and ${sp.vy} knots` : ''}. Trim. Keep the ball in the middle.`, wait: 7 },
+      { t: '500 feet', say: 'At 500 feet: after take-off checks. Lookout left. Turn crosswind.', wait: 7 },
+      { t: 'Circuit height', say: 'Approaching circuit height: level off. Attitude, let the speed build, power back, trim.', wait: 7 },
+      { t: 'Downwind', say: 'Lookout, turn downwind. Check your spacing from the runway. Make your downwind call.', call: faa ? `${place} traffic, ${abbr}, left downwind ${RW}, full stop, ${place}.` : `${abbr}, downwind to land.`, wait: 8 },
+      { t: 'Downwind checks', say: `Before-landing checks now${faa ? ', GUMPS' : ', BUMPFH or FREDA, as your school teaches'}. Say each item.`, wait: 12 },
+      { t: 'Base', say: 'Abeam the end of the runway: power back, first stage of flap, start the descent. Lookout, turn base.', wait: 8 },
+      { t: 'Final turn', say: 'Lookout along the approach. Turn final. Line up with the centreline.', wait: 6 },
+      { t: 'Final call', say: 'Make your final call.', call: faa ? `${place} traffic, ${abbr}, final ${RW}, full stop, ${place}.` : `${abbr}, final.`, wait: 6 },
+      { t: 'Approach', say: `Landing flap.${sp.vref ? ` ${sp.vref + 5} knots, slowing to ${sp.vref} over the threshold.` : ''} Pick your aim point and keep it still in the windscreen. Power for the glidepath, attitude for the speed.`, wait: 9 },
+      { t: 'Flare', say: 'Over the threshold: power to idle. Eyes to the far end. Ease back, hold it off, let it settle. Keep it straight on the rollout.', wait: 9 },
+      { t: 'Vacate', say: 'Slow to walking pace, vacate the runway, stop. After-landing checks. Well done: that was one circuit.', wait: 4 }
+    ];
+  }
+  function chairflySheet() {
+    const steps = chairflyScript(), synth = window.speechSynthesis;
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Chair-fly a circuit</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p class="hint">Sit down, close your eyes if you like, and move your hands and feet as if you’re flying. Boplo talks you round and pauses for you to do each step and say the calls out loud. About four minutes.</p>
+        <ol class="cf-steps">${steps.map((s, i) => `<li data-cf="${i}"><b>${esc(s.t)}</b><span>${esc(s.say)}</span>${s.call ? `<em>Say: “${esc(s.call)}”</em>` : ''}</li>`).join('')}</ol></div>
+      <footer class="sheet-foot"><label class="sim-radio-opt" style="align-items:center"><input type="checkbox" data-cfvoice ${synth ? 'checked' : 'disabled'}> Read it out loud</label><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-cfstop>Stop</button><button type="button" class="btn btn-blue btn-has-spark" data-cfgo>Start ${spark}</button></div></footer>`;
+    let i = -1, timer = 0, run = false;
+    const stop = () => { run = false; clearTimeout(timer); try { synth?.cancel(); } catch { } sheet.querySelector('[data-cfgo]').innerHTML = `Start ${spark}`; };
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { stop(); sheet.close(); });
+    sheet.addEventListener('close', stop, { once: true });
+    const show = k => { sheet.querySelectorAll('[data-cf]').forEach(li => { li.classList.toggle('on', +li.dataset.cf === k); li.classList.toggle('done', +li.dataset.cf < k); }); sheet.querySelector(`[data-cf="${k}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+    const voiceOn = () => sheet.querySelector('[data-cfvoice]')?.checked && synth;
+    const next = () => {
+      if (!run) return; i++; if (i >= steps.length) { stop(); i = -1; toast('Circuit complete. Do it again tomorrow and it sticks.'); return; }
+      const s = steps[i]; show(i);
+      const after = () => { if (run) timer = setTimeout(next, s.wait * 1000); };
+      if (voiceOn()) { const u = new SpeechSynthesisUtterance(s.say); u.rate = 1; u.lang = regimeOf(state.profile) === 'faa' ? 'en-US' : 'en-GB'; let done = false; const fin = () => { if (!done) { done = true; after(); } }; u.onend = fin; u.onerror = fin; setTimeout(fin, 2000 + s.say.length * 80); synth.cancel(); synth.speak(u); }
+      else timer = setTimeout(next, (s.wait + s.say.length / 18) * 1000);
+    };
+    sheet.querySelector('[data-cfgo]').onclick = e => { if (run) { stop(); return; } run = true; e.currentTarget.textContent = 'Pause'; if (i >= steps.length - 1) i = -1; i = Math.max(-1, i - 1); next(); };
+    sheet.querySelector('[data-cfstop]').onclick = () => { stop(); i = -1; show(-1); };
+    sheet.showModal();
+  }
+
+  /* ---- milestone moments: celebrate the moment a logged flight crosses one ---- */
+  function celebrate(m) {
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">${esc(m.title)}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body celebrate"><div class="cel-burst" aria-hidden="true"><svg><use href="#spark"/></svg></div><p class="cel-big">${esc(m.big)}</p><p>${m.title === 'First solo' ? 'Your first solo. Every pilot remembers this one.' : m.title.includes('hours') ? `That’s ${esc(m.big)} hours in your logbook. Real progress.` : 'A moment worth marking.'}</p></div>
+      <footer class="sheet-foot"><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Later</button><button type="button" class="btn btn-blue btn-has-spark" data-celshare>Make a share card ${spark}</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close());
+    sheet.querySelector('[data-celshare]').onclick = () => { sheet.close(); setTimeout(() => shareCard(m), 50); };
+    sheet.showModal();
+  }
+  function wireCoach2(again) {
+    $$('[data-bring]').forEach(i => i.onchange = () => { let g = {}; try { g = JSON.parse(localStorage.getItem(bringKey()) || '{}'); } catch { } g[i.dataset.bring] = i.checked; try { localStorage.setItem(bringKey(), JSON.stringify(g)); } catch { } });
+    $$('[data-kneeboard]').forEach(b => b.onclick = printKneeboard);
+    $$('[data-chairfly]').forEach(b => b.onclick = chairflySheet);
   }
 
   function overview() {
@@ -671,7 +827,7 @@
     const hour = new Date().getHours(), greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
     shell('overview', { title: `${greet}, ${esc(firstName(p.name))}.`, sub: list.length ? `${list.length} flight${list.length === 1 ? '' : 's'} logged, ${hrs(totalMin())} hours recorded in total.` : 'Log your first flight and your desk starts filling in.' },
-      `<div class="grid">
+      `<div class="grid">${lessonDayTile()}
         <section class="tile dark next span-7" aria-labelledby="next-h">${contours('b')}
           <div class="tile-head"><h2 id="next-h">Up next</h2><span class="chip">${esc(when)}</span></div>
           <h3 class="display">${esc(p.nextLesson || 'Add your next lesson')}</h3>
@@ -700,7 +856,7 @@
           ${goal ? '' : '<p class="footnote">Set an hours goal in your profile to see progress here.</p>'}
         </section>
 
-        ${coachTiles()}
+        ${coachTiles()}${roughLesson(sorted()[0]) ? winsTile() : ''}
         <section class="stats span-12" aria-label="Totals">
           <div class="stat"><span>Total time</span><b>${hrs(totalMin())}<small>h</small></b><em>${p.openingMinutes ? `Includes ${hrs(p.openingMinutes)} h from before` : 'From your logged flights'}</em></div>
           <div class="stat"><span>Last 30 days</span><b>${hrs(sum(last30, f => f.minutes))}<small>h</small></b><em>${last30.length} flight${last30.length === 1 ? '' : 's'}</em></div>
@@ -728,7 +884,7 @@
           ${latest ? `<div class="mini-meta"><span><b>${esc(upper(latest.departure))} → ${esc(upper(latest.arrival))}</b> · ${esc(fmtDate(latest.date))}</span><span>${hm(latest.minutes)} · ${esc(roleName(latest.role))}</span></div>` : ''}
         </section>
       </div>`);
-    wireMomentum(); wireCoach(overview);
+    wireMomentum(); wireCoach(overview); wireCoach2(overview);
   }
 
   function logbook() {
@@ -904,6 +1060,7 @@
             ${input('Date', 'lessonDate', p.lessonDate, 'date')}
             ${input('Start time', 'lessonTime', p.lessonTime, 'time')}
             <div class="field cal-add"><span>Calendar</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-icsone ${p.lessonDate ? '' : 'disabled'}>Add this lesson to my calendar</button><button type="button" class="btn btn-line btn-sm" data-calsub>${p.calOn ? 'Calendar sync is on' : 'Sync with my calendar'}</button>${p.lessonDate ? '<button type="button" class="btn btn-line btn-sm" data-scrub>Lesson cancelled?</button>' : ''}</div></div>
+            <div class="field cal-add"><span>Before you fly</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-chairfly>Chair-fly the circuit</button><button type="button" class="btn btn-line btn-sm" data-kneeboard>Print my kneeboard</button></div></div>
           </div>
           <div class="group" style="margin-top:22px"><h3>Preparation checklist</h3>
             <div class="checklist" data-checks></div>
@@ -922,7 +1079,7 @@
         </section></div>
       </form>`);
     const form = $('[data-prep]'), box = $('[data-checks]'), nw = $('[data-new]');
-    wireCoach(prepare);
+    wireCoach(prepare); wireCoach2(prepare);
     const one = $('[data-icsone]'); if (one) one.onclick = () => { const v = Object.fromEntries(new FormData(form)); downloadICS(v.nextLesson, v.lessonDate || p.lessonDate, v.lessonTime, p.airport); };
     $('[data-calsub]').onclick = calendarSheet;
     const draw = () => {
@@ -1140,6 +1297,7 @@
             <div><dt>Budget lasts to</dt><dd>${fc.budget && fc.hasRates ? esc(monthYear(fc.runOut)) : '—'}</dd></div>
           </dl>
         </section>
+        ${runwayTile()}
         ${fc.short > 0 ? `<p class="callout warn span-12"><b>Heads up:</b> at your current pace, the money runs out before the licence does. Flying more often is the biggest lever: fewer hours are lost to re-learning between lessons.</p>` : ''}
         <section class="tile span-7"><div class="tile-head"><h2>Breakdown</h2><span class="chip">${esc(cur)}</span></div>
           <div class="airports fc-break">
@@ -1230,6 +1388,7 @@
     shell('progress', { title: 'Progress', sub: 'Track the syllabus you’ve covered, and share the moments worth celebrating.' },
       `<div class="grid">
         ${(() => { const rq = requirements(); return rq ? reqTile(rq) : ''; })()}
+        ${normalTile('span-8')}${winsTile('span-4') || '<div class="span-4"></div>'}
         <section class="tile span-8" aria-labelledby="syl-h">
           <div class="tile-head"><h2 id="syl-h">${esc(s.title)}</h2><span class="chip">${doneN} of ${s.items.length} done</span></div>
           <div class="syl-bar" role="img" aria-label="${pct}% of the syllabus done"><i style="width:${pct}%"></i></div>
@@ -2887,6 +3046,7 @@
         <div class="group"><h3>Lesson and debrief</h3><div class="fields">
           <label class="field full"><span>Lesson or exercise <i>(optional)</i></span><input name="lesson" value="${esc(f.lesson || (editing ? '' : p.nextLesson || ''))}" maxlength="100"></label>
           ${input('Debrief notes', 'notes', f.notes || '', 'textarea', 'placeholder="What went well, what to work on next time"', true)}
+          ${input('One thing that clicked today', 'win', f.win || '', 'text', 'maxlength="200" placeholder="e.g. My first properly held-off landing"', true)}
           <div class="debrief-tools full" style="grid-column:1/-1"><button type="button" class="btn btn-line btn-sm mic" data-mic><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg><span>Speak your debrief</span></button><button type="button" class="btn btn-ink btn-sm" data-tidy>Tidy with Boplo</button><span class="hint">Talk it through after the flight, then tidy it into notes.</span></div>
           <div class="full" style="grid-column:1/-1" data-tidied></div>
         </div></div>
@@ -2956,10 +3116,12 @@
           if (a && b && a.code !== b.code) { points.push({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }); kind = 'endpoints'; }
         }
         const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), nightLandings: Math.min(Number(v.nightLandings || 0), Number(v.landings || 0)), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
-        btn.disabled = true;
+        data.win = String(v.win || '').trim().slice(0, 200);
+        btn.disabled = true; const msBefore = new Set(milestones().map(m => m.title));
         const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
         sheet.close(); render(); toast(editing ? 'Flight updated.' : 'Flight saved.');
+        if (!editing) { const fresh = milestones().filter(m => !msBefore.has(m.title) && m.title !== 'First flight logged'); if (fresh.length) setTimeout(() => celebrate(fresh.sort((a, b) => (b.title === 'First solo') - (a.title === 'First solo'))[0]), 700); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; err.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }); }
     };
     const del = sheet.querySelector('[data-delete]');

@@ -1150,3 +1150,29 @@ details.more .fields{padding:0 16px 16px}
 .coach-pl{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border-radius:14px;background:var(--well)}
 .coach-min{font-size:12px;font-weight:700;color:var(--electric)}
 .link.light{color:rgba(222,233,255,.85);background:none;border:0;font:inherit;font-size:14px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* ===== coach 2: where you are, wins, funding runway, lesson day, chair-fly, celebrate ===== */
+.nrm-bar{position:relative;height:14px;border-radius:99px;background:var(--well);margin:28px 0 8px}
+.nrm-wide{position:absolute;top:0;bottom:0;background:rgba(10,98,255,.12);border-radius:99px}.nrm-band{position:absolute;top:0;bottom:0;background:rgba(10,98,255,.35);border-radius:99px}
+.nrm-bar i{position:absolute;top:-6px;width:4px;height:26px;margin-left:-2px;border-radius:2px;background:var(--ink)}.nrm-bar i b{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);font-style:normal;font-size:12px;font-weight:700;white-space:nowrap}
+.nrm-scale{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-bottom:12px}
+.wins-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}.wins-list li{display:grid;gap:2px;padding:10px 12px;border-radius:12px;background:rgba(28,140,94,.07);border-left:3px solid var(--ok)}
+.wins-list span{font-size:14.5px}.wins-list small{font-size:12px;color:var(--ink-3)}
+.wins.rough{border-color:rgba(28,140,94,.3)}
+.fund-big{font-size:16px;line-height:1.5;margin:0 0 8px}.fund-big>b:first-child{font-size:28px;margin-right:4px}
+.lday-in{position:relative;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px}
+.lday h2{margin:6px 0 12px}.lday h3{font-size:14px;margin:12px 0 8px;color:var(--ice,#9ED8FF);letter-spacing:.04em}
+.lday-rem{margin:0;padding-left:20px;display:grid;gap:6px;color:rgba(230,238,255,.9)}
+.lday-acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.btn-line-light{background:none;border:1px solid rgba(255,255,255,.3);color:#fff;height:44px;padding:0 16px;border-radius:999px;font:inherit;font-weight:600;cursor:pointer}
+.lday-bring{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:14px 16px;display:grid;gap:8px;align-content:start}
+.lday-bring label{display:flex;gap:10px;align-items:center;font-size:14px;color:rgba(230,238,255,.9);cursor:pointer}.lday-bring input{width:17px;height:17px;accent-color:#9ED8FF}
+.lday-bring input:checked+span{text-decoration:line-through;opacity:.6}
+.cf-steps{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px;counter-reset:cf}
+.cf-steps li{display:grid;gap:3px;padding:10px 12px 10px 40px;border-radius:12px;background:var(--well);position:relative;transition:background .2s,opacity .2s}
+.cf-steps li::before{counter-increment:cf;content:counter(cf);position:absolute;left:12px;top:10px;width:20px;height:20px;border-radius:50%;background:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;color:var(--ink-2)}
+.cf-steps li b{font-size:14px}.cf-steps li span{font-size:13.5px;color:var(--ink-2)}.cf-steps li em{font-size:13px;color:var(--electric);font-style:normal;font-weight:600}
+.cf-steps li.on{background:rgba(10,98,255,.1);box-shadow:inset 0 0 0 1.5px var(--electric)}.cf-steps li.on::before{background:var(--electric);color:#fff}.cf-steps li.done{opacity:.55}
+.celebrate{text-align:center;padding-top:10px}.cel-burst svg{width:64px;height:64px;fill:var(--electric);animation:cel 1.4s ease-out}
+.cel-big{font-size:56px;font-weight:800;font-style:italic;letter-spacing:-.03em;margin:4px 0}
+@keyframes cel{0%{transform:scale(.2) rotate(-90deg);opacity:0}60%{transform:scale(1.2) rotate(10deg);opacity:1}100%{transform:scale(1)}}
+@media (max-width:760px){.lday-in{grid-template-columns:1fr}}
