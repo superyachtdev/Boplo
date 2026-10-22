@@ -1300,7 +1300,7 @@ window.BoploSim = (() => {
     /* ---- end card ---- */
     let ended = false;
     // practice scoring: glidepath, speed and centreline on a final; centreline, lift-off and climb speed on a take-off
-    const sThr = arrE ? path.project(landPt[0], landPt[1]).s : 0;
+    const sThr = arrE ? (() => { let bi = 0, bd = Infinity; path.P.forEach((q, i) => { const d = Math.hypot(q[0] - landPt[0], q[1] - landPt[1]); if (d < bd) { bd = d; bi = i; } }); return path.S[bi]; })() : 0; // no project(): it moves the path's search cursor
     function scorePractice(pr) {
       const P0 = pscore, kt = st.v / KT;
       if (PRF) {
