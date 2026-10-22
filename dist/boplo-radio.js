@@ -1,4 +1,4 @@
-/* Boplo tower radio: an optional, never-ending ambient ATC frequency.
+/* Boplo ATC radio: an optional, never-ending busy airport frequency (approach or tower).
    Off until the visitor switches it on; the choice is remembered. Browsers only allow sound after a click or key
    press, so a remembered "on" resumes at the first interaction. Voices are the device's own text-to-speech; the radio
    texture (hiss, squelch, mic clicks) is made with Web Audio. It pauses in the simulator, on radio practice and when
@@ -13,47 +13,77 @@
   const PH = 'Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel India Juliett Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey X-ray Yankee Zulu'.split(' ');
   const NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'niner'];
   const say = s => String(s).split('').map(c => /\d/.test(c) ? NUM[+c] : /[A-Z]/.test(c) ? PH[c.charCodeAt(0) - 65] : '').filter(Boolean).join(' ');
+  // busy airports: approach and tower frequencies with airline traffic, controller-heavy and almost never quiet
   const FIELDS = [
-    { name: 'Popham', unit: 'Radio', freq: '129.805', rwys: ['26', '08'], style: 'uk' }, { name: 'Wycombe', unit: 'Tower', freq: '126.555', rwys: ['24', '06'], style: 'uk' },
-    { name: 'Valencia', unit: 'Tower', freq: '118.155', rwys: ['12', '30'], style: 'icao' }, { name: 'Cuatro Vientos', unit: 'Tower', freq: '118.700', rwys: ['28', '10'], style: 'icao' },
-    { name: 'Bournemouth', unit: 'Tower', freq: '125.605', rwys: ['26', '08'], style: 'uk' }, { name: 'Shoreham', unit: 'Tower', freq: '124.930', rwys: ['20', '02'], style: 'uk' },
-    { name: 'Palo Alto', unit: 'Tower', freq: '118.6', rwys: ['31', '13'], style: 'faa' }, { name: 'Centennial', unit: 'Tower', freq: '118.9', rwys: ['35R', '17L'], style: 'faa' }
+    { name: 'Heathrow', unit: 'Director', freq: '119.730', rwys: ['27L', '27R'], style: 'uk', twr: '118.505', holds: ['Lambourne', 'Biggin', 'Ockham', 'Bovingdon'], apt: 'Heathrow' },
+    { name: 'Heathrow', unit: 'Tower', freq: '118.505', rwys: ['27R', '27L'], style: 'uk', holds: [], apt: 'Heathrow' },
+    { name: 'Madrid', unit: 'Approach', freq: '127.100', rwys: ['32L', '32R'], style: 'icao', twr: '118.150', holds: ['Toledo', 'Rober', 'Sotos'], apt: 'Barajas' },
+    { name: 'Barcelona', unit: 'Approach', freq: '119.100', rwys: ['24R', '25R'], style: 'icao', twr: '118.100', holds: ['Sabadell', 'Castillejos', 'Vibim'], apt: 'Barcelona' },
+    { name: 'Gatwick', unit: 'Director', freq: '126.825', rwys: ['26L', '26R'], style: 'uk', twr: '124.230', holds: ['Willo', 'Timba'], apt: 'Gatwick' },
+    { name: 'SoCal', unit: 'Approach', freq: '124.300', rwys: ['24R', '25L'], style: 'faa', twr: '133.900', holds: ['Seavu', 'Riivr'], apt: 'LA' },
+    { name: 'Kennedy', unit: 'Tower', freq: '119.100', rwys: ['31R', '22L'], style: 'faa', holds: [], apt: 'Kennedy' },
+    { name: 'Schiphol', unit: 'Approach', freq: '121.200', rwys: ['18R', '06'], style: 'icao', twr: '118.280', holds: ['Artip', 'Sugol', 'River'], apt: 'Schiphol' }
   ];
-  // keep the same airfield for the whole visit, across pages
-  const F = (() => { try { const k = +sessionStorage.getItem('boplo-radio-field'); if (FIELDS[k]) return FIELDS[k]; const i = Math.floor(Math.random() * FIELDS.length); sessionStorage.setItem('boplo-radio-field', i); return FIELDS[i]; } catch { return rnd(FIELDS); } })(), faa = F.style === 'faa';
-  let rw = F.rwys[0], qnh = 1009 + Math.floor(Math.random() * 14), wdir = 0, wspd = 0;
-  const rwSay = r => r.split('').map(c => /\d/.test(c) ? NUM[+c] : c === 'L' ? 'left' : c === 'R' ? 'right' : '').join(' ');
-  const setWind = () => { const h = parseInt(rw, 10) * 10; wdir = ((h + Math.round(between(-40, 40) / 10) * 10) % 360 + 360) % 360 || 360; wspd = Math.round(between(4, 14)); };
+  // keep the same frequency for the whole visit, across pages
+  const F = (() => { try { const k = +sessionStorage.getItem('boplo-radio-field2'); if (FIELDS[k]) return FIELDS[k]; const i = Math.floor(Math.random() * FIELDS.length); sessionStorage.setItem('boplo-radio-field2', i); return FIELDS[i]; } catch { return rnd(FIELDS); } })(), faa = F.style === 'faa', tower = F.unit === 'Tower';
+  let rw = rnd(F.rwys), qnh = 1006 + Math.floor(Math.random() * 18), wdir = 0, wspd = 0;
+  const rwSay = r => r.split('').map(c => /\d/.test(c) ? NUM[+c] : c === 'L' ? 'left' : c === 'R' ? 'right' : c === 'C' ? 'centre' : '').join(' ');
+  const setWind = () => { const h = parseInt(rw, 10) * 10; wdir = ((h + Math.round(between(-30, 30) / 10) * 10) % 360 + 360) % 360 || 360; wspd = Math.round(between(5, 16)); };
   setWind();
-  const windSay = () => faa ? `wind ${say(String(wdir).padStart(3, '0'))} at ${wspd}` : `surface wind ${say(String(wdir).padStart(3, '0'))} degrees ${wspd} knots`;
-  const qnhSay = () => faa ? `altimeter ${say(String(Math.round(qnh * .02953 * 100)))}` : `QNH ${say(String(qnh))}`;
+  const digits = n => String(n).split('').map(c => NUM[+c] ?? c).join(' ');
+  const hdgSay = h => digits(String(h).padStart(3, '0'));
+  const freqSay = f => { const [a, b] = f.split('.'); return `${digits(a)} ${faa ? 'point' : 'decimal'} ${digits(b.replace(/0+$/, '') || '0')}`; };
+  const windSay = () => faa ? `wind ${hdgSay(wdir)} at ${wspd}` : `wind ${hdgSay(wdir)} degrees ${wspd} knots`;
+  const qnhSay = () => faa ? `altimeter ${digits(Math.round(qnh * .02953 * 100))}` : `QNH ${digits(qnh)}`;
   const station = `${F.name} ${F.unit}`;
-  const mkReg = () => faa ? 'N' + (100 + Math.floor(Math.random() * 899)) + rnd('ABCDEFGHJKLMNPRSTUVWXYZ'.split('')) + rnd('ABCDEFGHJKLMNPRSTUVWXYZ'.split('')) : (rnd(['G', 'G', 'G', 'EC', 'D', 'F', 'EI']) + '-' + Array.from({ length: 4 }, () => rnd('ABCDEFGHIJKLMNOPRSTUVWXYZ'.split(''))).join('')).slice(0, 6);
-  const TYPES = faa ? ['Cessna', 'Skyhawk', 'Cherokee', 'Archer', 'Cirrus', 'Diamond Star'] : ['PA-28', 'Cessna 152', 'Cessna 172', 'DA40', 'Tecnam', 'Robin'];
-  const traffic = () => { const r = mkReg(), t = rnd(TYPES), full = faa ? `${t} ${say(r.slice(1))}` : say(r.replace('-', '')), short = faa ? `${t.split(' ')[0]} ${say(r.slice(-3))}` : `${say(r[0])} ${say(r.slice(-2))}`; return { full, short, t }; };
-  const hp = rnd(['Alpha', 'Alpha One', 'Bravo', 'Charlie']);
-  const SCRIPTS = [
-    () => { const a = traffic(); return [['p', `${station}, ${a.full}, radio check, ${F.freq.split('.').map(say).join(' decimal ')}.`], ['c', `${a.short}, ${station}, readability five.`]]; },
-    () => { const a = traffic(); return [['p', `${station}, ${a.full}, ${a.t}, at the flying club, request taxi for circuits.`], ['c', `${a.short}, taxi holding point ${hp}, runway ${rwSay(rw)}, ${qnhSay()}.`], ['p', `Holding point ${hp}, runway ${rwSay(rw)}, ${qnhSay()}, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, ready for departure.`], ['c', `${a.short}, runway ${rwSay(rw)}, cleared for take-off, ${windSay()}.`], ['p', `Runway ${rwSay(rw)}, cleared for take-off, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, downwind to land.`], ['c', chance(.5) ? `${a.short}, number one.` : `${a.short}, number two, follow the ${rnd(TYPES)} on base.`], ['p', chance(.5) ? `${a.short}.` : `Traffic in sight, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, final.`], ['c', `${a.short}, runway ${rwSay(rw)}, cleared to land, ${windSay()}.`], ['p', `Cleared to land runway ${rwSay(rw)}, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, final, touch and go.`], ['c', `${a.short}, runway ${rwSay(rw)}, cleared touch and go, ${windSay()}.`], ['p', `Cleared touch and go, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, going around.`], ['c', `${a.short}, roger, report downwind.`], ['p', `Wilco, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${station}, ${a.full}, ${rnd(['five miles south', 'overhead the reservoir', 'ten miles north-west', 'at the town'])}, two thousand feet, inbound for landing, information ${rnd(PH)}.`], ['c', `${a.short}, join ${rnd(['left', 'right'])} hand downwind runway ${rwSay(rw)}, ${qnhSay()}, report downwind.`], ['p', `Join downwind runway ${rwSay(rw)}, ${qnhSay()}, wilco, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, final, full stop. First solo.`], ['c', `${a.short}, runway ${rwSay(rw)}, cleared to land, ${windSay()}. And congratulations.`], ['p', `Cleared to land, thank you, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['c', `${a.short}, traffic is a ${rnd(TYPES)} ${rnd(['one mile ahead', 'in your two o’clock, a mile and a half', 'on a long final'])}, same level.`], ['p', chance(.6) ? `Traffic in sight, ${a.short}.` : `Looking, ${a.short}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, request wind check.`], ['c', `${a.short}, ${windSay()}.`]]; },
-    () => { qnh += chance(.5) ? 1 : -1; return [['c', `All stations, ${station}, ${qnhSay()}.`]]; },
-    () => { const a = traffic(); return [['p', `${a.short}, vacated, taxiing to the club.`], ['c', `${a.short}, roger.`]]; },
-    () => { if (!chance(.25)) return null; rw = rw === F.rwys[0] ? F.rwys[1] : F.rwys[0]; setWind(); return [['c', `All stations, ${station}, runway in use is now ${rwSay(rw)}, ${windSay()}.`]]; }
+  const AIR = faa ? [['Delta', 2], ['United', 2], ['American', 2], ['Southwest', 2], ['JetBlue', 1], ['Alaska', 1], ['Spirit Wings', 1], ['FedEx', 1], ['Speedbird', 1], ['Lufthansa', 1], ['Virgin', 1], ['Cactus', 1]]
+    : [['Speedbird', 3], ['Shamrock', 2], ['Iberia', 2], ['Vueling', 2], ['Ryanair', 2], ['Easy', 2], ['Lufthansa', 1], ['KLM', 1], ['Air France', 1], ['Swiss', 1], ['Emirates', 1], ['Qatari', 1], ['Air Europa', 1], ['Wizz Air', 1], ['Air Portugal', 1], ['Brussels Wings', 1], ['Channex', 1], ['Virgin', 1]];
+  const AIRW = AIR.flatMap(([n, w]) => Array(w).fill(n));
+  const LET = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+  // airline callsigns: ICAO style says the digits one by one and often ends in letters; FAA style groups the numbers
+  const flight = () => {
+    const al = rnd(AIRW), n = 1 + Math.floor(Math.random() * (chance(.5) ? 99 : 4999)), alpha = !faa && chance(.45);
+    if (faa) { const s = String(n); const spoken = s.length === 4 ? `${+s.slice(0, 2)} ${s.slice(2) === '00' ? 'hundred' : s[2] === '0' ? 'zero ' + s[3] : +s.slice(2)}` : s.length === 3 ? `${s[0]} ${s[1] === '0' ? 'zero ' + s[2] : +s.slice(1)}` : s; return `${al} ${spoken}`; }
+    const tail = alpha ? ' ' + say(rnd(LET.split('')) + rnd(LET.split(''))) : '';
+    return `${al} ${digits(alpha ? n % 100 : n)}${tail}`;
+  };
+  const FL = () => { const fl = rnd([60, 70, 80, 90, 100, 110, 120, 130, 150, 170]); return faa ? (fl < 180 ? `${fl / 10 === Math.floor(fl / 10) ? digits(fl / 10).replace(/ /g, ' ') + ' thousand' : fl * 100}` : `flight level ${digits(fl)}`) : `flight level ${digits(String(fl).padStart(2, '0'))}`; };
+  const ALT = () => { const a = rnd([3000, 4000, 5000, 6000, 7000]); return faa ? `${digits(a / 1000)} thousand` : `altitude ${digits(a / 1000)} thousand feet`; };
+  const HDG = () => Math.round(between(1, 36)) * 10;
+  const SPD = () => rnd([160, 170, 180, 190, 200, 210, 220, 230, 250]);
+  const desc = faa ? 'descend and maintain' : 'descend';
+  const ctrlOnly = (cs, text) => [['c', `${cs}, ${text}.`]];
+  const rb = (cs, text) => [['p', `${text[0].toUpperCase() + text.slice(1)}, ${cs}.`]];
+  const SCRIPTS = tower ? [
+    () => { const a = flight(); return [['c', `${a}, ${windSay()}, runway ${rwSay(rw)}, cleared to land.`], ['p', `Cleared to land runway ${rwSay(rw)}, ${a}.`]]; },
+    () => { const a = flight(); return [['c', `${a}, runway ${rwSay(rw)}, line up and wait.`], ['p', `Line up and wait runway ${rwSay(rw)}, ${a}.`]]; },
+    () => { const a = flight(); return [['c', `${a}, runway ${rwSay(rw)}, ${windSay()}, cleared for take-off.`], ['p', `Cleared for take-off runway ${rwSay(rw)}, ${a}.`]]; },
+    () => { const a = flight(); return [['p', `${station}, ${a}, ${faa ? 'six mile final' : 'established localiser'} runway ${rwSay(rw)}.`], ['c', `${a}, ${station}, continue approach, number ${digits(Math.round(between(2, 4)))}, ${windSay()}.`], ['p', `Continue, ${a}.`]]; },
+    () => { const a = flight(), b = flight(); return [['c', `${a}, after the landing ${rnd(['Airbus', 'seven three seven', 'Embraer', 'seven eight seven'])} on short final, line up runway ${rwSay(rw)}, behind.`], ['p', `After the landing traffic, line up runway ${rwSay(rw)} behind, ${a}.`], ['c', `${b}, reduce to minimum approach speed, expect late landing clearance.`], ['p', `Minimum approach speed, ${b}.`]]; },
+    () => { const a = flight(), g = freqSay(rnd(['121.900', '121.700', '118.705'])); return [['c', `${a}, vacate ${rnd(['left', 'right'])} via ${rnd(['Alpha Bravo', 'November One', 'Kilo', 'Bravo Four'])}, contact ground ${g}.`], ...rb(a, g)]; },
+    () => { const a = flight(); return [['c', `${a}, go around, I say again, go around, ${faa ? 'fly runway heading, climb and maintain two thousand' : 'climb straight ahead altitude three thousand feet'}.`], ['p', `Going around, ${faa ? 'runway heading, two thousand' : 'straight ahead, three thousand feet'}, ${a}.`]]; },
+    () => { const a = flight(), d = freqSay(rnd(['125.800', '120.520', '124.475', '135.050'])); return [['c', `${a}, contact ${faa ? 'departure' : 'London Control'} ${d}, good day.`], ['p', `${d[0].toUpperCase() + d.slice(1)}, good day, ${a}.`]]; },
+    () => { const a = flight(), b = flight(); return [['c', `${a}, ${windSay()}, runway ${rwSay(rw)}, cleared to land.`], ['p', `Cleared to land, ${a}.`], ['c', `${b}, continue approach, ${windSay()}.`], ['p', `Continue, ${b}.`]]; }
+  ] : [
+    () => { const a = flight(), f = FL(); return [['c', `${a}, ${desc} ${f}.`], ...rb(a, `${desc[0].toUpperCase() + desc.slice(1)} ${f}`)]; },
+    () => { const a = flight(), h = HDG(), sp = SPD(); return [['c', `${a}, turn ${rnd(['left', 'right'])} heading ${hdgSay(h)}, reduce speed ${digits(sp)} knots.`], ...rb(a, `Heading ${hdgSay(h)}, speed ${digits(sp)}`)]; },
+    () => { const a = flight(), h = HDG(); return [['c', `${a}, turn ${rnd(['left', 'right'])} heading ${hdgSay(h)}, ${faa ? 'maintain three thousand until established, cleared ILS runway ' + rwSay(rw) + ' approach' : 'cleared ILS approach runway ' + rwSay(rw) + ', report established'}.`], ...rb(a, `Heading ${hdgSay(h)}, cleared ILS ${rwSay(rw)}`)]; },
+    () => { const a = flight(), f = F.twr; return [['c', `${a}, contact ${F.apt} Tower ${freqSay(f)}, ${rnd(['goodbye', 'good day', 'bye bye'])}.`], ...rb(a, `${freqSay(f)}`)]; },
+    () => { const a = flight(), f = FL(), al = ALT(); return [['p', `${station}, ${a}, ${f}, information ${rnd(PH)}.`], ['c', `${a}, ${station}, ${desc} ${al}, ${qnhSay()}, ${faa ? 'expect ILS runway ' + rwSay(rw) : 'vectors ILS runway ' + rwSay(rw)}.`], ...rb(a, `${desc[0].toUpperCase() + desc.slice(1)} ${al}, ${qnhSay()}`)]; },
+    () => { const a = flight(), b = flight(), c = flight(), s1 = SPD(), s2 = SPD(); return [['c', `${a}, reduce speed ${digits(s1)} knots.`], ...rb(a, `${digits(s1)} knots`), ...(() => { const al = ALT(); return [['c', `${b}, ${desc} ${al}.`], ...rb(b, `${desc} ${al}`)]; })(), ['c', `${c}, maintain ${digits(s2)} knots to four miles.`], ...rb(c, `${digits(s2)} to four miles`)]; },
+    () => { const a = flight(), h = F.holds.length ? rnd(F.holds) : 'the hold'; return [['c', `${a}, hold at ${h}, ${f2()}, expect onward clearance in ${digits(Math.round(between(5, 18)))} minutes.`], ...rb(a, `Hold at ${h}`)]; },
+    () => { const a = flight(), n = digits(Math.round(between(3, 9))); return [['c', `${a}, ${faa ? 'traffic twelve o’clock, five miles, a seven three seven same direction, report it in sight' : 'you are number ' + n + ' in traffic, expect vectors for spacing'}.`], ['p', faa ? `${rnd(['Looking', 'Traffic in sight'])}, ${a}.` : `Number ${n}, ${a}.`]]; },
+    () => { const a = flight(); return [['p', `${a}, established localiser ${rwSay(rw)}.`], ['c', `${a}, ${faa ? 'roger, contact Tower ' + freqSay(F.twr) : 'descend on the glidepath, contact Tower ' + freqSay(F.twr)}.`], ...rb(a, `Tower ${freqSay(F.twr)}`)]; },
+    () => { const a = flight(), al = ALT(); return [['c', `${a}, say again your callsign.`], ['p', `${a}.`], ['c', `${a}, thank you, ${desc} ${al}.`], ...rb(a, `${desc} ${al}`)]; },
+    () => { qnh += chance(.5) ? 1 : -1; return [['c', `All stations, ${station}, ${faa ? 'new altimeter ' + digits(Math.round(qnh * .02953 * 100)) : 'QNH now ' + digits(qnh)}.`]]; },
+    () => ctrlOnly(flight(), `${rnd(['expedite descent', 'no speed restriction', 'resume own navigation', 'fly direct ' + (F.holds.length ? rnd(F.holds) : 'the final approach fix')])}`)
   ];
-
+  function f2() { return faa ? 'as published, maintain one one thousand' : `${FL()}`; }
   /* ---------- sound: hiss, squelch and mic clicks from Web Audio, voices from speech synthesis ---------- */
   let ctx = null, hiss = null, squelch = null, voices = [], vC = null, vP = [];
   const pickVoices = () => {
     voices = synth ? synth.getVoices().filter(v => /^en(-|_|$)/i.test(v.lang)) : [];
-    const pref = faa ? /en-US/i : /en-GB|en-IE|en-AU/i, good = voices.filter(v => pref.test(v.lang)), pool = (good.length ? good : voices).sort((a, b) => (/(premium|enhanced|natural|neural|siri)/i.test(b.name) - /(premium|enhanced|natural|neural|siri)/i.test(a.name)));
+    const pref = faa ? /en-US/i : F.style === 'icao' ? /en-GB|en-IE|en-US|en-AU/i : /en-GB|en-IE|en-AU/i, good = voices.filter(v => pref.test(v.lang)), pool = (good.length ? good : voices).sort((a, b) => (/(premium|enhanced|natural|neural|siri)/i.test(b.name) - /(premium|enhanced|natural|neural|siri)/i.test(a.name)));
     vC = pool[0] || null; vP = voices.filter(v => v !== vC).sort(() => Math.random() - .5).slice(0, 4);
   };
   if (synth) { pickVoices(); synth.onvoiceschanged = pickVoices; }
@@ -83,7 +113,7 @@
     if (!synth) return done();
     const u = new SpeechSynthesisUtterance(text);
     const v = who === 'c' ? vC : vP[lineNo % Math.max(1, vP.length)] || vC; if (v) { u.voice = v; u.lang = v.lang; } else u.lang = faa ? 'en-US' : 'en-GB';
-    u.rate = who === 'c' ? 1.08 : between(1.02, 1.16); u.pitch = who === 'c' ? .95 : between(.85, 1.15); u.volume = .55;
+    u.rate = who === 'c' ? 1.22 : between(1.15, 1.32); u.pitch = who === 'c' ? .95 : between(.82, 1.18); u.volume = who === 'c' ? .6 : .45;
     let ended = false; const end = () => { if (ended) return; ended = true; key(false); setCaption(''); done(); };
     u.onend = end; u.onerror = end; setTimeout(end, 1800 + text.length * 85);
     key(true); setCaption((who === 'c' ? F.unit.toUpperCase() : 'PILOT') + ' · ' + text);
@@ -98,8 +128,8 @@
     const step = () => {
       if (!on) { playing = false; return; }
       if (blocked()) { synth?.cancel(); key(false); playing = false; timer = setTimeout(next, 1500); return; }
-      if (i >= s.length) { playing = false; timer = setTimeout(next, between(6000, 15000)); return; }
-      const [who, text] = s[i++]; speak(who, text, () => { timer = setTimeout(step, between(900, 2200)); });
+      if (i >= s.length) { playing = false; timer = setTimeout(next, chance(.15) ? between(2500, 5000) : between(350, 1400)); return; }
+      const [who, text] = s[i++]; speak(who, text, () => { timer = setTimeout(step, between(200, 650)); });
     };
     step();
   }
@@ -132,13 +162,13 @@
   @media print{.bradio{display:none}}`;
   document.head.append(css);
   const el = document.createElement('div'); el.className = 'bradio off'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Tower radio');
-  el.innerHTML = `<span class="cap" aria-live="off"></span><button type="button" aria-pressed="false" title="Ambient air traffic control radio"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg><span class="lbl">Tower radio</span><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></button>`;
+  el.innerHTML = `<span class="cap" aria-live="off"></span><button type="button" aria-pressed="false" title="Ambient air traffic control radio"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg><span class="lbl">ATC radio</span><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></button>`;
   const btn = el.querySelector('button'), lbl = el.querySelector('.lbl'), cap = el.querySelector('.cap');
   let waiting = false;
   function setCaption(t) { current = t; cap.textContent = t; cap.classList.toggle('show', !!t); el.classList.toggle('tx', !!t); }
   function paint() {
     el.classList.toggle('on', on); el.classList.toggle('off', !on && !waiting); btn.setAttribute('aria-pressed', String(on));
-    lbl.textContent = on ? (paused ? 'Radio paused' : `${F.name} ${F.unit} · ${F.freq}`) : waiting ? 'Tap anywhere for radio' : 'Tower radio';
+    lbl.textContent = on ? (paused ? 'Radio paused' : `${F.name} ${F.unit} · ${F.freq}`) : waiting ? 'Tap anywhere for radio' : 'ATC radio';
     btn.title = on ? 'Turn the tower radio off' : 'Ambient air traffic control radio: invented exchanges, voiced by your device';
   }
   btn.addEventListener('click', e => { e.stopPropagation(); if (on || waiting) { waiting = false; store.set('off'); stop(); } else { store.set('on'); start(); } });
