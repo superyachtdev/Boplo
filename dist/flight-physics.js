@@ -56,7 +56,7 @@
     function reset({ x = 0, z = 0, alt = 0, hdg = 0, airborne = false, speed = 0, pitch = 0 } = {}) {
       const h = hdg * D2R, th = pitch * D2R;
       s.F = norm([Math.sin(h) * Math.cos(th), Math.sin(th), Math.cos(h) * Math.cos(th)]); s.R = [Math.cos(h), 0, -Math.sin(h)]; s.U = norm(cross(s.F, s.R));
-      s.x = x; s.z = z; s.alt = alt; s.v = scale(s.F, speed); s.w = [0, 0, 0]; s.ground = !airborne; s.power = airborne ? .65 : 0; s.rpm = airborne ? 2300 : 0;
+      s.x = x; s.z = z; s.alt = alt; s.v = scale(s.F, airborne ? speed : 0); s.w = [0, 0, 0]; s.ground = !airborne; s.power = airborne ? .65 : 0; s.rpm = airborne ? 2300 : 0;
       s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
       if (p.tail && !airborne) tilt(opts.groundAtt || 11);
       Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, parking: !airborne && !!opts.parkingAtStart });

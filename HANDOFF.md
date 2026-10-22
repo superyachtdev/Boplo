@@ -116,6 +116,30 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - `flight-sim.js` picks the departure and arrival runway ends: into the wind when it's 5 kt or more, otherwise lined up with the route, preferring long paved runways. The route becomes threshold → runway → 1.8 km climb-out → route → (base entry if the turn onto final is over 65°) → 3 NM final → threshold → rollout. Short local flights fly a left-hand circuit off the real runway. Airfields with no published runway get a 550 m grass strip along the route.
 - Runways are drawn by us as textured meshes, painted in `runwayCanvas()` with ICAO threshold stripes, designators (with L/R/C), centreline, aiming point, touchdown zone and edge lines. Grass and dirt strips get edge markers. Heights are sampled from the scenery and the aircraft rides on the runway surface (`rwHeight`). If the scenery heights arrive late, the datum correction moves the runways too, and they are re-sampled.
 
+## Simulator aircraft (2026-10-22, Claude)
+- `dist/flight-aircraft.js` (`window.BoploAircraft`) builds nine training types as glTF binaries in code from short specs in metres: Cessna 152 and 172, Piper PA-28 Warrior, Diamond DA40 and DA20, Tecnam P2008, Robin DR400, Cirrus SR20 and Piper J-3 Cub. Specs cover high or low wing, struts, cranked tips, conventional or T-tail, tricycle or tailwheel, fairings, cabin or bubble canopy and a generic livery (no manufacturer marks).
+- `model(id)` turns book figures (stall, rotate, approach, cruise, top speed, climb) into the sim's thrust and drag. `flight-sim.js` uses them for lift-off, stall, approach speeds, autopilot targets and overspeed. The Cub sits nose-up on its tailwheel (`groundAtt`) and raises the tail during the take-off roll.
+- The Simulator page has an Aircraft picker (`ui.sim.ac`, kept in localStorage `boplo-sim-ac`), with rendered images (`dist/aircraft/<id>.webp`, regenerate with `scripts/aircraft-renders`: serve a folder with render.html + flight-aircraft.js, run render.mjs, then `python3 composite.py r dist/aircraft`). "Match my logbook" maps the flight's aircraft text with `match()` (for example "PA-28 Warrior" → pa28), falling back to the profile aircraft and then the C172.
+
+## Simulator flight model and controls (2026-10-22, Claude)
+- `dist/flight-physics.js` (`window.BoploPhysics`) is a rigid-body flight model:
+  - aerodynamics: lift from angle of attack with a real stall, induced and parasite drag, propeller thrust η·P/√(V²+V0²) with density lapse, pitch dynamics (the elevator commands angle of attack about the trimmed one), roll and yaw dynamics with weathervane and dihedral stability, adverse yaw, prop/torque yaw at high power and low speed, sideslip
+  - flaps and engine: flaps in each type's real notches (`DATA`), elevator trim, carb heat, optional auto-rudder
+  - ground: nosewheel or tailwheel steering, rolling friction by surface, brakes, parking brake; crash checks for hard landings, wing strikes, nosewheel-first landings and prop strikes
+- Calibration comes from mass, wing area, hp and book speeds. CLmax comes from Vs/Vso, and CD0 from the top speed at full power. `scripts/sim-physics-check.cjs` reports each type's lift-off, climb, top speed, clean and full-flap stall speeds and landing; stall speeds match the book within about 1 kt.
+- `BoploPhysics.pilot()` holds the autopilot control laws: take-off, initial climb, track/heading, VS-to-pitch with an integrator and auto-trim, auto-throttle, flaps, flare and rollout braking. `scripts/sim-autopilot-check.cjs` flies a full trip per type.
+- `flight-sim.js` maps the model to the existing HUD, scoring and replay. Autopilot modes: NAV (route, lateral and vertical, with auto-throttle), HDG, ALT and SPD holds with ± buttons.
+- Controls: W/S or arrows (elevator), A/D or arrows (ailerons), Q/E (rudder), R/F (throttle), V and Shift+V or ] [ (flaps), T/G (trim), B (brakes), Shift+B (parking brake), H (carb heat), U (auto-rudder), I (panel), C (camera), J (gates). Gamepad and touch (stick, rudder slider, flap, trim and brake buttons) are covered too.
+- Six-pack canvas (`drawSixPack`): ASI with the type's arcs (Vso–Vfe white, Vs–Vno green, Vno–Vne yellow, Vne red), AI, altimeter, turn coordinator with slip ball, HSI with heading bug, route course and deviation, VSI, plus an engine and systems column. Cockpit camera uses the eye point from `BoploAircraft.build().eye`.
+
+## Simulator graphics, weather and control settings (2026-10-22, Claude)
+- Aircraft GLBs (flight-aircraft.js) have separate ailL/ailR/flapL/flapR/elev/rud nodes with pivot/axis metadata; flight-sim.js placeAircraft rotates them from the control inputs (rate-limited). Beacon, nav, strobe and landing lights (L).
+- Runway lighting from buildRunwayLights(): edge lights, threshold/end lights, approach lights with a sequenced rabbit, and a 4-box PAPI (2.5–3.5°) coloured per frame from the eye angle.
+- O.time ('day' | 'golden' | 'night') tints the 3D tiles (customShader u_light) and scales lights. O.weather {clouds:[{cover,base ft AGL}], visM, gust, turb, windRel:{off,spd,gust}} drives fog, a CloudCollection ring around the aircraft, gusts and turbulence (windAt). The app's sim page has Weather (presets or Live METAR) and Time of day options.
+- Cameras: Chase, Cockpit, Wing, Tower (auto-placed beside the nearest runway, zooms on the aircraft), Wide, High. Drag to orbit/look, wheel or pinch to zoom, double-click resets.
+- Controls panel (K): sensitivity curve (expo), key rate, spring-to-centre, invert, auto-rudder, mouse yoke (Y), and joystick/yoke axis mapping with Detect, reverse and a throttle-lever axis. Saved in localStorage 'boplo-sim-ctl' style store key 'ctl'.
+- Takeoff "launch" fix: runways and the datum are never shifted while the aircraft is on them; far runways are resampled lazily when within 9 km.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.
