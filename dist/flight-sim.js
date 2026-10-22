@@ -546,9 +546,9 @@ window.BoploSim = (() => {
     const landPt = arrE ? add(arrE.T, arrE.dir, Math.max(arrE.disp, 0)) : P[P.length - 1];
     const last = landPt, sameEnd = !arrE && Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
     // runway surfaces: sample the ground along each runway (centre and both sides) so our runway sits on the scenery
-    const rwSt = rwys.map(rw => { const n = Math.max(2, Math.ceil(rw.len / 45) + 1), f = unit(rw.A, rw.B), l = leftOf(f), pts = []; for (let i = 0; i < n; i++) { const c = add(rw.A, f, rw.len * i / (n - 1)); pts.push(c, add(c, l, rw.wid * .4), add(c, l, -rw.wid * .4)); } return { rw, n, f, l, pts, h: [] }; });
-    const hs = await mostDetailed([P[0], sameEnd ? P[0] : last, ...rwSt.flatMap(r => r.pts)]);
-    const [h0, h1] = hs;
+    const rwSt = rwys.map(rw => { const n = Math.max(2, Math.ceil(rw.len / 80) + 1), f = unit(rw.A, rw.B), l = leftOf(f), pts = []; for (let i = 0; i < n; i++) { const c = add(rw.A, f, rw.len * i / (n - 1)); pts.push(c, add(c, l, rw.wid * .35), add(c, l, -rw.wid * .35)); } return { rw, n, f, l, pts, h: [] }; });
+    const [h0, h1] = await mostDetailed([P[0], sameEnd ? P[0] : last]);
+    const rwPts = rwSt.flatMap(r => r.pts), hs = [null, null, ...(rwPts.length ? await mostDetailed(rwPts) : [])];
     if (!alive) return { close: destroy };
     // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
     let geoN = 0;
@@ -557,17 +557,19 @@ window.BoploSim = (() => {
     let g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
     // if the detailed start height wasn't ready in time, fix the datum from the first real ground reading at the start
     let datumFixed = !(tileset && h0 == null);
-    // shape each runway: robust end heights, a straight slope between them, small local variation, never through the ground
-    { let k = 2; const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+    // shape each runway: robust end heights, a straight slope between them, small local variation
+    const shapeRunways = hs => { let k = 2, any = false; const med = a => { const v = a.filter(Number.isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
       for (const r of rwSt) {
         const raw = []; for (let i = 0; i < r.n; i++, k += 3) raw.push(med([hs[k], hs[k + 1], hs[k + 2]]));
-        const ok = raw.filter(Number.isFinite), fallback = ok.length ? med(ok) : g0;
+        const ok = raw.filter(Number.isFinite), fallback = ok.length ? med(ok) : g0 - .35; if (ok.length) any = true;
         const ha = med(raw.slice(0, 3)) ?? fallback, hb = med(raw.slice(-3)) ?? fallback;
         r.h = raw.map((v, i) => { const lin = ha + (hb - ha) * i / (r.n - 1); return Number.isFinite(v) ? lin + clamp(v - lin, -1.2, 1.2) : lin; });
         for (let i = 1; i < r.n - 1; i++) r.h[i] = (r.h[i - 1] + r.h[i] * 2 + r.h[i + 1]) / 4;
         r.h = r.h.map(v => v + .35);
       }
-    }
+      return any;
+    };
+    let rwSampled = shapeRunways(hs);
     const rwHeight = (x, z) => {
       for (const r of rwSt) {
         const dx = x - r.rw.A[0], dz = z - r.rw.A[1], u = dx * r.f[0] + dz * r.f[1], w = dx * r.l[0] + dz * r.l[1];
@@ -577,9 +579,12 @@ window.BoploSim = (() => {
       }
       return null;
     };
-    // draw them: a textured strip mesh with real markings, receiving shadows
-    for (const r of rwSt) {
+    // draw them: a textured strip mesh with real markings, receiving shadows. Rebuilt if the ground height is corrected later.
+    const rwImg = new Map();
+    function drawRunways() {
+     for (const r of rwSt) {
       try {
+        if (r.prim) { scene.primitives.remove(r.prim); const i = exclude.indexOf(r.prim); if (i >= 0) exclude.splice(i, 1); r.prim = null; }
         const n = r.n, pos = new Float64Array(n * 6), nor = new Float32Array(n * 6), sts = new Float32Array(n * 4), idx = new Uint16Array((n - 1) * 6);
         for (let i = 0; i < n; i++) {
           const c = add(r.rw.A, r.f, r.rw.len * i / (n - 1));
@@ -587,10 +592,13 @@ window.BoploSim = (() => {
           if (i < n - 1) idx.set([i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2], i * 6);
         }
         const geometry = new C.Geometry({ attributes: { position: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.DOUBLE, componentsPerAttribute: 3, values: pos }), normal: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 3, values: nor }), st: new C.GeometryAttribute({ componentDatatype: C.ComponentDatatype.FLOAT, componentsPerAttribute: 2, values: sts }) }, indices: idx, primitiveType: C.PrimitiveType.TRIANGLES, boundingSphere: C.BoundingSphere.fromVertices(pos) });
-        const prim = scene.primitives.add(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry }), appearance: new C.MaterialAppearance({ material: C.Material.fromType('Image', { image: runwayCanvas(r.rw).toDataURL('image/png') }), flat: true, faceForward: true, translucent: false, closed: false }), asynchronous: false, shadows: C.ShadowMode.RECEIVE_ONLY }));
-        exclude.push(prim);
+        const prim = scene.primitives.add(new C.Primitive({ geometryInstances: new C.GeometryInstance({ geometry }), appearance: new C.MaterialAppearance({ material: C.Material.fromType('Image', { image: rwImg.get(r.rw) || (rwImg.set(r.rw, runwayCanvas(r.rw).toDataURL('image/png')), rwImg.get(r.rw)) }), flat: true, faceForward: true, translucent: false, closed: false }), asynchronous: false, shadows: C.ShadowMode.RECEIVE_ONLY }));
+        exclude.push(prim); r.prim = prim;
       } catch (e) { console.warn('runway', e); }
+     }
     }
+    drawRunways();
+    const shiftRunways = d => { if (!rwSt.length || !d) return; rwSt.forEach(r => { r.h = r.h.map(v => v + d); }); drawRunways(); };
     if (rwSt.length) { const a = rwHeight(P[0][0], P[0][1]); if (a != null && depE) g0 = a; const b = rwHeight(landPt[0], landPt[1]); if (b != null && arrE) g1 = b; }
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
@@ -663,7 +671,9 @@ window.BoploSim = (() => {
       if (datumFixed) return; datumFixed = true;
       const shift = groundHere - g0; if (Math.abs(shift) < 2 || Math.abs(shift) > 150) return;
       if (O.fromElevFt != null) geoN = groundHere - O.fromElevFt * FT;
-      g0 += shift; g1 += shift; planCruise(); planGates(); if (!st.ground) st.alt += shift;
+      g0 += shift; g1 += shift; planCruise(); planGates(); st.alt += shift; st.gnd += shift; if (!rwSampled) shiftRunways(shift);
+      // and try again for proper runway heights now the scenery has loaded
+      if (!rwSampled && rwPts.length) mostDetailed(rwPts).then(v => { if (alive && shapeRunways([null, null, ...v])) { rwSampled = true; drawRunways(); } });
     }
 
     /* ---- aircraft state ---- */
@@ -781,7 +791,8 @@ window.BoploSim = (() => {
       st.thr += clamp(thrTarget - st.thr, -dt * .8, dt * .8);
       st.flaps += clamp(flapT - st.flaps, -dt * .25, dt * .25);
       let vk = st.v / KT;
-      const ge = rwHeight(st.x, st.z) ?? elevAt(st.x, st.z); if (ge != null) { st.gnd = ge; st.gk = true; if (!datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(ge); }
+      const gr = elevAt(st.x, st.z); if (gr != null && !datumFixed && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0));
+      const ge = rwHeight(st.x, st.z) ?? gr; if (ge != null) { st.gnd = ge; st.gk = true; }
       if (!st.ground) st.airT = (st.airT || 0) + dt;
       if (st.ground) {
         st.bank += (0 - st.bank) * Math.min(1, dt * 6);
