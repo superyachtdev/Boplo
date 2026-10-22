@@ -58,6 +58,7 @@
     ['ask', 'Ask Boplo', 'ask'],
     ['logbook', 'Logbook', 'logbook'],
     ['progress', 'Progress', 'progress'],
+    ['budget', 'Budget', 'budget'],
     ['study', 'Study', 'study'],
     ['prepare', 'Prepare', 'prepare'],
     ['navlog', 'Nav log', 'navlog'],
@@ -73,7 +74,7 @@
     ['overview', 'Overview', 'overview', ['overview'], 'Overview'],
     ['ask', 'Ask Boplo', 'ask', ['ask'], 'Ask'],
     ['logbook', 'Logbook', 'logbook', ['logbook', 'map', 'analytics'], 'Logbook'],
-    ['training', 'Training', 'study', ['progress', 'prepare', 'study', 'radio', 'currency'], 'Training'],
+    ['training', 'Training', 'study', ['progress', 'budget', 'study', 'prepare', 'radio', 'currency'], 'Training'],
     ['planning', 'Flight planning', 'navlog', ['navlog', 'weather'], 'Planning'],
     ['sim', 'Simulator', 'sim', ['sim'], 'Fly']
   ];
@@ -450,16 +451,9 @@
           <div class="stat"><span>Solo and PIC</span><b>${hrs(sum(state.flights.filter(f => f.role !== 'dual'), f => f.minutes))}<small>h</small></b><em>${hrs(sum(state.flights.filter(f => f.role === 'dual'), f => f.minutes))} h dual</em></div>
         </section>
 
-        ${(() => { const pc = pace(); const hasRates = Number(p.rateAircraft || 0) > 0 || pc.costedCount; return `<section class="tile span-7 pace" aria-labelledby="pace-h">
-          <div class="tile-head"><h2 id="pace-h">Your pace</h2><a class="link" href="#profile">${hasRates ? 'Edit rates' : 'Add your rates'}</a></div>
-          <div class="pace-grid">
-            <div><span>Flying lately</span><b>${pc.perWeek ? pc.perWeek.toFixed(1) : '0'}<small>h a week</small></b><em>Average over the last 8 weeks</em></div>
-            <div><span>Finish around</span><b>${pc.eta && pc.goal ? esc(pc.eta.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })) : '—'}</b><em>${!pc.goal ? 'Set an hours goal' : !pc.perWeek ? 'Log recent flights to forecast' : pc.remaining ? `${pc.remaining.toFixed(1)} h to go at this pace` : 'Hours goal reached'}</em></div>
-            <div><span>Spent so far</span><b>${hasRates ? esc(money(pc.spent)) : '—'}</b><em>${hasRates ? `About ${esc(money(pc.perHour))} per hour` : 'Add your aircraft and instructor rates'}</em></div>
-            <div><span>Projected total</span><b>${hasRates && pc.goal ? esc(money(pc.projected)) : '—'}</b><em>${hasRates && pc.goal ? `If you finish at ${pc.goal} h` : 'Needs rates and an hours goal'}</em></div>
-          </div>
-          <p class="footnote">An estimate from your own records. Most students need more than the minimum hours, and costs vary between schools.</p>
-        </section>`; })()}
+        ${momentumTile()}
+        ${(() => { const rq = requirements(); return rq ? reqTile(rq, { short: true, cls: 'span-7' }) : `<section class="tile span-7"><div class="tile-head"><h2>Licence checklist</h2></div><p class="hint">Choose a licence in your profile to see what it needs.</p></section>`; })()}
+        ${forecastTile()}
         <section class="tile span-5" aria-labelledby="studyt-h">
           ${(() => { const st = studyOf(p), last = (st._mocks || []).slice(-1)[0], pm = QB ? QB.passMark(regimeOf(p)) : 75, seen = QB ? QB.questions.filter(q => st[q.id]).length : 0; return `<div class="tile-head"><h2 id="studyt-h">Theory</h2><a class="link" href="#study">Study</a></div>
           ${last ? `<div class="study-last"><b class="${last.s >= pm ? 'pass' : 'fail'}">${last.s}%</b><span>Last mock exam · pass mark ${pm}%</span></div>` : `<p class="hint" style="margin-bottom:14px">${seen ? `${seen} questions practised so far.` : 'Practise theory between lessons in short sessions.'}</p>`}
@@ -477,6 +471,7 @@
           ${latest ? `<div class="mini-meta"><span><b>${esc(upper(latest.departure))} → ${esc(upper(latest.arrival))}</b> · ${esc(fmtDate(latest.date))}</span><span>${hm(latest.minutes)} · ${esc(roleName(latest.role))}</span></div>` : ''}
         </section>
       </div>`);
+    wireMomentum();
   }
 
   function logbook() {
@@ -728,6 +723,206 @@
     return { goal, total, perWeek, spent, perHour, remaining, weeks, eta, projected: spent + remaining * perHour, costedCount: costed.length };
   }
 
+  /* ================= licence requirements ================= */
+  const nmBetween = (a, b) => { const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r; const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2; return 2 * 3440.065 * Math.asin(Math.sqrt(h)); };
+  const trackNM = f => { const p = f.points || []; let d = 0; for (let i = 1; i < p.length; i++) d += nmBetween(p[i - 1], p[i]); return d; };
+  const isXC = f => upper(f.departure) && upper(f.arrival) && upper(f.departure) !== upper(f.arrival) || trackNM(f) > 25 && (f.points || []).some(pt => nmBetween(f.points[0], pt) > 12);
+  const reqKey = p => `${regimeOf(p)}|${licenceOf(p)}`;
+  function requirements() {
+    const p = state.profile, list = R.requirementsFor(regimeOf(p), licenceOf(p)); if (!list) return null;
+    const ticks = readJSON(p.reqs)[reqKey(p)] || {}, fl = state.flights, docs = docsOf(p);
+    const h = pred => sum(fl.filter(pred), f => f.minutes) / 60;
+    const items = list.map(q => {
+      const o = { ...q, auto: true, have: 0, unit: 'h' };
+      if (q.k === 'total') o.have = totalMin() / 60;
+      else if (q.k === 'dual') o.have = h(f => f.role === 'dual');
+      else if (q.k === 'solo') o.have = h(f => f.role === 'solo');
+      else if (q.k === 'soloxc') o.have = h(f => f.role === 'solo' && isXC(f));
+      else if (q.k === 'nightldg') { o.have = sum(fl, f => Number(f.nightLandings || 0)); o.unit = ''; }
+      else if (q.k === 'longxc') { const hit = [...fl].sort((a, b) => a.date.localeCompare(b.date)).find(f => f.role === 'solo' && trackNM(f) >= q.nm); o.id = 'longxc'; o.found = hit || null; o.auto = !!hit; o.done = !!hit || !!ticks.longxc; o.need = 1; o.have = o.done ? 1 : 0; o.unit = 'flight'; }
+      else { o.auto = false; o.done = !!ticks[q.id] || (q.id === 'medical' && !!docs.medical && docs.medical >= todayISO()); o.medAuto = q.id === 'medical' && !!docs.medical && docs.medical >= todayISO(); o.need = 1; o.have = o.done ? 1 : 0; o.unit = ''; }
+      if (o.done == null) o.done = o.have >= q.need;
+      o.pct = Math.max(0, Math.min(1, o.have / (o.need || 1)));
+      return o;
+    });
+    const open = items.filter(i => !i.done);
+    const next = open.filter(i => ['dual', 'solo', 'soloxc', 'nightldg', 'total'].includes(i.k)).sort((a, b) => b.pct - a.pct)[0] || open[0] || null;
+    const L = R.licence(regimeOf(p), licenceOf(p));
+    return { items, doneN: items.length - open.length, next, licence: L, ticks };
+  }
+  const reqAmount = i => i.unit === 'h' ? `${Math.min(i.have, i.need).toFixed(1)} of ${i.need} h` : i.k === 'nightldg' ? `${Math.min(i.have, i.need)} of ${i.need}` : i.done ? 'Done' : 'To do';
+  function reqRow(i, interactive = true) {
+    const tick = !i.auto && !i.medAuto && interactive;
+    return `<div class="req ${i.done ? 'done' : ''}">
+      <span class="req-ic" aria-hidden="true">${i.done ? '<svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</span>
+      <div class="req-main"><div class="req-top"><b>${esc(i.label)}</b><span>${esc(reqAmount(i))}</span></div>
+        ${i.unit === 'h' || i.k === 'nightldg' ? `<div class="bar-track"><i style="width:${(i.pct * 100).toFixed(1)}%;background:${i.done ? 'var(--ok)' : 'var(--electric)'}"></i></div>` : ''}
+        ${i.found ? `<small>Found in your logbook: ${esc(fmtDate(i.found.date, { day: 'numeric', month: 'short', year: 'numeric' }))}, ${esc(upper(i.found.departure))} → ${esc(upper(i.found.arrival))}, ${Math.round(trackNM(i.found))} NM tracked. Check the landings count for your licence.</small>` : i.k === 'longxc' && !i.done ? '<small>Boplo spots this from a solo flight’s track. Without a track, tick it once your instructor confirms it.</small>' : i.medAuto ? '<small>From the medical expiry date in Currency.</small>' : i.note ? `<small>${esc(i.note)}</small>` : ''}
+      </div>
+      ${tick ? `<button type="button" class="btn btn-sm ${i.done ? 'btn-line' : 'btn-ink'}" data-reqtick="${esc(i.id)}">${i.done ? 'Undo' : 'Mark done'}</button>` : ''}
+    </div>`;
+  }
+  async function toggleReq(id) {
+    const p = state.profile, all = readJSON(p.reqs), k = reqKey(p), mine = all[k] || {};
+    if (mine[id]) delete mine[id]; else mine[id] = todayISO();
+    all[k] = mine; await saveProfile({ reqs: JSON.stringify(all) });
+  }
+  function reqTile(rq, opts = {}) {
+    const L = rq.licence;
+    return `<section class="tile ${opts.cls || 'span-12'}" aria-labelledby="req-h">
+      <div class="tile-head"><h2 id="req-h">${opts.short ? 'Licence checklist' : `What ${esc(L?.id || 'your licence')} needs`}</h2><span class="chip ${rq.doneN === rq.items.length ? 'ok' : ''}">${rq.doneN} of ${rq.items.length} done</span></div>
+      ${rq.next && opts.short ? `<p class="req-next"><span>Next milestone</span><b>${esc(rq.next.label)}</b>${rq.next.unit === 'h' ? ` <em>${(rq.next.need - rq.next.have).toFixed(1)} h to go</em>` : ''}</p>` : ''}
+      <div class="reqs">${(opts.short ? rq.items.filter(i => !i.done).slice(0, 4) : rq.items).map(i => reqRow(i, !opts.short)).join('')}</div>
+      ${opts.short ? `<a class="link" href="#progress">See the full checklist</a>` : `<p class="footnote">Worked out from your logbook: dual and solo time come from each flight’s role, and cross-country counts flights that land somewhere other than where they started. Hours from before Boplo count toward the total only. ${L?.url ? `<a class="link" href="${esc(L.url)}" target="_blank" rel="noopener">${esc(L.source)}</a>.` : ''} Your instructor and authority decide what counts.</p>`}
+    </section>`;
+  }
+
+  /* ================= cost forecast ================= */
+  const FREQ_PER_WEEK = { 'Twice a week': 2, 'Weekly': 1, 'Monthly': 0.25, 'Intensive course': 4 };
+  const budgetOf = p => { const b = readJSON(p.budget, {}); return { total: Number(b.total || 0), extras: Array.isArray(b.extras) ? b.extras : [] }; };
+  // completion factor over the published minimum, by how often you fly. Typical private pilots finish at about 1.8× the FAA minimum (DPE completion data, Pilot Institute survey); frequent flying finishes sooner.
+  const finishFactor = perWeek => perWeek >= 1.8 ? 1.4 : perWeek >= 0.9 ? 1.65 : 1.9;
+  function forecast(basis = ui.fcBasis || 'typical') {
+    const p = state.profile, L = R.licence(regimeOf(p), licenceOf(p)), min = L?.minHours || null, pc = pace();
+    const recent = inLast(56), flPerWeek = recent.length / 8;
+    const avgLen = state.flights.length ? sum(state.flights, f => f.minutes) / state.flights.length / 60 : 1.1;
+    const planned = FREQ_PER_WEEK[p.frequency] || 0;
+    const perWeekFl = flPerWeek || planned || 1, perWeekH = pc.perWeek || perWeekFl * avgLen;
+    const factor = finishFactor(perWeekFl);
+    const typical = min ? Math.round(min * factor) : null;
+    const target = basis === 'min' && min ? min : basis === 'goal' && pc.goal ? pc.goal : typical || pc.goal || null;
+    const b = budgetOf(p), extrasPaid = sum(b.extras.filter(x => x.paid), x => Number(x.amt || 0)), extrasDue = sum(b.extras.filter(x => !x.paid), x => Number(x.amt || 0));
+    const perHour = pc.perHour || 0, remainingH = target ? Math.max(0, target - pc.total) : null;
+    const remainingFly = remainingH != null ? remainingH * perHour : null;
+    const spentAll = pc.spent + extrasPaid;
+    const projected = remainingFly != null ? spentAll + remainingFly + extrasDue : null;
+    const weeks = remainingH != null && perWeekH > 0 ? remainingH / perWeekH : null;
+    const finish = weeks != null ? new Date(Date.now() + weeks * 7 * 86400000) : null;
+    const monthly = perWeekH * perHour * 4.345;
+    const left = b.total ? b.total - spentAll : null;
+    const runOut = left != null && monthly > 0 ? (left <= 0 ? new Date() : new Date(Date.now() + left / monthly * 30.44 * 86400000)) : null;
+    const short = b.total && projected != null ? projected - b.total : null;
+    const fast = min && perWeekFl < 1.8 ? { hours: Math.round(min * 1.4), save: (typical - Math.round(min * 1.4)) * perHour, saveH: typical - Math.round(min * 1.4) } : null;
+    return { min, typical, target, basis, factor, perWeekFl, perWeekH, measured: !!flPerWeek, planned, perHour, spent: pc.spent, extrasPaid, extrasDue, spentAll, remainingH, remainingFly, projected, finish, monthly, budget: b.total, left, runOut, short, fast, range: min ? [Math.round(min * 1.3), Math.round(min * 1.9)] : null, hasRates: perHour > 0, total: pc.total };
+  }
+  const monthYear = d => d ? d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—';
+  function forecastLine(fc) {
+    if (!fc.target) return 'Choose your licence in Profile to see a forecast.';
+    if (!fc.hasRates) return `Most students finish around ${fc.typical || fc.target} h. Add your aircraft and instructor rates to see the cost.`;
+    if (fc.budget && fc.short > 0) return `At this pace your budget runs out around ${monthYear(fc.runOut)}, about ${money(fc.short)} short of finishing.`;
+    if (fc.budget) return `Your budget covers it, with about ${money(-fc.short)} to spare.`;
+    return `About ${money(fc.projected)} in total, finishing around ${monthYear(fc.finish)}.`;
+  }
+  function forecastTile() {
+    const fc = forecast();
+    return `<section class="tile span-7 pace" aria-labelledby="pace-h">
+      <div class="tile-head"><h2 id="pace-h">Cost forecast</h2><a class="link" href="#budget">Open budget</a></div>
+      <div class="pace-grid">
+        <div><span>Likely to finish at</span><b>${fc.target ? `${fc.target}<small>h</small>` : '—'}</b><em>${fc.min ? `Minimum ${fc.min} h · at your pace` : 'Set your licence'}</em></div>
+        <div><span>Finish around</span><b>${esc(monthYear(fc.finish))}</b><em>${fc.remainingH != null ? `${fc.remainingH.toFixed(1)} h to go · ${fc.perWeekFl.toFixed(1)} flights a week` : '—'}</em></div>
+        <div><span>Spent so far</span><b>${fc.hasRates || fc.spentAll ? esc(money(fc.spentAll)) : '—'}</b><em>${fc.hasRates ? `About ${esc(money(fc.perHour))} per hour` : 'Add your rates'}</em></div>
+        <div><span>Projected total</span><b>${fc.projected != null && fc.hasRates ? esc(money(fc.projected)) : '—'}</b><em>${fc.budget ? `Budget ${esc(money(fc.budget))}` : 'Add a budget to track it'}</em></div>
+      </div>
+      <p class="fc-line ${fc.short > 0 ? 'warn' : ''}">${esc(forecastLine(fc))}</p>
+    </section>`;
+  }
+  const EXTRA_SUGG = () => regimeOf(state.profile) === 'faa' ? ['Medical exam', 'Knowledge test', 'Checkride examiner fee', 'Headset', 'Books and ground school', 'Landing and airport fees'] : ['Medical exam', 'Theory exams', 'Skill test and examiner fee', 'Radio (FRTOL) exam', 'Headset', 'Books and ground school', 'Licence issue fee', 'Landing fees'];
+  let budgetSave = null;
+  function budgetPage() {
+    const p = state.profile, fc = forecast(), b = budgetOf(p), cur = currencyOf(p);
+    const basisBtn = (k, t) => `<button type="button" data-basis="${k}" aria-pressed="${fc.basis === k}">${t}</button>`;
+    const month = {}; state.flights.forEach(f => { const c = costOf(f); if (c != null) { const k = f.date.slice(0, 7); month[k] = (month[k] || 0) + c; } });
+    const months = [...Array(6)].map((_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 5 + i); const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; return [k, month[k] || 0, d.toLocaleDateString('en-GB', { month: 'short' })]; });
+    const maxM = Math.max(1, ...months.map(m => m[1]));
+    shell('budget', { title: 'Budget', sub: 'What your licence is likely to cost, based on how students really finish, and whether your budget gets you there.' },
+      `<div class="grid">
+        <section class="tile dark span-12 fc-hero">${contours('a')}
+          <div class="fc-hero-main"><span class="kicker">Projected total</span><h2 class="display">${fc.projected != null && fc.hasRates ? esc(money(fc.projected)) : '—'}</h2><p>${esc(forecastLine(fc))}</p>
+            <div class="bill-toggle fc-basis" role="group" aria-label="Plan for">${basisBtn('typical', 'Typical at your pace')}${fc.min ? basisBtn('min', `Minimum ${fc.min} h`) : ''}${Number(p.goalHours) ? basisBtn('goal', `My goal ${Number(p.goalHours)} h`) : ''}</div></div>
+          <dl class="fc-facts">
+            <div><dt>Hours</dt><dd>${fc.target || '—'}${fc.target ? ' h' : ''}</dd></div>
+            <div><dt>Finish</dt><dd>${esc(monthYear(fc.finish))}</dd></div>
+            <div><dt>Monthly spend</dt><dd>${fc.hasRates ? esc(money(fc.monthly)) : '—'}</dd></div>
+            <div><dt>Budget lasts to</dt><dd>${fc.budget && fc.hasRates ? esc(monthYear(fc.runOut)) : '—'}</dd></div>
+          </dl>
+        </section>
+        ${fc.short > 0 ? `<p class="callout warn span-12"><b>Heads up:</b> at your current pace, the money runs out before the licence does. Flying more often is the biggest lever: fewer hours are lost to re-learning between lessons.</p>` : ''}
+        <section class="tile span-7"><div class="tile-head"><h2>Breakdown</h2><span class="chip">${esc(cur)}</span></div>
+          <div class="airports fc-break">
+            <div><span>Flying so far · ${state.flights.length} flight${state.flights.length === 1 ? '' : 's'}</span><b>${esc(money(fc.spent))}</b></div>
+            <div><span>Other costs paid</span><b>${esc(money(fc.extrasPaid))}</b></div>
+            <div><span>Flying still to do · ${fc.remainingH != null ? fc.remainingH.toFixed(1) : '—'} h × ${esc(money(fc.perHour))}</span><b>${fc.remainingFly != null ? esc(money(fc.remainingFly)) : '—'}</b></div>
+            <div><span>Other costs to come</span><b>${esc(money(fc.extrasDue))}</b></div>
+            <div class="fc-sum"><span>Total</span><b>${fc.projected != null ? esc(money(fc.projected)) : '—'}</b></div>
+          </div>
+          <form class="fc-form" data-fcform>
+            <label class="field"><span>Total budget</span><input name="total" inputmode="decimal" value="${b.total || ''}" placeholder="e.g. 12000"></label>
+            <label class="field"><span>Aircraft per hour</span><input name="rateAircraft" inputmode="decimal" value="${Number(p.rateAircraft) || ''}" placeholder="0"></label>
+            <label class="field"><span>Instructor per hour</span><input name="rateInstructor" inputmode="decimal" value="${Number(p.rateInstructor) || ''}" placeholder="0"></label>
+          </form>
+          <p class="footnote">Spending comes from each flight’s cost, or your rates when a flight has no cost entered.</p>
+        </section>
+        <section class="tile span-5"><div class="tile-head"><h2>Spent by month</h2></div>
+          <div class="fc-months">${months.map(([k, v, l]) => `<div title="${esc(money(v))}"><i style="height:${Math.max(2, v / maxM * 100)}%"></i><span>${esc(l)}</span></div>`).join('')}</div>
+          ${fc.fast ? `<div class="fc-lever"><b>Fly twice a week</b><p>Students who fly twice a week tend to finish nearer ${fc.fast.hours} h. For you that’s about ${fc.fast.saveH} fewer hours${fc.hasRates ? `, or ${esc(money(fc.fast.save))} saved` : ''}.</p></div>` : fc.min ? `<div class="fc-lever ok"><b>Good pace</b><p>You’re flying often enough to finish close to the best case, around ${Math.round(fc.min * 1.4)} h.</p></div>` : ''}
+        </section>
+        <section class="tile span-12"><div class="tile-head"><h2>Other costs</h2><button type="button" class="btn btn-line btn-sm" data-addx>Add a cost</button></div>
+          <div class="fc-extras" data-extras>${b.extras.length ? b.extras.map((x, i) => `<div class="fc-x" data-x="${i}"><input aria-label="Cost name" name="n" value="${esc(x.n || '')}" placeholder="What it’s for"><input aria-label="Amount" name="amt" inputmode="decimal" value="${x.amt || ''}" placeholder="Amount"><label class="fc-paid"><input type="checkbox" name="paid" ${x.paid ? 'checked' : ''}> Paid</label><button type="button" class="icon-btn" data-delx="${i}" aria-label="Remove">${ico('close')}</button></div>`).join('') : '<p class="hint">Exams, the medical, examiner fees and a headset add up. Add them so the total is honest.</p>'}</div>
+          <div class="fc-sugg">${EXTRA_SUGG().filter(n => !b.extras.some(x => x.n === n)).map(n => `<button type="button" class="chip" data-suggx="${esc(n)}">+ ${esc(n)}</button>`).join('')}</div>
+        </section>
+      </div>
+      <p class="footnote" style="margin-top:16px">How this works: published minimums are the floor, not the norm. Typical private pilots finish at about 1.8× the minimum, and those who fly twice a week finish nearer 1.4×. Boplo uses your recent pace (or the frequency in your profile) to pick a figure. It’s an estimate from your own records, not a quote.</p>`);
+    const save = (patch, rerender = true) => { clearTimeout(budgetSave); budgetSave = setTimeout(async () => { try { await saveProfile(patch()); if (rerender) { const y = scrollY, a = document.activeElement?.name; budgetPage(); scrollTo(0, y); } } catch (x) { toast(x.message); } }, 600); };
+    const num = v => { const n = Number(String(v).replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : 0; };
+    const extrasNow = () => $$('[data-x]').map(r => ({ n: r.querySelector('[name=n]').value.trim().slice(0, 60), amt: num(r.querySelector('[name=amt]').value), paid: r.querySelector('[name=paid]').checked }));
+    const writeBudget = extras => JSON.stringify({ total: num($('[data-fcform]').total.value), extras: extras.slice(0, 30) });
+    $('[data-fcform]').oninput = () => save(() => ({ budget: writeBudget(extrasNow()), rateAircraft: num($('[data-fcform]').rateAircraft.value), rateInstructor: num($('[data-fcform]').rateInstructor.value) }), false);
+    $('[data-fcform]').onchange = () => save(() => ({ budget: writeBudget(extrasNow()), rateAircraft: num($('[data-fcform]').rateAircraft.value), rateInstructor: num($('[data-fcform]').rateInstructor.value) }));
+    $('[data-extras]').onchange = () => save(() => ({ budget: writeBudget(extrasNow()) }));
+    $$('[data-delx]').forEach(x => x.onclick = () => { const e = extrasNow(); e.splice(Number(x.dataset.delx), 1); save(() => ({ budget: writeBudget(e) })); });
+    const add = n => { const e = extrasNow(); e.push({ n, amt: 0, paid: false }); clearTimeout(budgetSave); saveProfile({ budget: writeBudget(e) }).then(() => { budgetPage(); const rows = $$('[data-x]'); rows[rows.length - 1]?.querySelector(n ? '[name=amt]' : '[name=n]')?.focus(); }).catch(x => toast(x.message)); };
+    $('[data-addx]').onclick = () => add('');
+    $$('[data-suggx]').forEach(x => x.onclick = () => add(x.dataset.suggx));
+    $$('[data-basis]').forEach(x => x.onclick = () => { ui.fcBasis = x.dataset.basis; budgetPage(); });
+  }
+
+  /* ================= momentum ================= */
+  function momentum() {
+    const p = state.profile, fl = sorted(), last = fl[0]?.date || null, gap = last ? -daysUntil(last) : null;
+    const today = parseISO(todayISO()), weeks = [...Array(8)].map((_, i) => { const end = new Date(today - i * 7 * 86400000), start = new Date(end - 6 * 86400000); const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; return fl.filter(f => f.date >= iso(start) && f.date <= iso(end)).length; }).reverse();
+    let streak = 0; for (let i = weeks.length - 1; i >= 0 && weeks[i] > 0; i--) streak++;
+    const target = FREQ_PER_WEEK[p.frequency] || 2, lately = sum(weeks.slice(-4), x => x) / 4;
+    const level = gap == null ? 'none' : gap <= 7 ? 'good' : gap <= 20 ? 'book' : gap <= 59 ? 'fade' : gap <= 89 ? 'warn' : 'lapsed';
+    const msg = { none: 'Log your first flight and Boplo keeps an eye on your momentum.', good: lately >= target ? 'Great rhythm. Flying this often is how students finish in fewer hours.' : 'Nice and recent. Keep the next lesson close to stay sharp.', book: 'A good moment to book your next lesson, before skills start to slip.', fade: 'Skills fade fastest in the first few weeks off. Getting back up soon saves hours later.', warn: 'You’re getting close to 90 days. After that, passenger currency lapses and skills need rebuilding.', lapsed: 'It’s been over 90 days. Most students restart with a dual lesson to brush up, and that’s normal.' }[level];
+    return { last, gap, weeks, streak, target, lately, level, msg };
+  }
+  let installEvt = null;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $$('[data-install]').forEach(b => b.hidden = false); });
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function momentumTile() {
+    const m = momentum(), p = state.profile, max = Math.max(m.target, ...m.weeks, 1);
+    return `<section class="tile span-5 mo mo-${m.level}" aria-labelledby="mo-h">
+      <div class="tile-head"><h2 id="mo-h">Momentum</h2>${m.streak > 1 ? `<span class="chip ok">${m.streak}-week streak</span>` : ''}</div>
+      <div class="mo-big"><b>${m.gap == null ? '—' : m.gap}</b><span>${m.gap == null ? 'no flights yet' : m.gap === 1 ? 'day since your last flight' : 'days since your last flight'}</span></div>
+      <p class="mo-msg">${esc(m.msg)}</p>
+      <div class="mo-weeks" role="img" aria-label="Flights per week over the last 8 weeks: ${m.weeks.join(', ')}">${m.weeks.map((n, i) => `<div><i style="height:${n ? Math.max(14, n / max * 100) : 4}%" class="${n >= m.target ? 'hit' : ''}"></i><span>${i === 7 ? 'This wk' : ''}</span></div>`).join('')}<em style="bottom:${m.target / max * 100}%" title="Your target"></em></div>
+      <p class="footnote">${m.lately.toFixed(1)} flights a week lately · target ${m.target} (from your profile)</p>
+      <div class="mo-actions">
+        <label class="switch"><input type="checkbox" data-reminders ${p.reminders ? 'checked' : ''} ${preview ? 'disabled' : ''}><span></span>Email reminders</label>
+        ${standalone() ? '' : `<button type="button" class="btn btn-line btn-sm" data-install ${installEvt || iOS ? '' : 'hidden'}>Install the app</button>`}
+      </div>
+    </section>`;
+  }
+  function wireMomentum() {
+    const r = $('[data-reminders]'); if (r) r.onchange = async () => { try { await saveProfile({ reminders: r.checked }); toast(r.checked ? 'Reminders on. Boplo emails you when it’s been a while, and the day before a lesson.' : 'Reminders off.'); } catch (x) { r.checked = !r.checked; toast(x.message); } };
+    $$('[data-install]').forEach(b => b.onclick = async () => {
+      if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => { }); installEvt = null; b.hidden = true; return; }
+      sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Add Boplo to your home screen</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div><div class="sheet-body"><ol class="steps-list"><li>Tap the <b>Share</b> button in Safari’s toolbar.</li><li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. Boplo opens full screen, like an app.</li></ol></div>`;
+      sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close()); sheet.showModal();
+    });
+  }
+
   /* ================= syllabus progress ================= */
   const syllabusOf = p => R.syllabusFor(regimeOf(p));
   const readJSON = (s, d = {}) => { try { const v = JSON.parse(s || ''); return v && typeof v === 'object' ? v : d; } catch { return d; } };
@@ -740,6 +935,7 @@
     const ms = milestones();
     shell('progress', { title: 'Progress', sub: 'Track the syllabus you’ve covered, and share the moments worth celebrating.' },
       `<div class="grid">
+        ${(() => { const rq = requirements(); return rq ? reqTile(rq) : ''; })()}
         <section class="tile span-8" aria-labelledby="syl-h">
           <div class="tile-head"><h2 id="syl-h">${esc(s.title)}</h2><span class="chip">${doneN} of ${s.items.length} done</span></div>
           <div class="syl-bar" role="img" aria-label="${pct}% of the syllabus done"><i style="width:${pct}%"></i></div>
@@ -761,6 +957,7 @@
       try { await saveProfile({ syllabus: JSON.stringify(all) }); } catch (x) { $('.form-error').textContent = x.message; }
     });
     $$('[data-share]').forEach(b => b.onclick = () => shareCard(ms[Number(b.dataset.share)]));
+    $$('[data-reqtick]').forEach(b => b.onclick = async () => { b.disabled = true; try { await toggleReq(b.dataset.reqtick); const y = scrollY; progressPage(); scrollTo(0, y); } catch (x) { toast(x.message); b.disabled = false; } });
   }
 
   /* ================= milestones and share cards ================= */
@@ -833,18 +1030,34 @@
   const QB = window.BOPLO_QUESTIONS;
   const studyOf = p => readJSON(p.study, {});
   let quiz = null;
+  // spaced repetition (Leitner boxes): each question keeps [right, seen, box, dueDay]. Right moves it up a box, wrong sends it back to box 1.
+  const BOX_DAYS = [0, 1, 3, 7, 16, 35], BOX_STRENGTH = [0, .25, .5, .72, .88, 1];
+  const dayNo = () => Math.floor(parseISO(todayISO()).getTime() / 86400000);
+  const boxOf = r => r ? (r[2] != null ? r[2] : (r[0] / r[1] >= .75 ? 3 : r[0] ? 2 : 1)) : 0;
+  const dueOf = r => r ? (r[3] != null ? r[3] : 0) : null;
+  const strength = r => { if (!r) return 0; const b = boxOf(r), late = dayNo() - (dueOf(r) || 0); return BOX_STRENGTH[b] * (late > BOX_DAYS[b] * 2 + 7 ? .75 : 1); };
+  const dueQs = st => QB.questions.filter(q => st[q.id] && dueOf(st[q.id]) <= dayNo());
+  const readiness = (st, subject) => { const qs = QB.questions.filter(q => !subject || q.subject === subject); return qs.length ? Math.round(sum(qs, q => strength(st[q.id])) / qs.length * 100) : 0; };
+  const readyLabel = n => n >= 85 ? 'Ready to book' : n >= 65 ? 'Getting there' : n >= 30 ? 'Building up' : 'Just starting';
   function studyPage() {
     if (!isAdv()) { shell('study', { title: 'Study', sub: 'Theory practice for your licence exams.' }, paywall('Practise for your theory exams.', 'Practice questions by subject, weakest first, and timed mock exams with your authority’s pass mark.')); return; }
     if (!QB) { shell('study', { title: 'Study' }, '<div class="tile empty center"><h3>Questions didn’t load.</h3><p>Reload the page to try again.</p></div>'); return; }
     if (quiz) return quizView();
     const p = state.profile, st = studyOf(p), pm = QB.passMark(regimeOf(p));
     const sub = QB.subjects.map(s => { const qs = QB.questions.filter(q => q.subject === s.id); const seen = qs.filter(q => st[q.id]); const right = qs.filter(q => st[q.id]?.[0] > 0 && st[q.id][0] >= st[q.id][1] - st[q.id][0]); return { ...s, seen: seen.length, score: seen.length ? Math.round(sum(seen, q => st[q.id][0] / st[q.id][1]) / seen.length * 100) : null }; });
+    sub.forEach(s => s.ready = readiness(st, s.id));
     const weak = sub.filter(s => s.score != null && s.score < pm).sort((a, b) => a.score - b.score);
+    const due = dueQs(st).length, fresh = QB.questions.filter(q => !st[q.id]).length, ready = readiness(st), Cr = 2 * Math.PI * 44;
     const mocks = (st._mocks || []).slice(-5).reverse();
     shell('study', { title: 'Study', sub: 'Practise the theory between lessons. Short sessions, explained answers, and a mock exam when you’re ready.', actions: `<button class="btn btn-blue btn-has-spark" data-mock>Start a mock exam ${spark}</button>` },
       `<p class="callout draft">${QB.reviewed ? `Reviewed by ${esc(QB.reviewed.by)}.` : '<b>Early-access question bank.</b> Original questions written for Boplo, awaiting review by a flight instructor.'} Use them for practice alongside your official study material, not instead of it.</p>
       <div class="grid" style="margin-top:16px">
-        <section class="span-8 subj-grid">${sub.map(s => `<button type="button" class="tile subj" data-subj="${s.id}"><span class="subj-top"><b>${esc(s.name)}</b>${s.score != null ? `<span class="chip ${s.score >= pm ? 'ok' : 'warn'}">${s.score}%</span>` : `<span class="chip">${s.count} questions</span>`}</span><small>${esc(s.blurb)}</small><span class="subj-bar"><i style="width:${s.count ? s.seen / s.count * 100 : 0}%"></i></span><span class="subj-meta">${s.seen} of ${s.count} practised</span></button>`).join('')}</section>
+        <section class="tile dark span-12 review-hero">${contours('b')}
+          <div class="ring ring-sm" role="img" aria-label="Exam readiness ${ready}%"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/><circle class="fill" cx="50" cy="50" r="44" stroke-dasharray="${Cr.toFixed(1)}" stroke-dashoffset="${(Cr * (1 - ready / 100)).toFixed(1)}"/></svg><div><b class="num">${ready}%</b></div></div>
+          <div class="review-main"><span class="kicker">Exam readiness · ${esc(readyLabel(ready))}</span><h2 class="display">${due ? `${due} question${due === 1 ? '' : 's'} due for review` : fresh ? 'Nothing due. Learn something new.' : 'All caught up.'}</h2><p>Questions you get right come back after longer and longer gaps; ones you miss come back tomorrow. A few minutes a day is how it sticks.</p></div>
+          <button class="btn btn-light btn-has-spark" data-review ${due || fresh ? '' : 'disabled'}>${due ? 'Start today’s review' : 'Learn 10 new'} ${spark}</button>
+        </section>
+        <section class="span-8 subj-grid">${sub.map(s => `<button type="button" class="tile subj" data-subj="${s.id}"><span class="subj-top"><b>${esc(s.name)}</b>${s.score != null ? `<span class="chip ${s.score >= pm ? 'ok' : 'warn'}">${s.score}%</span>` : `<span class="chip">${s.count} questions</span>`}</span><small>${esc(s.blurb)}</small><span class="subj-bar"><i style="width:${s.ready}%"></i></span><span class="subj-meta">${s.ready}% ready · ${s.seen} of ${s.count} practised</span></button>`).join('')}</section>
         <aside class="span-4" style="display:grid;gap:16px;align-content:start">
           <section class="tile"><div class="tile-head"><h2>Focus next</h2></div>${weak.length ? `<div class="bars">${weak.slice(0, 3).map(s => `<div class="bar-row"><div><span>${esc(s.name)}</span><b>${s.score}%</b></div><div class="bar-track"><i style="width:${s.score}%;background:var(--electric)"></i></div></div>`).join('')}</div><button class="btn btn-ink btn-sm" style="margin-top:16px" data-subj="${weak[0].id}">Practise ${esc(weak[0].name)}</button>` : `<p class="hint">${sub.some(s => s.seen) ? `Every subject you’ve practised is at or above the ${pm}% pass mark.` : 'Practise a subject and the ones that need work show up here.'}</p>`}</section>
           <section class="tile"><div class="tile-head"><h2>Mock exams</h2><span class="chip">Pass mark ${pm}%</span></div>${mocks.length ? `<div class="airports">${mocks.map(m => `<div><span>${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b class="${m.s >= pm ? 'pass' : 'fail'}">${m.s}% ${m.s >= pm ? 'pass' : 'below pass'}</b></div>`).join('')}</div>` : '<p class="hint">16 mixed questions across all subjects, scored against the pass mark your authority uses.</p>'}</section>
@@ -852,9 +1065,16 @@
       </div>`);
     $$('[data-subj]').forEach(b => b.onclick = () => startQuiz(b.dataset.subj));
     $$('[data-mock]').forEach(b => b.onclick = () => startQuiz(null));
+    $$('[data-review]').forEach(b => b.onclick = () => startQuiz('review'));
   }
   function startQuiz(subject) {
     const st = studyOf(state.profile);
+    if (subject === 'review') {
+      const due = dueQs(st).sort((a, b) => dueOf(st[a.id]) - dueOf(st[b.id])).slice(0, 15);
+      const fresh = QB.questions.filter(q => !st[q.id]).sort(() => Math.random() - .5).slice(0, Math.max(0, 10 - due.length));
+      quiz = { subject: null, review: true, mock: false, qs: [...due, ...fresh].sort(() => Math.random() - .5), i: 0, picked: null, right: 0, answers: [] };
+      quizView(); scrollTo({ top: 0 }); return;
+    }
     let pool = QB.questions.filter(q => !subject || q.subject === subject);
     const weight = q => { const r = st[q.id]; return r ? r[0] / r[1] : -1; };
     pool = pool.map(q => [q, weight(q) + Math.random() * .35]).sort((a, b) => a[1] - b[1]).map(x => x[0]);
@@ -867,34 +1087,41 @@
     if (!q) return quizDone();
     const order = quiz.order?.[quiz.i] || (quiz.order = quiz.order || [], quiz.order[quiz.i] = [0, 1, 2, 3].sort(() => Math.random() - .5));
     const answered = quiz.picked != null;
-    shell('study', { title: quiz.mock ? 'Mock exam' : esc(subj.name), sub: `Question ${quiz.i + 1} of ${quiz.qs.length}${quiz.mock ? ` · ${esc(QB.subjects.find(s => s.id === q.subject).name)}` : ''}`, actions: '<button class="btn btn-line" data-quit>End session</button>' },
+    shell('study', { title: quiz.mock ? 'Mock exam' : quiz.review ? 'Daily review' : esc(subj.name), sub: `Question ${quiz.i + 1} of ${quiz.qs.length}${quiz.mock || quiz.review ? ` · ${esc(QB.subjects.find(s => s.id === q.subject).name)}` : ''}`, actions: '<button class="btn btn-line" data-quit>End session</button>' },
       `<section class="tile quiz">
         <div class="quiz-bar"><i style="width:${quiz.i / quiz.qs.length * 100}%"></i></div>
         <h2 class="quiz-q">${esc(q.q)}</h2>
         <div class="quiz-opts" role="group" aria-label="Answers">${order.map(oi => { const cls = !answered ? '' : oi === q.answer ? 'right' : oi === quiz.picked ? 'wrong' : 'dim'; return `<button type="button" class="opt ${cls}" data-opt="${oi}" ${answered ? 'disabled' : ''}>${esc(q.options[oi])}</button>`; }).join('')}</div>
-        ${answered ? `<div class="quiz-explain ${quiz.picked === q.answer ? 'ok' : 'bad'}" role="status"><b>${quiz.picked === q.answer ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explain)}</div>
+        ${answered ? `<div class="quiz-explain ${quiz.picked === q.answer ? 'ok' : 'bad'}" role="status"><b>${quiz.picked === q.answer ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explain)}${!preview ? `<div class="quiz-more" data-more>${quiz.more?.[quiz.i] ? md(quiz.more[quiz.i], askSources || {}) : `<button type="button" class="link" data-explain>${ico('ask')}Explain it another way with Ask Boplo</button>`}</div>` : ''}</div>
         <div class="actions"><span class="hint">${quiz.right} correct so far</span><div class="right"><button class="btn btn-blue btn-has-spark" data-next>${quiz.i + 1 < quiz.qs.length ? 'Next question' : 'See results'} ${spark}</button></div></div>` : ''}
       </section>`);
     $$('[data-opt]').forEach(b => b.onclick = () => { quiz.picked = Number(b.dataset.opt); const ok = quiz.picked === q.answer; if (ok) quiz.right++; quiz.answers.push([q.id, ok]); quizView(); $('[data-next]')?.focus(); });
     const n = $('[data-next]'); if (n) n.onclick = () => { quiz.i++; quiz.picked = null; quizView(); };
+    const ex = $('[data-explain]'); if (ex) ex.onclick = async () => {
+      const box = $('[data-more]'), at = quiz.i, picked = q.options[quiz.picked];
+      box.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+      const prompt = `I'm practising a theory question.\nQuestion: ${q.q}\nOptions: ${q.options.join(' | ')}\nCorrect answer: ${q.options[q.answer]}\nI chose: ${picked}\nThe app's explanation: ${q.explain}\n\nExplain it another way in under 120 words, with a simple way to remember it${quiz.picked !== q.answer ? ', and why my choice is wrong' : ''}.`;
+      try { const text = await askOnce(prompt, t => { if (quiz && quiz.i === at) box.innerHTML = md(t, askSources || {}); }); (quiz.more = quiz.more || {})[at] = text; }
+      catch (x) { box.innerHTML = `<p class="form-error">${esc(x.message)}</p>`; }
+    };
     $('[data-quit]').onclick = () => { if (quiz.answers.length) quizDone(true); else { quiz = null; studyPage(); } };
   }
   async function quizDone(early = false) {
     const p = state.profile, st = studyOf(p), pm = QB.passMark(regimeOf(p));
-    quiz.answers.forEach(([id, ok]) => { const r = st[id] || [0, 0]; st[id] = [r[0] + (ok ? 1 : 0), r[1] + 1]; });
+    quiz.answers.forEach(([id, ok]) => { const r = st[id] || [0, 0]; const box = ok ? Math.min(5, (r[1] ? boxOf(r) : 1) + 1) : 1; st[id] = [r[0] + (ok ? 1 : 0), r[1] + 1, box, dayNo() + BOX_DAYS[box]]; });
     const score = Math.round(quiz.right / Math.max(1, quiz.answers.length) * 100);
     if (quiz.mock && !early) st._mocks = [...(st._mocks || []), { d: todayISO(), s: score }].slice(-20);
     const missed = quiz.answers.filter(a => !a[1]).map(a => QB.questions.find(q => q.id === a[0]));
     const res = { ...quiz }; quiz = null;
     try { await saveProfile({ study: JSON.stringify(st) }); } catch { }
-    shell('study', { title: res.mock ? 'Mock exam result' : 'Session complete', sub: `${res.right} of ${res.answers.length} correct.` },
+    shell('study', { title: res.mock ? 'Mock exam result' : res.review ? 'Review done' : 'Session complete', sub: `${res.right} of ${res.answers.length} correct · exam readiness now ${readiness(st)}%.` },
       `<section class="tile quiz result">
         <div class="result-score ${score >= pm ? 'pass' : 'fail'}"><b>${score}%</b><span>${res.mock ? (score >= pm ? `At or above the ${pm}% pass mark` : `Below the ${pm}% pass mark`) : 'this session'}</span></div>
         ${missed.length ? `<h3>Worth another look</h3><div class="missed">${missed.map(q => `<div><b>${esc(q.q)}</b><p>${esc(q.options[q.answer])}. ${esc(q.explain)}</p></div>`).join('')}</div>` : '<p class="hint">Everything right. Nice work.</p>'}
         <div class="actions"><button class="btn btn-line" data-back>Back to subjects</button><div class="right"><button class="btn btn-blue btn-has-spark" data-again>${res.mock ? 'Another mock' : 'Practise again'} ${spark}</button></div></div>
       </section>`);
     $('[data-back]').onclick = () => studyPage();
-    $('[data-again]').onclick = () => startQuiz(res.subject);
+    $('[data-again]').onclick = () => startQuiz(res.review ? 'review' : res.subject);
   }
 
   /* ================= weather decoder ================= */
@@ -1614,10 +1841,49 @@
     }
     flush(); return out.join('');
   }
+  // one streamed request to /flight/ask; calls onText with the text so far, resolves with the final text
+  async function streamAsk(body, onText) {
+    const res = await fetch('/flight/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok || !(res.headers.get('Content-Type') || '').includes('event-stream')) {
+      const out = await res.json().catch(() => ({}));
+      if (res.status === 402) upgradeSheet(out.error || 'Ask Boplo has more questions on Advanced.');
+      throw new Error(out.error || 'Boplo couldn’t answer just now. Try again in a moment.');
+    }
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '', text = '', err = null, last = 0;
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+        if (!line.startsWith('data:')) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+        if (ev.t) text += ev.t;
+        if (ev.error) err = ev.error;
+        if (ev.done && askUsageInfo) { askUsageInfo.left = ev.left ?? askUsageInfo.left; }
+      }
+      if (performance.now() - last > 60) { last = performance.now(); onText?.(text); }
+    }
+    onText?.(text);
+    if (err && !text) throw new Error(err);
+    if (!text) throw new Error('Boplo didn’t answer. Try asking again.');
+    return text;
+  }
+  const askOnce = (q, onText) => streamAsk({ messages: [{ role: 'user', content: q }], context: askContext() }, onText);
+
+  const EXAM_FOCUS = [['all', 'Whole oral'], ['airspace', 'Airspace and rules'], ['weather', 'Weather'], ['performance', 'Performance and planning'], ['systems', 'Aircraft systems'], ['emergencies', 'Emergencies'], ['navigation', 'Navigation'], ['human', 'Human factors']];
+  const examStore = (k, v) => { const key = askKey() + '-' + k; try { if (v === undefined) return JSON.parse(localStorage.getItem(key) || 'null'); localStorage.setItem(key, JSON.stringify(v)); } catch { } return null; };
+  const scoreOf = t => { const m = String(t || '').match(/Score:\s*\**\s*(\d{1,3})\s*\/\s*100/i); return m ? Math.min(100, Number(m[1])) : null; };
+  const resultOf = t => (String(t || '').match(/Result:\s*\**\s*([^\n*]+)/i) || [])[1]?.trim() || '';
+  const TTS = 'speechSynthesis' in window;
+  const speakable = t => String(t).replace(/^##.*$/gm, '').replace(/^\s*sources?:.*$/gim, '').replace(/[*_`#>]/g, '').replace(/\n+/g, ' ').trim();
+  ui.askMode = ui.askMode || (() => { try { return localStorage.getItem('boplo-ask-mode') || 'chat'; } catch { return 'chat'; } })();
   let askBusy = false, askSources = null, askUsageInfo = null;
   async function askPage() {
-    const p = state.profile, first = String(p.name || '').split(/\s+/)[0];
-    let msgs = askLoad();
+    const p = state.profile, first = String(p.name || '').split(/\s+/)[0], exam = ui.askMode === 'exam';
+    let msgs = exam ? (preview ? [] : examStore('exam') || []) : askLoad();
+    const setup = { focus: 'all', style: 'friendly', questions: 10, voice: false, ...(examStore('exam-setup') || {}) };
+    const history = examStore('exam-history') || [];
+    const debriefed = exam && msgs.some(m => m.role === 'assistant' && scoreOf(m.content) != null);
     const sugg = [
       p.nextLesson ? `Help me prepare for ${p.nextLesson}` : 'What should I prepare before my next lesson?',
       'Quiz me on air law, one question at a time',
@@ -1626,27 +1892,57 @@
       state.flights.some(f => f.notes) ? 'Look at my recent debriefs. What should I work on?' : 'How do I make a good radio call in the circuit?',
       regimeOf(p) === 'faa' ? 'What are the VFR weather minimums in Class E airspace?' : 'What are the VMC minima in class G airspace?'
     ];
-    shell('ask', { title: 'Ask Boplo', sub: 'Your aviation study assistant. It knows your desk and answers from official sources.', actions: '<button class="btn btn-line" data-newchat>New chat</button>' },
-      `<div class="ask">
+    const modeToggle = `<div class="bill-toggle ask-modes" role="group" aria-label="Mode"><button type="button" data-mode="chat" aria-pressed="${!exam}">Ask</button><button type="button" data-mode="exam" aria-pressed="${exam}">Mock checkride${isAdv() ? '' : ` ${ico('lock')}`}</button></div>`;
+    const gated = exam && !isAdv();
+    shell('ask', { title: 'Ask Boplo', sub: exam ? 'Practise your oral exam with an AI examiner that asks, pushes back and scores you.' : 'Your aviation study assistant. It knows your desk and answers from official sources.', actions: `${modeToggle}${gated ? '' : `<button class="btn btn-line" data-newchat>${exam ? 'New checkride' : 'New chat'}</button>`}` },
+      gated ? paywall('Rehearse your checkride out loud.', 'An AI examiner runs a realistic oral exam for your licence, asks follow-ups when an answer is thin, and gives you a scored debrief with what to study next. Speak your answers or type them.')
+      : `<div class="ask${exam ? ' exam' : ''}">
         <div class="ask-log" data-log aria-live="polite"></div>
-        <form class="ask-bar" data-askform>
-          <textarea name="q" rows="1" maxlength="2000" placeholder="${preview ? 'Sign in to ask your own questions' : 'Ask about theory, rules, weather, radio, or your training…'}" ${preview ? 'disabled' : ''} aria-label="Your question"></textarea>
-          ${SR ? `<button type="button" class="icon-btn ask-mic" data-askmic aria-label="Speak your question" ${preview ? 'disabled' : ''}><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg></button>` : ''}
+        <form class="ask-bar" data-askform ${exam && (!msgs.length || debriefed) ? 'hidden' : ''}>
+          <textarea name="q" rows="1" maxlength="2000" placeholder="${preview ? 'Sign in to ask your own questions' : exam ? 'Answer the examiner…' : 'Ask about theory, rules, weather, radio, or your training…'}" ${preview ? 'disabled' : ''} aria-label="${exam ? 'Your answer' : 'Your question'}"></textarea>
+          ${SR ? `<button type="button" class="icon-btn ask-mic" data-askmic aria-label="Speak" ${preview ? 'disabled' : ''}><svg class="ico" aria-hidden="true"><use href="#i-mic"/></svg></button>` : ''}
           <button class="btn btn-blue ask-send" data-send ${preview ? 'disabled' : ''} aria-label="Send">${ico('send')}</button>
         </form>
-        <p class="ask-foot"><span data-left></span>Boplo can make mistakes. It’s a study aid, not a flight briefing or your instructor. Check anything important with them and official sources.</p>
+        ${exam && msgs.length && !debriefed ? `<div class="exam-bar"><span data-qn></span>${TTS ? `<label class="switch"><input type="checkbox" data-voice ${setup.voice ? 'checked' : ''}><span></span>Voice</label>` : ''}<button type="button" class="btn btn-ink btn-sm" data-end>End and get my debrief</button></div>` : ''}
+        <p class="ask-foot"><span data-left></span>${exam ? 'Practice only. A real examiner and your instructor decide when you’re ready.' : 'Boplo can make mistakes. It’s a study aid, not a flight briefing or your instructor. Check anything important with them and official sources.'}</p>
       </div>`);
+    $$('[data-mode]').forEach(b => b.onclick = () => { if (askBusy) return; ui.askMode = b.dataset.mode; try { localStorage.setItem('boplo-ask-mode', ui.askMode); } catch { } window.speechSynthesis?.cancel(); askPage(); });
+    if (gated) return;
     const log = $('[data-log]'), form = $('[data-askform]'), ta = form.q;
-    const empty = () => `<section class="tile dark ask-hello">${contours('b')}<div class="ask-mark"><svg aria-hidden="true"><use href="#spark"/></svg></div><h2 class="display">${first ? `Hi ${esc(first)}.` : 'Hi.'} What are we studying today?</h2><p>Ask anything about flying theory, rules, weather, radio or your own training. Boplo cites official sources and knows your desk.</p><div class="ask-sugg">${sugg.map(x => `<button type="button" data-sugg>${esc(x)}</button>`).join('')}</div></section>`;
-    const bubble = (m, i) => m.role === 'user' ? `<div class="amsg mine"><div>${esc(m.content).replace(/\n/g, '<br>')}</div></div>`
-      : `<div class="amsg bo" data-i="${i}"><span class="bo-av" aria-hidden="true"><svg><use href="#spark"/></svg></span><div class="bo-body">${m.error ? `<p class="form-error">${esc(m.error)}</p>` : md(m.content, askSources || {})}${m.content && !m.pending ? `<div class="bo-tools"><button type="button" class="link" data-copy="${i}">Copy</button></div>` : ''}${m.pending && !m.content ? '<span class="typing"><i></i><i></i><i></i></span>' : ''}</div></div>`;
+    const save = () => exam ? (!preview && examStore('exam', msgs.filter(m => !m.error && !m.pending).slice(-60))) : askSave(msgs.filter(m => !m.error));
+    const empty = () => exam ? `<section class="tile dark ask-hello exam-setup">${contours('b')}<div class="ask-mark"><svg aria-hidden="true"><use href="#spark"/></svg></div>
+        <h2 class="display">Mock checkride</h2><p>A practice oral exam for ${esc(licenceOf(p))} under ${esc(regimeOf(p) === 'faa' ? 'the FAA ACS' : regimeOf(p) === 'uk' ? 'UK CAA rules' : regimeOf(p) === 'easa' ? 'EASA rules' : 'your authority’s rules')}. The examiner sets a scenario, asks one question at a time and follows up like the real thing.</p>
+        <div class="exam-opts">
+          <div><span>Focus</span><div class="ask-sugg">${EXAM_FOCUS.map(([k, t]) => `<button type="button" data-focus="${k}" aria-pressed="${setup.focus === k}">${esc(t)}</button>`).join('')}</div></div>
+          <div class="exam-row"><div><span>Examiner</span><div class="ask-sugg">${[['friendly', 'Friendly'], ['strict', 'Strict']].map(([k, t]) => `<button type="button" data-style="${k}" aria-pressed="${setup.style === k}">${t}</button>`).join('')}</div></div>
+          <div><span>Length</span><div class="ask-sugg">${[8, 12, 16].map(n => `<button type="button" data-len="${n}" aria-pressed="${setup.questions === n}">${n} questions</button>`).join('')}</div></div>
+          ${TTS ? `<div><span>Voice</span><div class="ask-sugg"><button type="button" data-voiceopt aria-pressed="${setup.voice}">${setup.voice ? 'On: examiner speaks, you answer out loud' : 'Off: read and type'}</button></div></div>` : ''}</div>
+        </div>
+        <button class="btn btn-light btn-has-spark" data-begin ${preview ? 'disabled' : ''}>Start the checkride ${spark}</button>
+        ${history.length ? `<div class="exam-hist"><span>Recent scores</span>${history.slice(-5).reverse().map(h => `<b class="${h.s >= 75 ? 'pass' : h.s >= 60 ? 'mid' : 'fail'}" title="${esc(fmtDate(h.d))} · ${esc(h.f)}">${h.s}</b>`).join('')}</div>` : ''}
+      </section>`
+      : `<section class="tile dark ask-hello">${contours('b')}<div class="ask-mark"><svg aria-hidden="true"><use href="#spark"/></svg></div><h2 class="display">${first ? `Hi ${esc(first)}.` : 'Hi.'} What are we studying today?</h2><p>Ask anything about flying theory, rules, weather, radio or your own training. Boplo cites official sources and knows your desk.</p><div class="ask-sugg">${sugg.map(x => `<button type="button" data-sugg>${esc(x)}</button>`).join('')}</div></section>`;
+    const bubble = (m, i) => {
+      if (m.role === 'user' && m.start) return `<div class="exam-start">${esc(m.label || 'Checkride started')}</div>`;
+      if (m.role === 'user') return `<div class="amsg mine"><div>${esc(m.content).replace(/\n/g, '<br>')}</div></div>`;
+      const sc = exam && !m.pending ? scoreOf(m.content) : null;
+      return `<div class="amsg bo" data-i="${i}"><span class="bo-av" aria-hidden="true"><svg><use href="#spark"/></svg></span><div class="bo-body">${sc != null ? `<div class="exam-score ${sc >= 75 ? 'pass' : sc >= 60 ? 'mid' : 'fail'}"><b>${sc}<small>/100</small></b><span>${esc(resultOf(m.content) || 'Debrief')}</span></div>` : ''}${m.error ? `<p class="form-error">${esc(m.error)}</p>` : md(String(m.content).replace(/^##\s*Debrief\s*$/im, '').replace(/^Score:.*$/im, '').replace(/^Result:.*$/im, ''), askSources || {})}${m.content && !m.pending ? `<div class="bo-tools"><button type="button" class="link" data-copy="${i}">Copy</button>${exam && TTS && sc == null ? `<button type="button" class="link" data-say="${i}">Read aloud</button>` : ''}</div>` : ''}${m.pending && !m.content ? '<span class="typing"><i></i><i></i><i></i></span>' : ''}</div></div>`;
+    };
     const paint = (scroll = true) => {
-      log.innerHTML = msgs.length ? msgs.map(bubble).join('') : empty();
+      log.innerHTML = msgs.length ? msgs.map(bubble).join('') + (exam && debriefed ? `<div class="exam-again"><button class="btn btn-blue btn-has-spark" data-again>Start another checkride ${spark}</button><a class="btn btn-line" href="#study">Practise in Study</a></div>` : '') : empty();
       $$('[data-sugg]').forEach(b => b.onclick = () => { ta.value = b.textContent; send(); });
       $$('[data-copy]').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(msgs[+b.dataset.copy].content); b.textContent = 'Copied'; } catch { } });
+      $$('[data-say]').forEach(b => b.onclick = () => say(msgs[+b.dataset.say].content, false));
+      $$('[data-focus]').forEach(b => b.onclick = () => { setup.focus = b.dataset.focus; examStore('exam-setup', setup); paint(false); });
+      $$('[data-style]').forEach(b => b.onclick = () => { setup.style = b.dataset.style; examStore('exam-setup', setup); paint(false); });
+      $$('[data-len]').forEach(b => b.onclick = () => { setup.questions = Number(b.dataset.len); examStore('exam-setup', setup); paint(false); });
+      $$('[data-voiceopt]').forEach(b => b.onclick = () => { setup.voice = !setup.voice; examStore('exam-setup', setup); paint(false); });
+      const bg = $('[data-begin]'); if (bg) bg.onclick = () => { const f = EXAM_FOCUS.find(x => x[0] === setup.focus)[1]; msgs = [{ role: 'user', start: true, label: `Checkride started · ${f} · ${setup.style === 'strict' ? 'strict' : 'friendly'} examiner · ${setup.questions} questions`, content: 'Begin the mock checkride now: set the scenario and ask your first question.' }]; save(); askPage(); };
+      const ag = $('[data-again]'); if (ag) ag.onclick = () => { msgs = []; save(); askPage(); };
+      const qn = $('[data-qn]'); if (qn) { const n = msgs.filter(m => m.role === 'assistant' && m.content).length; qn.textContent = `Question ${Math.min(n, setup.questions)} of about ${setup.questions}`; }
       if (scroll) log.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' });
     };
-    const left = () => { const u = askUsageInfo; $('[data-left]').textContent = preview ? 'Example conversation. ' : u ? (u.on === false ? 'Ask Boplo is offline right now. ' : `${u.left} of ${u.limit} questions left today. `) : ''; };
+    const left = () => { const u = askUsageInfo, el = $('[data-left]'); if (el) el.textContent = preview ? 'Example conversation. ' : u ? (u.on === false ? 'Ask Boplo is offline right now. ' : `${u.left} of ${u.limit} ${exam ? 'turns' : 'questions'} left today. `) : ''; };
     paint(false); left();
     if (!preview && !askSources) api('ask/usage').then(r => { askSources = r.sources; askUsageInfo = r; left(); paint(false); }).catch(() => { });
     else if (preview && !askSources) { askSources = { PHAK: { title: 'FAA Pilot’s Handbook of Aeronautical Knowledge', url: 'https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/phak' }, AFH: { title: 'FAA Airplane Flying Handbook', url: 'https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/airplane_handbook' } }; paint(false); }
@@ -1654,42 +1950,46 @@
     ta.oninput = grow;
     ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } };
     form.onsubmit = e => { e.preventDefault(); send(); };
-    $('[data-newchat]').onclick = () => { if (askBusy) return; msgs = preview ? [] : []; askSave(msgs); paint(); ta.focus(); };
+    const nc = $('[data-newchat]'); if (nc) nc.onclick = () => { if (askBusy) return; window.speechSynthesis?.cancel(); msgs = []; save(); if (exam) askPage(); else { paint(); ta.focus(); } };
+    const vt = $('[data-voice]'); if (vt) vt.onchange = () => { setup.voice = vt.checked; examStore('exam-setup', setup); if (!vt.checked) speechSynthesis.cancel(); };
     const mic = $('[data-askmic]'); let rec = null;
-    if (mic && SR) mic.onclick = () => { if (rec) { rec.stop(); return; } rec = new SR(); rec.lang = navigator.language || 'en-GB'; rec.interimResults = true; const base = ta.value ? ta.value.trim() + ' ' : ''; rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; ta.value = base + t; grow(); }; rec.onend = () => { rec = null; mic.classList.remove('live'); }; rec.start(); mic.classList.add('live'); };
+    const listen = (auto = false) => {
+      if (!SR || rec) return; rec = new SR(); rec.lang = navigator.language || 'en-GB'; rec.interimResults = true;
+      const base = ta.value ? ta.value.trim() + ' ' : ''; let heard = '';
+      rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; heard = t; ta.value = base + t; grow(); };
+      rec.onend = () => { rec = null; mic?.classList.remove('live'); if (auto && heard.trim() && document.body.contains(ta)) send(); };
+      rec.onerror = () => { };
+      try { rec.start(); mic?.classList.add('live'); } catch { rec = null; }
+    };
+    if (mic && SR) mic.onclick = () => { if (rec) { rec.stop(); return; } window.speechSynthesis?.cancel(); listen(exam && setup.voice); };
+    function say(text, thenListen) {
+      if (!TTS) return; speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(speakable(text)); u.lang = regimeOf(p) === 'faa' ? 'en-US' : 'en-GB'; u.rate = 1.02;
+      if (thenListen && SR) u.onend = () => { if (document.body.contains(ta) && ui.askMode === 'exam') listen(true); };
+      speechSynthesis.speak(u);
+    }
+    const de = $('[data-end]'); if (de) de.onclick = () => { if (askBusy) return; ta.value = '[END] Please stop here and give me my debrief.'; send(); };
     async function send() {
       if (preview || askBusy) return;
-      const q = ta.value.trim(); if (!q) return;
-      ta.value = ''; grow(); askBusy = true;
-      msgs.push({ role: 'user', content: q }); const bot = { role: 'assistant', content: '', pending: true }; msgs.push(bot); paint();
-      const history = msgs.filter(m => !m.pending && !m.error).map(m => ({ role: m.role, content: m.content }));
+      const q = ta.value.trim(); if (!q && !(exam && msgs.length === 1)) return;
+      ta.value = ''; grow(); askBusy = true; window.speechSynthesis?.cancel();
+      if (q) msgs.push({ role: 'user', content: q });
+      const bot = { role: 'assistant', content: '', pending: true }; msgs.push(bot); paint();
+      const hist = msgs.filter(m => !m.pending && !m.error).map(m => ({ role: m.role, content: m.content }));
       try {
-        const res = await fetch('/flight/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history, context: askContext() }) });
-        if (!res.ok || !(res.headers.get('Content-Type') || '').includes('event-stream')) {
-          const out = await res.json().catch(() => ({}));
-          if (res.status === 402) upgradeSheet(out.error || 'Ask Boplo has more questions on Advanced.');
-          throw new Error(out.error || 'Boplo couldn’t answer just now. Try again in a moment.');
-        }
-        const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '', last = 0;
-        for (;;) {
-          const { value, done } = await reader.read(); if (done) break;
-          buf += dec.decode(value, { stream: true });
-          let i; while ((i = buf.indexOf('\n\n')) >= 0) {
-            const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
-            if (!line.startsWith('data:')) continue;
-            let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
-            if (ev.t) bot.content += ev.t;
-            if (ev.error) bot.error = ev.error;
-            if (ev.done && askUsageInfo) { askUsageInfo.left = ev.left ?? askUsageInfo.left; left(); }
-          }
-          if (performance.now() - last > 60) { last = performance.now(); const el = log.querySelector(`[data-i="${msgs.length - 1}"] .bo-body`); if (el) { el.innerHTML = md(bot.content, askSources || {}); log.lastElementChild?.scrollIntoView({ block: 'end' }); } }
-        }
-        if (!bot.content && !bot.error) bot.error = 'Boplo didn’t answer. Try asking again.';
+        await streamAsk({ messages: hist, context: askContext(), ...(exam ? { mode: 'examiner', setup } : {}) }, t => { bot.content = t; const el = log.querySelector(`[data-i="${msgs.length - 1}"] .bo-body`); if (el) { el.innerHTML = md(t, askSources || {}); log.lastElementChild?.scrollIntoView({ block: 'end' }); } });
       } catch (x) { bot.error = x.message; }
+      left();
       bot.pending = false; if (bot.error && !bot.content) { msgs.pop(); msgs.push({ role: 'assistant', content: '', error: bot.error }); }
-      askBusy = false; askSave(msgs.filter(m => !m.error)); paint();
-      if (bot.error && !bot.content) ta.value = q;
+      askBusy = false; save();
+      const sc = exam ? scoreOf(bot.content) : null;
+      if (sc != null) { const f = EXAM_FOCUS.find(x => x[0] === setup.focus)?.[1] || ''; examStore('exam-history', [...history, { d: todayISO(), s: sc, f }].slice(-20)); askPage(); return; }
+      paint();
+      if (bot.error && !bot.content && q) ta.value = q;
+      if (exam && setup.voice && bot.content) say(bot.content, true);
     }
+    if (exam && msgs.length === 1 && msgs[0].start) send();
+    if (!exam && ui.askPrefill) { ta.value = ui.askPrefill; ui.askPrefill = null; send(); }
   }
 
   /* ================= more (mobile) ================= */
@@ -1857,7 +2157,7 @@
   function render() {
     if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -1908,6 +2208,7 @@
   }
 
   /* ---------------- start ---------------- */
+  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
   async function start() {
     if (preview) { demo(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
     try {

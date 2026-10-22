@@ -44,6 +44,30 @@ Safety boundaries (always):
 Official sources you can cite (short name, title, what it covers):
 ${SOURCES.map(([k, t, , d]) => `- ${k}: ${t}. ${d}`).join('\n')}`;
 
+// mock checkride: the same assistant playing an examiner for an oral exam. Appended after SYSTEM, so SYSTEM's safety rules still apply.
+const FOCUS = { all: 'a balanced mix across the whole oral', airspace: 'airspace, VFR minima and air law', weather: 'weather theory, reports and forecasts, and go/no-go thinking', performance: 'performance, mass and balance, and flight planning', systems: 'aircraft systems and instruments', emergencies: 'emergencies, malfunctions and decision-making', navigation: 'navigation, diversions and lost procedures', human: 'human factors and pilot fitness' };
+export function examinerBlock(setup = {}) {
+  const focus = FOCUS[setup.focus] || FOCUS.all;
+  const n = Math.min(20, Math.max(5, Number(setup.questions) || 10));
+  const strict = setup.style === 'strict';
+  return `
+
+MOCK CHECKRIDE MODE. For this conversation you are playing a ${strict ? 'demanding but fair' : 'friendly, encouraging'} examiner giving the student a practice oral exam for their licence test, under their own licensing system (use its standards: the FAA Airman Certification Standards for FAA, the EASA/UK skill test and theory syllabus for EASA or UK). This is practice only; never say they passed a real test.
+- Topic focus: ${focus}. Ground questions in a realistic scenario (a planned flight from their home airfield in their aircraft when known) and move through it the way a real examiner does.
+- Ask exactly one question per turn, short and spoken-style (it may be read aloud). Plan about ${n} questions. Start your first turn with one sentence setting the scenario, then the first question. Don't number questions and don't give the answer in the question.
+- After each answer: one or two sentences of feedback (what was right, what was missing or wrong, the correct point if needed), then the next question. If an answer is vague, ${strict ? 'push back with a follow-up' : 'ask one gentle follow-up'} before moving on, as a real examiner would. If they say they don't know, give the key point briefly and move on.
+- Keep each turn under 90 words. No lists in question turns. No "Sources:" line in question turns.
+- When you've asked about ${n} questions, or when the student writes [END], stop asking and give the debrief in exactly this shape:
+## Debrief
+Score: <0-100>/100
+Result: <Ready / Nearly there / More study needed>
+- <area>: <Strong | Satisfactory | Needs work>. <one sentence>
+(3 to 6 area lines)
+Study next: <one or two sentences naming specific topics>
+Sources: <the official documents the student should study, from the list>
+- Score fairly from their answers only; unanswered questions count against them.`;
+}
+
 export function sourceLinks() { return Object.fromEntries(SOURCES.map(([k, t, u]) => [k, { title: t, url: u }])); }
 
 let tableReady = null;
@@ -63,9 +87,9 @@ async function bump(env, userId) {
 }
 
 const clip = (s, n) => String(s ?? '').slice(0, n);
-export function cleanMessages(input) {
+export function cleanMessages(input, keep = 12) {
   const list = Array.isArray(input?.messages) ? input.messages : [];
-  const out = list.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim()).slice(-12).map(m => ({ role: m.role, content: clip(m.content.trim(), m.role === 'user' ? 2000 : 4000) }));
+  const out = list.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim()).slice(-keep).map(m => ({ role: m.role, content: clip(m.content.trim(), m.role === 'user' ? 2000 : 4000) }));
   while (out.length && out[0].role !== 'user') out.shift();
   // merge accidental repeats so roles alternate
   const merged = []; for (const m of out) { if (merged.length && merged[merged.length - 1].role === m.role) merged[merged.length - 1].content += '\n\n' + m.content; else merged.push({ ...m }); }
@@ -82,7 +106,10 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
   const u = await usage(env, user.id, plan);
   if (!u.on) throw Object.assign(new Error('Ask Boplo is switched off right now.'), { status: 503 });
   if (u.left <= 0) throw Object.assign(new Error(plan === 'advanced' ? `You’ve used today’s ${u.limit} questions. They reset at midnight UTC.` : `You’ve used today’s ${u.limit} free questions. Advanced gives you ${Number(env.AI_DAILY_ADV ?? 40)} a day.`), { status: plan === 'advanced' ? 429 : 402 });
-  const messages = cleanMessages(input), ctx = contextBlock(input?.context);
+  const exam = input?.mode === 'examiner';
+  if (exam && plan !== 'advanced') throw Object.assign(new Error('Mock checkrides are part of Advanced. Start a free trial from Plan & billing.'), { status: 402 });
+  // a checkride needs the whole exchange for the debrief; it starts with a short "begin" message from the app
+  const messages = cleanMessages(input, exam ? 48 : 12), ctx = contextBlock(input?.context) + (exam ? examinerBlock(input?.setup) : '');
   const provider = env.AI_PROVIDER === 'gemini' || !env.ANTHROPIC_API_KEY ? 'gemini' : 'claude';
   const enc = new TextEncoder(), { readable, writable } = new TransformStream(), w = writable.getWriter();
   const send = obj => w.write(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
@@ -93,7 +120,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
         const res = await fetcher('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: 900, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
+          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: exam ? 700 : 900, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
         });
         if (!res.ok || !res.body) { const t = await res.text().catch(() => ''); console.error('Claude error', res.status, t.slice(0, 300)); throw new Error(res.status === 529 || res.status === 503 ? 'Boplo is very busy right now. Try again in a moment.' : 'Boplo couldn’t answer just now. Try again in a moment.'); }
         await bump(env, user.id);

@@ -203,3 +203,37 @@ test('ask boplo streams answers, caches the system prompt and enforces daily lim
  assert.throws(()=>cleanMessages({messages:[]}),/Ask a question/);
  assert.equal(cleanMessages({messages:[{role:'user',content:'a'},{role:'user',content:'b'}]}).length,1);
 });
+test('mock checkride is Advanced-only and adds the examiner brief',async()=>{
+ const {ask}=await import('../functions/lib/ask.js');
+ const db=new DatabaseSync(':memory:');
+ db.exec('CREATE TABLE flight_ai_usage (user_id TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))');
+ const env={ANTHROPIC_API_KEY:'sk-ant-x',DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async run(){return db.prepare(sql).run(...args);}};}}};
+ let sent=null;
+ const fake=async(url,init)=>{sent=JSON.parse(init.body);const body=`data: ${JSON.stringify({type:'content_block_delta',delta:{type:'text_delta',text:'Scenario. First question?'}})}\n\n`;return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(body));c.close();}}),{status:200});};
+ await assert.rejects(ask(env,{id:'e1'},'free',{mode:'examiner',messages:[{role:'user',content:'Begin'}]},fake),e=>e.status===402);
+ const msgs=[];for(let i=0;i<20;i++){msgs.push({role:'user',content:'a'+i});msgs.push({role:'assistant',content:'q'+i});}msgs.push({role:'user',content:'[END]'});
+ const r=await ask(env,{id:'e1'},'advanced',{mode:'examiner',setup:{focus:'weather',style:'strict',questions:12},messages:msgs},fake);await r.response.text();await r.done;
+ assert.match(sent.system[1].text,/MOCK CHECKRIDE MODE/);assert.match(sent.system[1].text,/weather theory/);assert.match(sent.system[1].text,/about 12 questions/);assert.match(sent.system[1].text,/push back/);
+ assert.equal(sent.messages.length,41);assert.equal(sent.max_tokens,700);
+});
+test('training reminders pick the right email and can be switched off',async()=>{
+ const {pickNudge,runNudges,unsubToken,nudgesOff}=await import('../functions/lib/nudges.js');
+ const now=Date.parse('2026-10-22T07:17:00Z');
+ assert.equal(pickNudge({profile:{},lastFlight:'2026-10-18',flights:3,now}),null);
+ assert.match(pickNudge({profile:{name:'Gianni Wood'},lastFlight:'2026-10-08',flights:3,now}).lines[0],/Hi Gianni, it’s been 14 days/);
+ assert.equal(pickNudge({profile:{},lastFlight:'2026-10-01',flights:3,sent:{gap:now-3*86400000},now}),null);
+ assert.match(pickNudge({profile:{},lastFlight:'2026-07-01',flights:3,now}).subject,/Time for a refresher/);
+ const lesson=pickNudge({profile:{lessonDate:'2026-10-23',nextLesson:'Lesson 12'},lastFlight:'2026-10-21',flights:3,now});assert.equal(lesson.kind,'lesson:2026-10-23');
+ assert.equal(pickNudge({profile:{lessonDate:'2026-10-23'},lastFlight:'2026-10-21',flights:3,sent:{'lesson:2026-10-23':now},now}),null);
+ const db=new DatabaseSync(':memory:');
+ for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
+ const env={CRON_SECRET:'s3cret',RESEND_API_KEY:'re_x',EMAIL_FROM:'Boplo <hi@boplo.app>',DB:{prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}};}}};
+ for(const [id,on] of [['a',true],['b',false]]){db.prepare('INSERT INTO darts_users(id,email,created_at,updated_at) VALUES(?,?,0,0)').run(id,id+'@example.com');db.prepare('INSERT INTO flight_profiles(user_id,data,updated_at) VALUES(?,?,0)').run(id,JSON.stringify({name:'P',reminders:on}));db.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,0,0)').run('f'+id,id,JSON.stringify({date:'2026-09-20',minutes:60}));}
+ const mails=[];const fake=async(u,init)=>{mails.push(JSON.parse(init.body));return new Response('{}',{status:200});};
+ const out=await runNudges(env,{now,fetcher:fake});assert.equal(out.sent,1);assert.equal(mails[0].to[0],'a@example.com');assert.match(mails[0].html,/nudges\/off\?u=a&amp;t=|nudges\/off\?u=a&t=/);
+ assert.equal((await runNudges(env,{now:now+86400000,fetcher:fake})).sent,0);
+ const bad=await nudgesOff(env,new URL('https://boplo.app/flight/nudges/off?u=a&t=nope'));assert.equal(bad.status,400);
+ const ok=await nudgesOff(env,new URL(`https://boplo.app/flight/nudges/off?u=a&t=${await unsubToken(env,'a')}`));assert.equal(ok.status,200);
+ assert.equal(JSON.parse(db.prepare("SELECT data FROM flight_profiles WHERE user_id='a'").get().data).reminders,false);
+ const cron=await onRequest({env,request:new Request('https://boplo.app/flight/cron/nudges',{method:'POST',headers:{Authorization:'Bearer wrong'}})});assert.equal(cron.status,401);
+});

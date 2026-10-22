@@ -172,8 +172,31 @@ window.BOPLO_RULES = (() => {
   const legacyRegime = a => ({ 'UK CAA': 'uk', 'EASA member-state authority': 'easa', 'FAA': 'faa', 'Other / deciding': 'icao' })[a];
   const codeForName = n => { if (!n) return ''; const t = String(n).trim().toLowerCase(); const hit = countries.find(c => c.name.toLowerCase() === t || c.code.toLowerCase() === t); if (hit) return hit.code; if (/^(uk|united kingdom|england|scotland|wales|great britain)$/.test(t)) return 'GB'; if (/^(usa|united states|united states of america|us)$/.test(t)) return 'US'; return ''; };
 
+  // ---------- licence requirements, as checklists ----------
+  // k: total | dual | solo | soloxc (hours, worked out from the logbook) · nightldg (count) · longxc (one solo cross-country of at least nm) · manual (ticked by the pilot)
+  const T = (k, need, label, note = '') => ({ k, need, label, note });
+  const M = (id, label, note = '') => ({ k: 'manual', id, label, note });
+  const LX = (nm, label) => ({ k: 'longxc', nm, label });
+  const exams = M('theory', 'Theory exams passed'), medical = M('medical', 'Medical certificate held', 'Needed before your first solo.');
+  const reqs = {
+    'easa|PPL(A)': [T('total', 45, '45 hours of flight instruction', 'Up to 5 hours can be in a simulator.'), T('dual', 25, '25 hours dual'), T('solo', 10, '10 hours supervised solo'), T('soloxc', 5, '5 hours solo cross-country'), LX(150, 'One solo cross-country of at least 270 km (150 NM), with full-stop landings at 2 aerodromes other than departure'), medical, M('rt', 'Radiotelephony privileges'), exams, M('test', 'Skill test')],
+    'easa|LAPL(A)': [T('total', 30, '30 hours of flight instruction'), T('dual', 15, '15 hours dual'), T('solo', 6, '6 hours supervised solo'), T('soloxc', 3, '3 hours solo cross-country'), LX(80, 'One solo cross-country of at least 150 km (80 NM), with a full-stop landing at another aerodrome'), medical, exams, M('test', 'Skill test')],
+    'uk|PPL(A)': [T('total', 40, '40 hours as pilot of aeroplanes'), T('solo', 10, '10 hours supervised solo'), M('qxc', 'Solo qualifying cross-country', 'Your school confirms the route and distance under the current UK rules.'), medical, exams, M('test', 'Skill test')],
+    'uk|NPPL(A)': [T('total', 32, '32 hours of flight time'), T('solo', 10, '10 hours supervised solo'), medical, exams, M('test', 'Skill test')],
+    'faa|Private Pilot': [T('total', 40, '40 hours of flight time'), T('dual', 20, '20 hours with an instructor'), T('solo', 10, '10 hours solo'), T('soloxc', 5, '5 hours solo cross-country'), LX(150, 'One solo cross-country of 150 NM total, full-stop landings at 3 points, one leg over 50 NM'), T('nightldg', 10, '10 night takeoffs and full-stop landings', 'Part of 3 hours of night training, including one cross-country over 100 NM.'), M('xcdual', '3 hours of cross-country training with an instructor'), M('inst', '3 hours of flight by reference to instruments'), M('tower', '3 solo takeoffs and full-stop landings at a towered airport'), M('prep', '3 hours of checkride preparation in the 2 calendar months before the test'), M('medical', 'Medical certificate held', 'Needed before your first solo.'), M('theory', 'Knowledge test passed'), M('test', 'Practical test (checkride)')],
+    'faa|Sport Pilot': [T('total', 20, '20 hours of flight time'), T('dual', 15, '15 hours with an instructor'), T('solo', 5, '5 hours solo'), M('xcdual', '2 hours of cross-country training with an instructor'), LX(75, 'One solo cross-country of 75 NM total, with full-stop landings at 2 points'), M('theory', 'Knowledge test passed'), M('test', 'Practical test (checkride)')],
+    'faa|Recreational Pilot': [T('total', 30, '30 hours of flight time'), T('dual', 15, '15 hours with an instructor'), T('solo', 3, '3 hours solo'), M('medical', 'Medical certificate held'), M('theory', 'Knowledge test passed'), M('test', 'Practical test (checkride)')],
+    'tc|PPL': [T('total', 45, '45 hours of flight time'), T('dual', 17, '17 hours dual'), T('solo', 12, '12 hours solo'), T('soloxc', 5, '5 hours solo cross-country'), M('xc150', 'Solo cross-country of at least 150 NM with 2 full-stop landings away from departure'), medical, exams, M('test', 'Flight test')],
+    'tc|Recreational Pilot Permit': [T('total', 25, '25 hours of flight time'), T('dual', 15, '15 hours dual'), T('solo', 5, '5 hours solo'), medical, exams, M('test', 'Flight test')],
+    'casa|PPL': [T('total', 40, '40 hours of aeronautical experience', '35 hours in an integrated course.'), T('solo', 10, '10 hours solo'), T('soloxc', 5, '5 hours solo cross-country'), LX(150, 'One solo cross-country of at least 150 NM with landings at 2 other aerodromes'), medical, exams, M('test', 'Flight test')],
+    'casa|RPL': [T('total', 25, '25 hours of aeronautical experience'), exams, M('test', 'Flight test')],
+    'nz|PPL': [T('total', 50, '50 hours as pilot', '40 hours if you won’t fly cross-country.'), medical, exams, M('test', 'Flight test')],
+    'icao|PPL': [T('total', 40, '40 hours of flight time', '35 in an approved course.'), T('solo', 10, '10 hours solo'), T('soloxc', 5, '5 hours solo cross-country'), LX(150, 'One solo cross-country of at least 270 km (150 NM) with full-stop landings at 2 aerodromes'), medical, exams, M('test', 'Skill test')]
+  };
+  const requirementsFor = (r, id) => reqs[`${r}|${id}`] || null;
+
   const licencesFor = r => [...(regimes[r] || regimes.icao).licences, ...common];
   const licence = (r, id) => licencesFor(r).find(l => l.id === id) || null;
 
-  return { checked, syllabusFor, regimes, countries, popular, regimeFor, authorityFor, legacyRegime, codeForName, licencesFor, licence, nameFor: c => names[c] || c };
+  return { checked, requirementsFor, syllabusFor, regimes, countries, popular, regimeFor, authorityFor, legacyRegime, codeForName, licencesFor, licence, nameFor: c => names[c] || c };
 })();
