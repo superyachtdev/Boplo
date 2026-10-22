@@ -412,7 +412,7 @@
       </div></aside>
       <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#more" aria-label="Account" ${['more', 'profile', 'plan'].includes(page) ? 'aria-current="page"' : ''} style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
       <main class="main"><div class="page">
-        ${preview ? `<div class="preview-bar"><span><b>Example desk.</b> These are sample records; changes aren’t saved.</span><a class="btn btn-light btn-sm" href="/flight-app.html">Open my own desk</a></div>` : ''}
+        ${state.offline ? '<div class="offline-bar"><b>Offline.</b> Showing your desk as it was when you were last connected. Flights you log now are saved when you reconnect.</div>' : ''}${preview ? `<div class="preview-bar"><span><b>Example desk.</b> These are sample records; changes aren’t saved.</span><a class="btn btn-light btn-sm" href="/flight-app.html">Open my own desk</a></div>` : ''}
         ${(() => { const h = hubOf(page); if (!h || h[3].length < 2) return ''; ui.lastSub[h[0]] = page; return `<nav class="subnav" aria-label="${esc(h[1])}"><span class="subnav-hub">${ico(h[2])}${esc(h[1])}</span><div class="subnav-tabs">${h[3].map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(SUBLABEL[id] || (PAGES.find(x => x[0] === id) || [, id])[1])}</a>`).join('')}</div></nav>`; })()}
         <header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>
         ${body}
@@ -421,6 +421,7 @@
     </div>`;
     fitNav();
     $$('[data-add]').forEach(b => b.onclick = () => { if (!isAdv() && state.flights.length >= B().limits.flights) return upgradeSheet(`The Free plan holds ${B().limits.flights} flights. Advanced gives you an unlimited logbook.`); flightSheet(); });
+    $$('[data-record]').forEach(b => b.onclick = recorderSheet);
     $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
     $$('[data-logout]').forEach(b => b.onclick = logout);
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
@@ -891,7 +892,7 @@
     const q = ui.q.toLowerCase();
     const list = sorted().filter(f => (ui.role === 'all' || f.role === ui.role) && (!q || [f.departure, f.arrival, f.aircraft, f.registration, f.instructor, f.lesson, f.notes, f.date].join(' ').toLowerCase().includes(q)));
     const totalM = sum(list, f => f.minutes);
-    shell('logbook', { title: 'Logbook', sub: 'Every flight you’ve logged, with the context behind it.', actions: `${state.flights.length ? '<button class="btn btn-line" data-print>Print</button><button class="btn btn-line" data-csv>Export CSV</button>' : ''}<button class="btn btn-line" data-import>Import</button><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button>` },
+    shell('logbook', { title: 'Logbook', sub: 'Every flight you’ve logged, with the context behind it.', actions: `${state.flights.length ? '<button class="btn btn-line" data-print>Print</button><button class="btn btn-line" data-csv>Export CSV</button>' : ''}<button class="btn btn-line" data-import>Import</button><button class="btn btn-line" data-record>${ico('map')} Record</button><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button>` },
       state.flights.length ? `
       <div class="toolbar">
         <label class="search">${ico('search')}<span class="sr">Search flights</span><input type="search" data-q value="${esc(ui.q)}" placeholder="Search airfield, lesson, aircraft…"></label>
@@ -1362,11 +1363,13 @@
       <p class="footnote">${m.lately.toFixed(1)} flights a week lately · target ${m.target} (from your profile)</p>
       <div class="mo-actions">
         <label class="switch"><input type="checkbox" data-reminders ${p.reminders ? 'checked' : ''} ${preview ? 'disabled' : ''}><span></span>Email reminders</label>
+        ${pushOK() || iOS ? '<label class="switch"><input type="checkbox" data-pushsw><span></span>Phone notifications</label>' : ''}
         ${standalone() ? '' : `<button type="button" class="btn btn-line btn-sm" data-install ${installEvt || iOS ? '' : 'hidden'}>Install the app</button>`}
       </div>
     </section>`;
   }
   function wireMomentum() {
+    const ps = $('[data-pushsw]'); if (ps) { pushState().then(v => { ps.checked = v; }); ps.onchange = async () => { const want = ps.checked; ps.disabled = true; try { const v = await setPush(want); ps.checked = v; toast(v ? 'Notifications on. A test one is on its way.' : 'Notifications off on this device.'); } catch (x) { ps.checked = !want; toast(x.message); } ps.disabled = false; }; }
     const r = $('[data-reminders]'); if (r) r.onchange = async () => { try { await saveProfile({ reminders: r.checked }); toast(r.checked ? 'Reminders on. Boplo emails you when it’s been a while, and the day before a lesson.' : 'Reminders off.'); } catch (x) { r.checked = !r.checked; toast(x.message); } };
     $$('[data-install]').forEach(b => b.onclick = async () => {
       if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => { }); installEvt = null; b.hidden = true; return; }
@@ -2101,7 +2104,7 @@
   function importSheet() {
     sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Import flights</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
       <div class="sheet-body"><p>Upload a CSV from a spreadsheet or another logbook app. Boplo looks for columns named <b>date</b>, <b>from</b>, <b>to</b>, <b>aircraft</b>, <b>registration</b>, <b>role</b>, <b>duration</b> (h:mm or decimal hours) or <b>minutes</b>, <b>landings</b> and <b>remarks</b>.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><label class="btn btn-line">Choose a CSV file<input type="file" accept=".csv,text/csv" data-file hidden></label><label class="btn btn-blue btn-has-spark">Scan paper logbook pages ${spark}<input type="file" accept="image/*" multiple data-scan hidden></label></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><label class="btn btn-line">Choose a CSV file<input type="file" accept=".csv,text/csv" data-file hidden></label><label class="btn btn-blue btn-has-spark">Scan paper logbook pages ${spark}<input type="file" accept="image/*" multiple data-scan hidden></label><label class="btn btn-line">GPS tracks (GPX, KML, IGC)<input type="file" accept=".gpx,.kml,.igc,application/gpx+xml,application/vnd.google-earth.kml+xml" multiple data-gpx hidden></label></div>
       <p class="hint">Scanning: photograph each page flat, in good light, with the whole page in view. Boplo reads the rows and you check them before anything is saved.</p>
       <div data-prev></div><p class="form-error" role="alert"></p></div>
       <footer class="sheet-foot"><span class="hint" data-count></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-go disabled>Import</button></div></footer>`;
@@ -2128,6 +2131,7 @@
       sheet.querySelectorAll('[data-row]').forEach(tr => tr.oninput = e => { const r = scanned[+tr.dataset.row], k = e.target.dataset.k; if (k === 'use') r.use = e.target.checked; else if (k === 'time') { const v = e.target.value.trim(), m = v.match(/^(\d+):(\d{1,2})$/); r.minutes = m ? +m[1] * 60 + +m[2] : Math.round((parseFloat(v.replace(',', '.')) || 0) * 60); } else r[k] = e.target.value; upd(); });
       upd();
     };
+    sheet.querySelector('[data-gpx]').onchange = async e => { err.textContent = ''; const box = sheet.querySelector('[data-prev]'); box.innerHTML = '<p class="hint">Reading your tracks…</p>'; await importTracks(e.target.files, box); go.disabled = true; sheet.querySelector('[data-count]').textContent = ''; };
     sheet.querySelector('[data-scan]').onchange = async e => {
       err.textContent = ''; const files = [...e.target.files].slice(0, 10); if (!files.length) return;
       const box = sheet.querySelector('[data-prev]'); let notes = [];
@@ -2494,6 +2498,162 @@
     $('[data-reply]').onsubmit = async e => { e.preventDefault(); const f = e.target, err = f.querySelector('.form-error'), btn = f.querySelector('button'); btn.disabled = true; err.textContent = ''; try { await cApi(`posts/${id}/answers`, 'POST', Object.fromEntries(new FormData(f))); questionView(id); } catch (x) { err.textContent = x.message; btn.disabled = false; } };
   }
   // ask once before a destructive click: the first click arms the button, the second confirms
+  /* ================= flight recorder, GPS file import, offline desk and phone notifications ================= */
+  const KT_MS = 1.943844, R_E = 6371000;
+  const distM = (a, b) => { const r = Math.PI / 180, h = Math.sin((b.lat - a.lat) * r / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lng - a.lng) * r / 2) ** 2; return 2 * R_E * Math.asin(Math.sqrt(h)); };
+  // a recorded or imported track ({lat,lng,alt?,t?}) to logbook facts: block time, take-offs and landings, end points
+  function analyseTrack(pts) {
+    const P = pts.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const timed = P.filter(p => Number.isFinite(p.t)).length > P.length * .8;
+    if (!timed) return { points: P, minutes: null, landings: null, first: P[0], last: P[P.length - 1] };
+    for (let i = 1; i < P.length; i++) { const dt = (P[i].t - P[i - 1].t) / 1000; P[i].gs = Number.isFinite(P[i].gs) ? P[i].gs : dt > 0 ? distM(P[i - 1], P[i]) / dt * KT_MS : P[i - 1].gs || 0; }
+    if (P[0]) P[0].gs = P[0].gs || 0;
+    const moving = P.filter(p => p.gs > 6), start = moving[0]?.t ?? P[0].t, end = moving[moving.length - 1]?.t ?? P[P.length - 1].t;
+    const ground = P.filter(p => p.gs < 12 && Number.isFinite(p.alt)).map(p => p.alt).sort((a, b) => a - b), fieldAlt = ground.length ? ground[Math.floor(ground.length / 2)] : null;
+    let air = false, landings = 0, fast = 0, slow = 0, low = 0, takeoff = null;
+    for (const p of P) {
+      const agl = fieldAlt != null && Number.isFinite(p.alt) ? p.alt - fieldAlt : null;
+      if (!air) { fast = p.gs >= 40 ? fast + 1 : 0; if (fast >= 3 || (agl != null && agl > 60 && p.gs > 35)) { air = true; takeoff = takeoff || p.t; fast = 0; low = 0; } }
+      else {
+        slow = p.gs < 35 ? slow + 1 : 0; low = air === true && agl != null && agl < 12 && p.gs < 85 ? low + 1 : 0;
+        // a full stop ends the flight segment; a touch-and-go is counted once, then waits until it climbs away
+        if (slow >= 3) { if (air === true) landings++; air = false; slow = 0; low = 0; }
+        else if (low >= 3) { landings++; air = 'touched'; low = 0; }
+        else if (air === 'touched' && agl != null && agl > 40) air = true;
+      }
+    }
+    if (air === 'touched') air = false;
+    return { points: P, minutes: Math.max(1, Math.round((end - start) / 60000)), landings, takeoff, first: P[0], last: P[P.length - 1], date: new Date(start).toISOString().slice(0, 10), airborne: !!takeoff };
+  }
+  const thin = (P, max = 1500) => { if (P.length <= max) return P; const k = P.length / max, out = []; for (let i = 0; i < max; i++) out.push(P[Math.floor(i * k)]); out.push(P[P.length - 1]); return out; };
+  async function nearestField(pt) { if (!pt || !window.BoploMap) return ''; const cc = countryCodeOf(state.profile); const list = cc ? await BoploMap.airfields(cc) : []; let best = null, bd = 4000; for (const a of list) { const d = distM(pt, a); if (d < bd) { bd = d; best = a; } } return best ? best.code : ''; }
+  async function draftFromTrack(pts, extra = {}) {
+    const a = analyseTrack(pts), p = state.profile;
+    const [dep, arr] = await Promise.all([nearestField(a.first), nearestField(a.last)]);
+    return { date: a.date || todayISO(), departure: dep, arrival: arr || dep, minutes: a.minutes ?? '', landings: a.landings ?? '', aircraft: p.aircraft || '', registration: p.registration || '', role: 'dual', points: thin(a.points).map(x => ({ lat: +x.lat.toFixed(6), lng: +x.lng.toFixed(6) })), routeKind: 'track', notes: '', ...extra };
+  }
+
+  // ---- the recorder: keeps the screen awake, saves as it goes so a reload doesn't lose the flight ----
+  const REC = 'boplo-rec';
+  const recLoad = () => { try { return JSON.parse(localStorage.getItem(REC) || 'null'); } catch { return null; } };
+  const recSave = r => { try { localStorage.setItem(REC, JSON.stringify(r)); } catch { } };
+  let recWatch = null, recWake = null, recTick = 0;
+  function recorderSheet() {
+    if (!navigator.geolocation) { toast('This device can’t share its location.'); return; }
+    let r = recLoad() || { pts: [], startedAt: Date.now(), running: false };
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Record a flight</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body rec">
+        <div class="rec-big"><div><span>Time</span><b data-rt>0:00</b></div><div><span>Groundspeed</span><b data-rgs>—</b></div><div><span>Altitude</span><b data-ralt>—</b></div><div><span>Landings</span><b data-rld>0</b></div></div>
+        <p class="rec-state" data-rstate>Ready. Start when you’re strapped in; Boplo works out the take-off, the landings and your times.</p>
+        <p class="hint">Keep Boplo open with the screen on (it stays awake while recording), and the phone somewhere it can see the sky. Recording uses your location only on this device until you save the flight. Never let it distract you: set it up before engine start.</p>
+        <p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><button type="button" class="btn btn-line" data-rdiscard ${r.pts.length ? '' : 'hidden'}>Discard</button><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-blue btn-has-spark" data-rgo>${r.running ? 'Stop and log it' : r.pts.length ? 'Resume' : 'Start recording'} ${spark}</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
+    const $s = q => sheet.querySelector(q), err = $s('.form-error');
+    const paint = () => {
+      if (!sheet.open || !$s('[data-rt]')) return;
+      const a = r.pts.length > 2 ? analyseTrack(r.pts.map(x => ({ ...x }))) : null, last = r.pts[r.pts.length - 1];
+      const sec = r.running || r.pts.length ? Math.round(((r.running ? Date.now() : last?.t || Date.now()) - r.startedAt) / 1000) : 0;
+      $s('[data-rt]').textContent = `${Math.floor(sec / 3600)}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}${sec < 3600 ? ':' + String(sec % 60).padStart(2, '0') : ''}`;
+      $s('[data-rgs]').textContent = last && Number.isFinite(last.gs) ? `${Math.round(last.gs)} kt` : '—';
+      $s('[data-ralt]').textContent = last && Number.isFinite(last.alt) ? `${Math.round(last.alt / 0.3048).toLocaleString('en-GB')} ft` : '—';
+      $s('[data-rld]').textContent = a?.landings ?? 0;
+      $s('[data-rstate]').textContent = !r.running ? (r.pts.length ? `Paused · ${r.pts.length} points recorded.` : $s('[data-rstate]').textContent) : !a ? 'Recording. Waiting for a GPS fix…' : a.airborne ? `Recording · airborne since ${new Date(a.takeoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : last?.gs > 6 ? 'Recording · taxiing' : 'Recording · on the ground';
+    };
+    const onPos = pos => {
+      const c = pos.coords, t = pos.timestamp || Date.now(), last = r.pts[r.pts.length - 1];
+      if (c.accuracy > 80) return;
+      const pt = { lat: c.latitude, lng: c.longitude, alt: Number.isFinite(c.altitude) ? c.altitude : undefined, t, gs: Number.isFinite(c.speed) && c.speed >= 0 ? c.speed * KT_MS : undefined };
+      if (last && t - last.t < 2000) return;
+      if (last && distM(last, pt) < 8 && t - last.t < 15000) return;
+      if (!Number.isFinite(pt.gs) && last) pt.gs = distM(last, pt) / ((t - last.t) / 1000) * KT_MS;
+      r.pts.push(pt); if (r.pts.length > 9000) r.pts = r.pts.filter((_, i) => i % 2 === 0);
+      if (!r.saveT || t - r.saveT > 15000) { r.saveT = t; recSave(r); }
+      paint();
+    };
+    const startRec = async () => {
+      err.textContent = ''; r.running = true; if (!r.pts.length) r.startedAt = Date.now(); recSave(r);
+      recWatch = navigator.geolocation.watchPosition(onPos, e => { err.textContent = e.code === 1 ? 'Allow location access for Boplo to record the flight.' : 'No GPS signal yet. Keep the phone where it can see the sky.'; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      try { recWake = await navigator.wakeLock?.request('screen'); } catch { }
+      clearInterval(recTick); recTick = setInterval(paint, 1000);
+      $s('[data-rgo]').innerHTML = `Stop and log it ${spark}`; $s('[data-rdiscard]').hidden = false; paint();
+    };
+    const stopRec = () => { if (recWatch != null) navigator.geolocation.clearWatch(recWatch); recWatch = null; try { recWake?.release(); } catch { } recWake = null; clearInterval(recTick); r.running = false; recSave(r); };
+    $s('[data-rgo]').onclick = async () => {
+      if (!r.running) return startRec();
+      stopRec();
+      if (r.pts.length < 3) { err.textContent = 'Not enough GPS points were recorded to log a flight.'; return; }
+      const draft = await draftFromTrack(r.pts);
+      try { localStorage.removeItem(REC); } catch { }
+      sheet.close(); setTimeout(() => flightSheet(draft), 50); toast('Check the details, add your debrief and save.');
+    };
+    $s('[data-rdiscard]').onclick = e => { if (!confirmInline(e.target, 'Discard it?')) return; stopRec(); try { localStorage.removeItem(REC); } catch { } r = { pts: [], startedAt: Date.now(), running: false }; sheet.close(); toast('Recording discarded.'); };
+    addEventListener('visibilitychange', async () => { if (r.running && document.visibilityState === 'visible' && !recWake) { try { recWake = await navigator.wakeLock?.request('screen'); } catch { } } });
+    if (r.running) { r.running = false; startRec(); } else paint();
+  }
+
+  // ---- GPS files from ForeFlight, SkyDemon, Garmin and others: GPX, KML (including gx:Track) and IGC ----
+  function parseTrackFile(name, text) {
+    const n = name.toLowerCase(), pts = [];
+    if (/\.gpx$/.test(n) || /<gpx[\s>]/i.test(text)) {
+      for (const m of text.matchAll(/<(trkpt|rtept)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) { const lat = +(m[2].match(/lat="([^"]+)"/) || [])[1], lng = +(m[2].match(/lon="([^"]+)"/) || [])[1], ele = (m[3].match(/<ele>([^<]+)<\/ele>/) || [])[1], time = (m[3].match(/<time>([^<]+)<\/time>/) || [])[1]; pts.push({ lat, lng, alt: ele != null ? +ele : undefined, t: time ? Date.parse(time) : undefined }); }
+    } else if (/\.kml$/.test(n) || /<kml[\s>]/i.test(text)) {
+      const when = [...text.matchAll(/<when>([^<]+)<\/when>/g)].map(m => Date.parse(m[1])), gx = [...text.matchAll(/<gx:coord>([^<]+)<\/gx:coord>/g)].map(m => m[1].trim().split(/\s+/).map(Number));
+      if (gx.length) gx.forEach(([lng, lat, alt], i) => pts.push({ lat, lng, alt, t: when[i] }));
+      else for (const m of text.matchAll(/<coordinates>([\s\S]*?)<\/coordinates>/g)) m[1].trim().split(/\s+/).forEach(c => { const [lng, lat, alt] = c.split(',').map(Number); pts.push({ lat, lng, alt }); });
+    } else if (/\.igc$/.test(n) || /^B\d{6}\d{7}[NS]\d{8}[EW]/m.test(text)) {
+      const d = (text.match(/HFDTE(?:DATE:)?(\d{2})(\d{2})(\d{2})/) || []); const base = d.length ? Date.UTC(2000 + +d[3], +d[2] - 1, +d[1]) : Date.now();
+      for (const m of text.matchAll(/^B(\d{2})(\d{2})(\d{2})(\d{2})(\d{5})([NS])(\d{3})(\d{5})([EW])[AV](\d{5})(\d{5})/gm)) { const lat = (+m[4] + +m[5] / 60000) * (m[6] === 'S' ? -1 : 1), lng = (+m[7] + +m[8] / 60000) * (m[9] === 'W' ? -1 : 1); pts.push({ lat, lng, alt: +m[11] || +m[10], t: base + ((+m[1] * 60 + +m[2]) * 60 + +m[3]) * 1000 }); }
+    }
+    return pts.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180);
+  }
+  async function importTracks(files, box) {
+    const out = [];
+    for (const f of [...files].slice(0, 12)) {
+      try { const pts = parseTrackFile(f.name, await f.text()); if (pts.length < 2) throw new Error('no track points found'); out.push({ name: f.name, draft: await draftFromTrack(pts) }); }
+      catch (x) { out.push({ name: f.name, error: x.message }); }
+    }
+    box.innerHTML = `<div class="trk-list">${out.map((o, i) => o.error ? `<div class="trk bad"><b>${esc(o.name)}</b><small>Couldn’t read it: ${esc(o.error)}</small></div>` : `<div class="trk"><div><b>${esc(o.draft.date)} · ${esc(upper(o.draft.departure) || '?')} → ${esc(upper(o.draft.arrival) || '?')}</b><small>${esc(o.name)} · ${o.draft.points.length} points${o.draft.minutes ? ' · ' + hm(o.draft.minutes) : ''}${o.draft.landings !== '' ? ` · ${o.draft.landings} landing${o.draft.landings === 1 ? '' : 's'}` : ''}</small></div><button type="button" class="btn btn-blue btn-sm" data-trk="${i}">Review and log</button></div>`).join('')}</div><p class="hint">Times and landings are worked out from the track. Check them against your logbook before saving.</p>`;
+    box.querySelectorAll('[data-trk]').forEach(b => b.onclick = () => { const d = out[+b.dataset.trk].draft; b.disabled = true; b.textContent = 'Opened'; sheet.close(); setTimeout(() => flightSheet(d), 50); });
+  }
+
+  // ---- offline: keep the last desk on this device and queue flights logged without a connection ----
+  const OUTBOX = 'boplo-outbox', SNAP = 'boplo-ws';
+  const isOffline = x => !navigator.onLine || x instanceof TypeError || x?.name === 'TimeoutError' || x?.name === 'AbortError' || (x?.status === 503 && /reachable/i.test(x?.message || ''));
+  function saveSnapshot(ws) { try { const lite = { ...ws, flights: (ws.flights || []).map((f, i) => i < 60 ? f : { ...f, points: (f.points || []).length > 2 ? [f.points[0], f.points[f.points.length - 1]] : f.points }) }; localStorage.setItem(SNAP, JSON.stringify(lite)); } catch { try { localStorage.removeItem(SNAP); } catch { } } }
+  const loadSnapshot = () => { try { return JSON.parse(localStorage.getItem(SNAP) || 'null'); } catch { return null; } };
+  const outbox = () => { try { return JSON.parse(localStorage.getItem(OUTBOX) || '[]'); } catch { return []; } };
+  const setOutbox = l => { try { localStorage.setItem(OUTBOX, JSON.stringify(l)); } catch { } };
+  function queueFlight(data) { const id = 'local-' + Date.now().toString(36); setOutbox([...outbox(), { id, data }]); return { ...data, id, pending: true }; }
+  let flushing = false;
+  async function flushOutbox() {
+    if (flushing || preview || !navigator.onLine) return; const q = outbox(); if (!q.length) return; flushing = true; let done = 0;
+    for (const item of q) {
+      try { const r = await api('flights', 'POST', item.data); state.flights = [r.flight, ...state.flights.filter(f => f.id !== item.id)]; setOutbox(outbox().filter(x => x.id !== item.id)); done++; }
+      catch (x) { if (isOffline(x)) break; if (x.status >= 400 && x.status < 500) { setOutbox(outbox().filter(x2 => x2.id !== item.id)); toast(`A flight saved offline couldn’t be added: ${x.message}`); } }
+    }
+    flushing = false; if (done) { state.offline = false; render(); toast(`${done} flight${done === 1 ? '' : 's'} logged offline ${done === 1 ? 'is' : 'are'} now saved to your account.`); }
+  }
+  addEventListener('online', () => { flushOutbox(); if (state.offline) { state.offline = false; start(); } });
+  addEventListener('offline', () => { toast('You’re offline. Your desk keeps working, and flights you log are saved when you reconnect.'); });
+
+  // ---- phone notifications (web push) ----
+  const pushOK = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && !preview;
+  const b64ToU8 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const b = atob(s); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+  async function setPush(on) {
+    if (!pushOK()) throw new Error('This browser can’t show notifications.');
+    if (iOS && !standalone()) throw new Error('On iPhone, add Boplo to your Home Screen first (Share → Add to Home Screen), then turn notifications on from the app.');
+    const reg = await navigator.serviceWorker.ready;
+    if (!on) { const s = await reg.pushManager.getSubscription(); if (s) { await api('push/subscribe', 'DELETE', { endpoint: s.endpoint }).catch(() => { }); await s.unsubscribe().catch(() => { }); } return false; }
+    const perm = await Notification.requestPermission(); if (perm !== 'granted') throw new Error('Notifications are blocked for Boplo. Allow them in your browser or phone settings.');
+    const { key } = await api('push/key');
+    let s = await reg.pushManager.getSubscription(); if (!s) s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(key) });
+    await api('push/subscribe', 'POST', { subscription: s.toJSON() });
+    await api('push/test', 'POST').catch(() => { });
+    return true;
+  }
+  async function pushState() { if (!pushOK()) return false; try { const reg = await navigator.serviceWorker.getRegistration(); const s = reg && await reg.pushManager.getSubscription(); return !!s && Notification.permission === 'granted'; } catch { return false; } }
+
   const confirmInline = (b, label) => { if (b.dataset.armed) return true; b.dataset.armed = '1'; const t = b.textContent; b.textContent = label; setTimeout(() => { delete b.dataset.armed; b.textContent = t; }, 3000); return false; };
 
   /* ---- leaderboards ---- */
@@ -3026,6 +3186,7 @@
     sheet.innerHTML = `<form method="dialog" novalidate data-sheet>
       <header class="sheet-head"><h2 id="sheet-title" class="display">${editing ? 'Flight record' : 'Log a flight'}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></header>
       <div class="sheet-body">
+        ${!editing && !f.points?.length ? '<button type="button" class="rec-cta" data-record><span class="rec-dot"></span><span><b>About to fly? Record it with GPS</b><small>Boplo fills in the times, landings and track for you.</small></span></button>' : ''}${!editing && f.routeKind === 'track' && f.points?.length ? `<p class="callout">From your GPS track: ${f.points.length} points${f.minutes ? `, ${hm(f.minutes)}` : ''}${f.landings !== '' && f.landings != null ? `, ${f.landings} landing${f.landings === 1 ? '' : 's'}` : ''}. Check the times and add your debrief.</p>` : ''}
         <div class="group"><h3>The flight</h3><div class="fields">
           ${input('Date', 'date', f.date || todayISO(), 'date', `required max="${todayISO()}"`)}
           ${duration('Flight time', 'minutes', f.minutes ?? '', true)}
@@ -3118,12 +3279,15 @@
         const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), nightLandings: Math.min(Number(v.nightLandings || 0), Number(v.landings || 0)), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
         data.win = String(v.win || '').trim().slice(0, 200);
         btn.disabled = true; const msBefore = new Set(milestones().map(m => m.title));
-        const saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data);
+        let saved, queued = false;
+        try { saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data); }
+        catch (x) { if (!editing && isOffline(x)) { saved = { flight: queueFlight(data) }; queued = true; } else throw x; }
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
-        sheet.close(); render(); toast(editing ? 'Flight updated.' : 'Flight saved.');
+        sheet.close(); render(); toast(queued ? 'You’re offline: the flight is saved on this device and goes to your account when you reconnect.' : editing ? 'Flight updated.' : 'Flight saved.');
         if (!editing) { const fresh = milestones().filter(m => !msBefore.has(m.title) && m.title !== 'First flight logged'); if (fresh.length) setTimeout(() => celebrate(fresh.sort((a, b) => (b.title === 'First solo') - (a.title === 'First solo'))[0]), 700); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; err.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }); }
     };
+    sheet.querySelectorAll('[data-record]').forEach(b => b.onclick = () => { sheet.close(); setTimeout(recorderSheet, 50); });
     const del = sheet.querySelector('[data-delete]');
     if (del) del.onclick = async () => {
       if (!del.classList.contains('armed')) { del.classList.add('armed'); del.textContent = 'Delete for good'; return; }
@@ -3194,13 +3358,17 @@
     try {
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
-      state = ws; state.billing = ws.billing || null;
+      state = ws; state.billing = ws.billing || null; saveSnapshot(ws); setTimeout(flushOutbox, 1500);
       const q = new URLSearchParams(location.search);
       if (q.get('setup_intent') || q.get('payment_intent')) { history.replaceState(null, '', location.pathname + '#plan'); render(); finishCheckout(); return; }
       try { const intent = JSON.parse(localStorage.getItem('boplo-intent') || 'null'); if (intent?.plan && ws.profile?.complete) { localStorage.removeItem('boplo-intent'); ui.billInterval = intent.plan === 'monthly' ? 'monthly' : 'yearly'; if (B().plan !== 'advanced') location.hash = '#plan'; } } catch { }
       render();
     }
-    catch (e) { if (e.status === 401) auth(); else failure(e); }
+    catch (e) {
+      const snap = isOffline(e) ? loadSnapshot() : null;
+      if (snap?.user) { state = snap; state.billing = snap.billing || null; state.offline = true; const q = outbox(); if (q.length) state.flights = [...q.map(x => ({ ...x.data, id: x.id, pending: true })), ...state.flights.filter(f => !q.some(x => x.id === f.id))]; render(); return; }
+      if (e.status === 401) auth(); else failure(e);
+    }
   }
   start();
 })();

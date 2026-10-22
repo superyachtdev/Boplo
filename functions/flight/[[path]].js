@@ -1,6 +1,7 @@
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
+import { pushRoutes } from '../lib/push.js';
 import { health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
@@ -100,6 +101,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
   await env.DB.prepare('INSERT INTO flight_scans(user_id,day,n) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET n=n+1').bind(user.id,day).run();
   return json(out);
  }
+ if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
  // ---------- plan and billing ----------

@@ -178,3 +178,15 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Question bank needs instructor review before marketing it as exam prep.
 - Stripe is in test mode until the owner switches keys to live. Get the legal pages reviewed.
 - Unused legacy CSS/JS in `dist/` could be cleaned up.
+
+## Flight recording, GPS import, offline mode, phone notifications
+- **Record a flight** (Logbook → Record, and the CTA in Log a flight): `recorderSheet()` in flight-app.js uses `watchPosition` (high accuracy, fixes worse than 80 m skipped) with a screen wake lock. The track is kept in localStorage `boplo-rec` every 15 s, so a reload resumes it. "Stop and log it" opens the flight sheet prefilled by `draftFromTrack()`.
+- **analyseTrack(pts)**: block time from first to last fix moving above 6 kt. Airborne at 40 kt for 3 fixes (or more than 60 m above field altitude). Field altitude is the median altitude of slow fixes. A full stop is under 35 kt for 3 fixes. A touch-and-go is under 12 m above field for 3 fixes, counted once until the aircraft climbs above 40 m. Departure and arrival are the nearest airfield within 4 km.
+- **GPS import** (Import → GPS tracks): `parseTrackFile` reads GPX trkpt/rtept, KML gx:Track or coordinates, and IGC B records. Each file becomes a draft with "Review and log". Tracks are thinned to about 1,500 points (the server caps at 2,000) and saved with `routeKind: 'track'`.
+- **Offline**: `start()` saves a workspace snapshot (localStorage `boplo-ws`). If the API is unreachable it loads the snapshot, shows `.offline-bar`, and queues new flights in `boplo-outbox`. The outbox is flushed on `online` and on the next start. The service worker cache is now `boplo-shell-v2`.
+- **Phone notifications** (Overview → momentum tile switch): Web Push with VAPID. `functions/lib/push.js` generates the ES256 key pair on first use and stores it in D1 `flight_kv('vapid')`, so there is no secret to set. Subscriptions live in `flight_push`. Payloads are encrypted with aes128gcm (RFC 8291) and checked by `scripts/push-check.mjs`. Routes: `push/key`, `push/subscribe` (POST/DELETE), `push/test`. Notifications are sent for:
+  - a new answer to your question
+  - a new direct message
+  - the daily nudges (sent even if email reminders are off)
+
+  Expired subscriptions (404/410) are deleted. iOS only allows push from the installed Home Screen app.

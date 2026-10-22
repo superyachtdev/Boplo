@@ -2,6 +2,7 @@
 // Run once a day: POST /flight/cron/nudges with "Authorization: Bearer <CRON_SECRET>" (the GitHub Action in .github/workflows/nudges.yml does this).
 // Needs RESEND_API_KEY and EMAIL_FROM (already used for sign-in links) and CRON_SECRET.
 
+import { pushTo } from './push.js';
 const DAY = 86400000;
 let ready = null;
 function ensure(env) {
@@ -54,22 +55,29 @@ ${n.lines.map(l => `<p style="margin:0 0 12px">${esc(l)}</p>`).join('')}
 }
 
 export async function runNudges(env, { origin = 'https://boplo.app', now = Date.now(), fetcher = fetch } = {}) {
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return { ok: false, error: 'Email is not configured.' };
+  const emailOn = !!(env.RESEND_API_KEY && env.EMAIL_FROM);
   await ensure(env);
   const profiles = (await env.DB.prepare('SELECT p.user_id, p.data, u.email FROM flight_profiles p JOIN darts_users u ON u.id=p.user_id').all()).results || [];
   const lastRows = (await env.DB.prepare("SELECT user_id, MAX(json_extract(data,'$.date')) last, COUNT(*) n FROM flight_records GROUP BY user_id").all()).results || [];
   const lastBy = Object.fromEntries(lastRows.map(r => [r.user_id, r]));
   let sent = 0, checked = 0;
+  let pushUsers = new Set(); try { pushUsers = new Set(((await env.DB.prepare('SELECT DISTINCT user_id FROM flight_push').all()).results || []).map(r => r.user_id)); } catch { }
   for (const row of profiles) {
     let profile; try { profile = JSON.parse(row.data || '{}'); } catch { continue; }
-    if (profile.reminders !== true || !row.email) continue;
+    const wantsEmail = emailOn && profile.reminders === true && !!row.email, wantsPush = pushUsers.has(row.user_id);
+    if (!wantsEmail && !wantsPush) continue;
     checked++;
     const done = Object.fromEntries(((await env.DB.prepare('SELECT kind, sent_at FROM flight_nudges WHERE user_id=?').bind(row.user_id).all()).results || []).map(r => [r.kind, r.sent_at]));
     const n = pickNudge({ profile, lastFlight: lastBy[row.user_id]?.last || null, flights: lastBy[row.user_id]?.n || 0, sent: done, now });
     if (!n) continue;
-    const off = `${origin}/flight/nudges/off?u=${encodeURIComponent(row.user_id)}&t=${await unsubToken(env, row.user_id)}`;
-    const res = await fetcher('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [row.email], subject: n.subject, html: emailHtml(n, origin, off), headers: { 'List-Unsubscribe': `<${off}>` } }) });
-    if (!res.ok) { console.error('nudge email failed', res.status); continue; }
+    let ok = false;
+    if (wantsPush) { try { ok = (await pushTo(env, row.user_id, { title: n.subject, body: n.lines[1] || n.lines[0], url: `${origin}/flight-app.html${n.cta[1]}`, tag: n.kind })) > 0; } catch { } }
+    if (wantsEmail) {
+      const off = `${origin}/flight/nudges/off?u=${encodeURIComponent(row.user_id)}&t=${await unsubToken(env, row.user_id)}`;
+      const res = await fetcher('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [row.email], subject: n.subject, html: emailHtml(n, origin, off), headers: { 'List-Unsubscribe': `<${off}>` } }) });
+      if (res.ok) ok = true; else console.error('nudge email failed', res.status);
+    }
+    if (!ok) continue;
     await env.DB.prepare('INSERT INTO flight_nudges(user_id,kind,sent_at) VALUES(?,?,?) ON CONFLICT(user_id,kind) DO UPDATE SET sent_at=excluded.sent_at').bind(row.user_id, n.kind, now).run();
     sent++;
   }

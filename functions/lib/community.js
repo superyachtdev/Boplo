@@ -2,6 +2,7 @@
 // near your home airfield with private messages. People appear as first name + home airfield + licence.
 // Everything is created lazily in D1. Rate limits are per user per UTC day.
 
+import { pushTo } from './push.js';
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const now = () => Date.now();
 const day = () => new Date().toISOString().slice(0, 10);
@@ -110,6 +111,7 @@ async function answer(env, user, qid, input) {
     env.DB.prepare('INSERT INTO community_posts(id,user_id,parent_id,title,body,topic,created_at,last_at) VALUES(?,?,?,NULL,?,NULL,?,?)').bind(id, user.id, qid, body, t, t),
     env.DB.prepare('UPDATE community_posts SET answers=answers+1,last_at=? WHERE id=?').bind(t, qid)
   ]);
+  try { const q = await env.DB.prepare('SELECT user_id,title FROM community_posts WHERE id=?').bind(qid).first(); if (q && q.user_id !== user.id) { const me = (await people(env, [user.id]))[user.id]; await pushTo(env, q.user_id, { title: 'New answer to your question', body: `${me?.name || 'A pilot'}: ${body.slice(0, 110)}`, url: '/flight-app.html#community', tag: 'q-' + qid }); } } catch { }
   return { id };
 }
 async function vote(env, user, input) {
@@ -247,6 +249,7 @@ async function send(env, user, pid, input) {
   if (!listed && !wrote) fail(403, 'This pilot isn’t taking new messages.');
   await use(env, user.id, 'messages'); await pidOf(env, user.id);
   await env.DB.prepare('INSERT INTO community_msgs(id,from_id,to_id,body,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(), user.id, other, body, now()).run();
+  try { const me = (await people(env, [user.id]))[user.id]; await pushTo(env, other, { title: `Message from ${me?.name || 'a pilot'}${me?.airfield ? ' · ' + me.airfield : ''}`, body: body.slice(0, 140), url: '/flight-app.html#students', tag: 'dm-' + user.id }); } catch { }
   return { ok: true };
 }
 async function block(env, user, pid, on) {
