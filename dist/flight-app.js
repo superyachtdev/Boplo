@@ -1419,7 +1419,9 @@
     shell('plan', { title: 'Plan & billing', sub: adv ? 'Your subscription and payment details.' : 'Start free. Go Advanced when the hours add up.' },
       `${preview ? '<p class="callout">The example desk shows every Advanced feature. Sign in to see your own plan.</p>' : ''}
       ${!b.ready && !preview ? '<p class="callout warn">Payments are being set up. You can keep using the Free plan in the meantime.</p>' : ''}
-      ${adv ? `<section class="tile dark plan-now">${contours('a')}
+      ${adv && b.owner ? `<section class="tile dark plan-now">${contours('a')}
+          <div><span class="kicker">Your plan</span><h2 class="display">Advanced · owner</h2><p>Complimentary owner access. It never expires and nothing is billed.</p></div>
+        </section>` : adv ? `<section class="tile dark plan-now">${contours('a')}
           <div><span class="kicker">Your plan</span><h2 class="display">Advanced${b.interval ? ` · ${b.interval === 'monthly' ? 'monthly' : 'yearly'}` : ''}</h2><p>${esc(statusLine)}</p></div>
           <div class="plan-now-actions">
             <button class="btn btn-light" data-portal>Payment method and invoices</button>

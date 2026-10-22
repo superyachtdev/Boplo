@@ -10,7 +10,10 @@ export const FREE_LIMITS = { flights: 15, navPlans: 1 };
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const STRIPE_VERSION = '2024-06-20'; // pinned so response shapes stay stable
 
-export const planOf = row => (row && ACTIVE.has(row.status) ? 'advanced' : 'free');
+export const planOf = row => (row && (row.owner || ACTIVE.has(row.status)) ? 'advanced' : 'free');
+// OWNER_EMAILS (Cloudflare env, comma-separated): these accounts always have Advanced, free, with no Stripe subscription
+export const isOwner = (env, user) => !!user?.email && String(env.OWNER_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).includes(String(user.email).trim().toLowerCase());
+export const withOwner = (env, user, row) => (isOwner(env, user) ? { ...(row || {}), owner: true } : row);
 // limits only apply once checkout is configured, so nobody is locked out before they can upgrade
 export const billingOn = env => !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY);
 export const effectivePlan = (env, row) => (billingOn(env) ? planOf(row) : 'advanced');
@@ -109,7 +112,7 @@ export async function syncCustomer(env, customerId, fetcher = fetch) {
 
 export function publicBilling(env, row) {
   return {
-    plan: effectivePlan(env, row), enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
+    plan: effectivePlan(env, row), owner: !!row?.owner, enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
     cancelAtPeriodEnd: !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: !row?.trial_used,
     trialDays: Number(env.BILLING_TRIAL_DAYS ?? 7), publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
     tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS

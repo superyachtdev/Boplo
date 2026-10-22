@@ -1,5 +1,5 @@
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
-import { health, checkPromo, planOf, effectivePlan, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
+import { health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
 const text = (value,max=200) => String(value ?? '').trim().slice(0,max);
@@ -43,7 +43,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
- const brow=await billingRow(env,user.id).catch(()=>null),plan=effectivePlan(env,brow);
+ const brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null)),plan=effectivePlan(env,brow);
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='workspace'&&request.method==='GET'){
@@ -78,9 +78,9 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='billing/health'&&request.method==='GET')return json(await health(env));
  if(path==='billing/promo'&&request.method==='POST')return json(await checkPromo(env,await body()));
  if(path==='billing/subscribe'&&request.method==='POST')return json(await subscribe(env,user,await body(),url.origin));
- if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,r));}
- if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,await setCancel(env,user,true)));
- if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,await setCancel(env,user,false)));
+ if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,withOwner(env,user,r)));}
+ if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,true))));
+ if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,false))));
  if(path==='billing/portal'&&request.method==='POST')return json(await portal(env,user,url.origin));
  // ---------- your data ----------
  if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}

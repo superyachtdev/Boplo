@@ -102,6 +102,12 @@ test('free plan limits, paid features and billing state',async()=>{
  assert.equal((await call('flights','POST',valid)).status,402);
  assert.equal((await call('flights/import','POST',{flights:[valid]})).status,402);
  assert.equal((await call('share','POST',{})).status,402);
+ // owner emails always get Advanced, without a subscription
+ env.OWNER_EMAILS=' someone@else.com , FR@example.com ';
+ const own=await (await call('workspace')).json();assert.equal(own.billing.plan,'advanced');assert.equal(own.billing.owner,true);
+ assert.equal((await call('flights','POST',valid)).status,201);
+ db.prepare("DELETE FROM flight_records WHERE rowid=(SELECT MAX(rowid) FROM flight_records)").run();
+ delete env.OWNER_EMAILS;
  const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,true);assert.equal(ws.billing.ready,true);assert.equal(publicBilling({},null).plan,'advanced');
  // an abandoned trial checkout stays free; a paid subscription unlocks everything
  db.prepare("INSERT INTO flight_billing(user_id,customer_id,status,updated_at) VALUES('fr','cus_1','incomplete',0)").run();
