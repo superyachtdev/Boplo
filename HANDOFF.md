@@ -94,6 +94,12 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 - **Limits:** daily count per user in `flight_ai_usage` (created on first use). Free gets 3 a day (then 402 → upgrade sheet), Advanced 40 (then 429).
 - Chat history lives in the browser's localStorage only. The privacy policy lists Anthropic as a processor.
 
+## Navigation hubs (2026-10-22, Claude)
+- The sidebar was 14 items and scrolled, so pages are grouped into 5 hubs (`HUBS` in `dist/flight-app.js`): Overview · Ask Boplo · Logbook (Flights, Map, Analytics) · Training (Progress, Prepare, Study, Radio, Currency) · Flight planning (Nav log, Weather, Simulator).
+- Hubs with more than one page show pill sub-tabs (`.subnav`) above the page title. Each hub remembers the last sub-tab used (`ui.lastSub`) for the session.
+- Mobile: the 5 hubs are the bottom tabs. The topbar avatar opens `#more`, now the Account page (Profile, Plan & billing, legal links, sign out).
+- Every page keeps its own hash (`#currency`, `#sim` …), so old links still work; `#training`, `#planning` and `#account` also resolve.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

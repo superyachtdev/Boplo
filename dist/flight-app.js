@@ -68,8 +68,20 @@
     ['map', 'Map', 'map'],
     ['analytics', 'Analytics', 'analytics']
   ];
-  const TABS = ['overview', 'logbook', 'ask', 'progress', 'more'];
-  const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare' };
+  // the sidebar groups pages into hubs; each hub shows its pages as tabs across the top
+  const HUBS = [
+    ['overview', 'Overview', 'overview', ['overview'], 'Overview'],
+    ['ask', 'Ask Boplo', 'ask', ['ask'], 'Ask'],
+    ['logbook', 'Logbook', 'logbook', ['logbook', 'map', 'analytics'], 'Logbook'],
+    ['training', 'Training', 'study', ['progress', 'prepare', 'study', 'radio', 'currency'], 'Training'],
+    ['planning', 'Flight planning', 'navlog', ['navlog', 'weather', 'sim'], 'Planning']
+  ];
+  const SUBLABEL = { logbook: 'Flights' };
+  const hubOf = id => HUBS.find(h => h[3].includes(id));
+  ui.lastSub = ui.lastSub || {};
+  const hubHref = h => '#' + (ui.lastSub[h[0]] && h[3].includes(ui.lastSub[h[0]]) ? ui.lastSub[h[0]] : h[3][0]);
+  const TABS = HUBS.map(h => h[0]);
+  const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare', training: 'progress', planning: 'navlog', account: 'more' };
   const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more', 'plan'].includes(k) ? k : 'overview'; };
 
   /* checklist stored as text lines: "[x] item" / "[ ] item" */
@@ -346,19 +358,20 @@
       <aside class="side"><div class="side-in night">${contours('b')}
         ${brand('#overview')}
         <button class="btn btn-blue btn-has-spark log-cta" data-add>Log a flight ${spark}</button>
-        <nav aria-label="Flight desk">${PAGES.map(([id, label, icon]) => `<a href="#${id}" ${page === id ? 'aria-current="page"' : ''}>${ico(icon)}${label}</a>`).join('')}</nav>
+        <nav aria-label="Flight desk">${HUBS.map(h => `<a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="page"' : ''}>${ico(h[2])}${h[1]}</a>`).join('')}</nav>
         <div class="me">
           <div class="me-row"><span class="avatar" aria-hidden="true">${esc(initials(p.name))}</span><div style="min-width:0"><b>${esc(p.name)}</b><small><span class="plan-badge ${isAdv() ? 'adv' : ''}">${isAdv() ? 'Advanced' : 'Free'}</span>${esc([p.licence, p.authority].filter(Boolean).join(' · '))}</small></div></div>
           <div class="me-actions"><a href="#profile" ${page === 'profile' ? 'aria-current="page"' : ''}>${ico('profile')}Profile</a><a href="#plan" ${page === 'plan' ? 'aria-current="page"' : ''}>${ico('plan')}${isAdv() ? 'Plan' : 'Upgrade'}</a><button data-logout>${ico('out')}${preview ? 'Leave' : 'Sign out'}</button></div>
         </div>
       </div></aside>
-      <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#profile" aria-label="Profile" style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
+      <header class="topbar">${brand('#overview')}<div style="display:flex;gap:8px;align-items:center"><a class="icon-btn" href="#more" aria-label="Account" ${['more', 'profile', 'plan'].includes(page) ? 'aria-current="page"' : ''} style="background:transparent;border-color:var(--hair-d);color:#fff">${ico('profile')}</a><button class="btn btn-blue btn-has-spark" data-add>Log flight ${spark}</button></div></header>
       <main class="main"><div class="page">
         ${preview ? `<div class="preview-bar"><span><b>Example desk.</b> These are sample records; changes aren’t saved.</span><a class="btn btn-light btn-sm" href="/flight-app.html">Open my own desk</a></div>` : ''}
+        ${(() => { const h = hubOf(page); if (!h || h[3].length < 2) return ''; ui.lastSub[h[0]] = page; return `<nav class="subnav" aria-label="${esc(h[1])}"><span class="subnav-hub">${ico(h[2])}${esc(h[1])}</span><div class="subnav-tabs">${h[3].map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(SUBLABEL[id] || (PAGES.find(x => x[0] === id) || [, id])[1])}</a>`).join('')}</div></nav>`; })()}
         <header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>
         ${body}
       </div></main>
-      <nav class="tabbar" aria-label="Flight desk">${TABS.map(id => { const pg = PAGES.find(x => x[0] === id) || ['more', 'More', 'more']; const on = page === id || (id === 'more' && !TABS.includes(page)); return `<a href="#${id}" ${on ? 'aria-current="page"' : ''}>${ico(pg[2])}${pg[1]}</a>`; }).join('')}</nav>
+      <nav class="tabbar" aria-label="Flight desk">${HUBS.map(h => `<a href="${hubHref(h)}" ${hubOf(page) === h ? 'aria-current="page"' : ''}>${ico(h[2])}${h[4]}</a>`).join('')}</nav>
     </div>`;
     $$('[data-add]').forEach(b => b.onclick = () => { if (!isAdv() && state.flights.length >= B().limits.flights) return upgradeSheet(`The Free plan holds ${B().limits.flights} flights. Advanced gives you an unlimited logbook.`); flightSheet(); });
     $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
@@ -1665,8 +1678,12 @@
 
   /* ================= more (mobile) ================= */
   function morePage() {
-    shell('more', { title: 'More' }, `<div class="more-grid">${[['study', 'Study', 'Practice questions and mock exams'], ['plan', 'Plan & billing', 'Your plan, trial and payments'], ['sim', 'Simulator', 'Fly your logged routes again in 3D'], ['navlog', 'Nav log', 'Headings, times and fuel for a route'], ['currency', 'Currency', 'Medical, rating and recency dates'], ['radio', 'Radio', 'Practise your radio calls out loud'], ['map', 'Map', 'Your routes and nearby airfields'], ['weather', 'Weather', 'Decode real METARs and TAFs'], ['analytics', 'Analytics', 'Hours, roles and spending'], ['prepare', 'Prepare', 'Checklist and questions for the next lesson'], ['profile', 'Profile', 'Licence, aircraft and rates']].map(([id, t, d]) => `<a class="tile more-item" href="#${id}">${ico(id === 'profile' ? 'profile' : id)}<span><b>${t}</b><small>${d}</small></span></a>`).join('')}</div>`);
+    const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced with a free trial', 'plan']];
+    shell('more', { title: 'Account', sub: state.user?.email ? `Signed in as ${esc(state.user.email)}` : '' }, `<div class="more-grid">${items.map(([id, t, d, ic]) => `<a class="tile more-item" href="#${id}">${ico(ic)}<span><b>${t}</b><small>${esc(d)}</small></span></a>`).join('')}</div>
+      <div class="acct-links"><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact support</a><button type="button" class="link" data-logout>${preview ? 'Leave example desk' : 'Sign out'}</button></div>`);
+    $$('[data-logout]').forEach(b => b.onclick = logout);
   }
+
 
   /* ================= voice debrief ================= */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

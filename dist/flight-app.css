@@ -392,7 +392,7 @@ details.more .fields{padding:0 16px 16px}
   .stat:nth-child(n+3){border-top:1px solid var(--hair-l)}
 }
 @media (max-width:960px){
-  .shell{grid-template-columns:1fr}
+  .shell{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-content:start}
   .side{display:none}
   .topbar{display:flex;position:sticky;top:0;z-index:20;align-items:center;justify-content:space-between;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 16px 10px;background:rgba(2,6,17,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
   .topbar .brand img{height:22px}
@@ -826,3 +826,17 @@ details.more .fields{padding:0 16px 16px}
 .ask-foot span{color:var(--ink-2);font-weight:550}
 @media (max-width:900px){.ask-bar{bottom:calc(env(safe-area-inset-bottom) + 84px)}}
 @media (prefers-reduced-motion:reduce){.typing i{animation:none}}
+/* hub sub-tabs */
+.side nav a{height:46px}
+.subnav{display:flex;align-items:center;gap:14px;margin:-4px 0 18px;flex-wrap:wrap}
+.subnav-hub{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.subnav-hub .ico{width:15px;height:15px}
+.subnav-tabs{display:flex;gap:4px;padding:4px;border-radius:14px;background:var(--paper-2,rgba(10,30,70,.05));border:1px solid var(--hair,rgba(10,30,70,.1));overflow-x:auto;scrollbar-width:none;max-width:100%}
+.subnav-tabs::-webkit-scrollbar{display:none}
+.subnav-tabs a{flex:none;padding:8px 15px;border-radius:10px;font-size:14px;font-weight:560;color:var(--ink-2);white-space:nowrap;transition:background-color .2s,color .2s}
+.subnav-tabs a:hover{color:var(--ink)}
+.subnav-tabs a[aria-current="page"]{background:var(--electric,#1a5cff);color:#fff;box-shadow:0 2px 8px rgba(26,92,255,.25)}
+.acct-links{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:22px;font-size:14px}
+.acct-links a,.acct-links .link{color:var(--ink-2);background:none;border:0;padding:0;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.topbar .icon-btn[aria-current="page"]{background:rgba(158,216,255,.16)!important}
+@media (max-width:960px){.subnav{margin:0 -16px 16px;padding:0 16px;flex-wrap:nowrap}.subnav-hub{display:none}.subnav-tabs{flex:1}.subnav-tabs a{padding:8px 13px}}
