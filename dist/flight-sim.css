@@ -234,3 +234,4 @@
 .sr-type{display:flex;gap:6px}.sr-type[hidden]{display:none}.sr-type input{flex:1;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;padding:0 10px;font:inherit}.sr-type button{height:38px;padding:0 12px;border-radius:10px;border:0;background:#0A62FF;color:#fff;font:inherit}
 .sim-radio.done .sr-row{opacity:.4;pointer-events:none}
 .sim-rh{margin:14px 0 8px;font-size:15px}
+.sim-radio [hidden]{display:none!important}
