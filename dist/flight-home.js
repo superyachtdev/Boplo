@@ -136,6 +136,7 @@
   if (billing && plans) billing.addEventListener('click', e => {
     const b = e.target.closest('button[data-period]'); if (!b) return;
     plans.dataset.period = b.dataset.period;
+    $$('[data-cmp]').forEach(x => { x.dataset.period = b.dataset.period; });
     $$('button', billing).forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   });
 
