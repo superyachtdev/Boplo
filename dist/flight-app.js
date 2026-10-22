@@ -380,13 +380,14 @@
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
   }
 
-  // show every section's pages in the sidebar; when the window is too short, fold the other sections (bottom first), then this one, so the sidebar never scrolls
+  // show every section's pages in the sidebar; when the window is too short, fold the other sections (bottom first), then this one, so the sidebar never scrolls (Logbook folds first: its main link already opens Flights; Flight planning, with the simulator, folds last)
   function fitNav() {
     const nav = $('.side nav'); if (!nav || !nav.offsetParent) return;
     const hubs = [...nav.querySelectorAll('.nav-hub')].filter(x => x.querySelector('.nav-subs'));
     hubs.forEach(x => x.classList.remove('folded'));
     const over = () => nav.scrollHeight > nav.clientHeight + 1;
-    for (const x of [...hubs.filter(x => !x.classList.contains('on')).reverse(), ...hubs.filter(x => x.classList.contains('on'))]) { if (!over()) break; x.classList.add('folded'); }
+    const FOLD = ['logbook', 'training', 'planning'], rank = x => FOLD.indexOf(x.dataset.hub);
+    for (const x of [...hubs.filter(x => !x.classList.contains('on')).sort((a, b) => rank(a) - rank(b)), ...hubs.filter(x => x.classList.contains('on'))]) { if (!over()) break; x.classList.add('folded'); }
     const on = nav.querySelector('.nav-hub.on'); $('.shell')?.classList.toggle('side-subs', !!on && !on.classList.contains('folded') && !!on.querySelector('.nav-subs'));
   }
   let fitT; addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(fitNav, 80); });
