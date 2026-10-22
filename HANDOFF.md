@@ -116,6 +116,11 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - `flight-sim.js` picks the departure and arrival runway ends: into the wind when it's 5 kt or more, otherwise lined up with the route, preferring long paved runways. The route becomes threshold → runway → 1.8 km climb-out → route → (base entry if the turn onto final is over 65°) → 3 NM final → threshold → rollout. Short local flights fly a left-hand circuit off the real runway. Airfields with no published runway get a 550 m grass strip along the route.
 - Runways are drawn by us as textured meshes, painted in `runwayCanvas()` with ICAO threshold stripes, designators (with L/R/C), centreline, aiming point, touchdown zone and edge lines. Grass and dirt strips get edge markers. Heights are sampled from the scenery and the aircraft rides on the runway surface (`rwHeight`). If the scenery heights arrive late, the datum correction moves the runways too, and they are re-sampled.
 
+## Simulator aircraft (2026-10-22, Claude)
+- `dist/flight-aircraft.js` (`window.BoploAircraft`) builds nine training types as glTF binaries in code from short specs in metres: Cessna 152 and 172, Piper PA-28 Warrior, Diamond DA40 and DA20, Tecnam P2008, Robin DR400, Cirrus SR20 and Piper J-3 Cub. Specs cover high or low wing, struts, cranked tips, conventional or T-tail, tricycle or tailwheel, fairings, cabin or bubble canopy and a generic livery (no manufacturer marks).
+- `model(id)` turns book figures (stall, rotate, approach, cruise, top speed, climb) into the sim's thrust and drag. `flight-sim.js` uses them for lift-off, stall, approach speeds, autopilot targets and overspeed. The Cub sits nose-up on its tailwheel (`groundAtt`) and raises the tail during the take-off roll.
+- The Simulator page has an Aircraft picker (`ui.sim.ac`, kept in localStorage `boplo-sim-ac`), with side-view icons from `profileSVG()`. "Match my logbook" maps the flight's aircraft text with `match()` (for example "PA-28 Warrior" → pa28), falling back to the profile aircraft and then the C172.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

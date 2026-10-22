@@ -990,3 +990,18 @@ details.more .fields{padding:0 16px 16px}
 .ask-bar[hidden]{display:none!important}
 .bo-tools{display:flex;gap:16px}
 @media (max-width:960px){.fc-basis{display:flex;width:100%;border-radius:16px}.fc-basis button{flex:1 1 auto;padding:0 10px;font-size:13px;border-radius:12px}}
+
+/* ===== simulator aircraft picker ===== */
+.ac-pick{margin:4px 0 8px}
+.ac-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ac-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:10px}
+.ac-card{display:grid;gap:6px;text-align:left;padding:14px;border-radius:var(--r-ui,16px);background:#fff;border:1px solid var(--hair-l);transition:border-color .2s,box-shadow .2s,transform .2s;align-content:start}
+.ac-card:hover{border-color:rgba(10,98,255,.35);transform:translateY(-1px)}
+.ac-card.on{border-color:var(--electric);box-shadow:0 0 0 3px rgba(10,98,255,.15)}
+.ac-card b{font-weight:620;font-size:15px}
+.ac-card small{color:var(--ink-3);font-size:13px;line-height:1.4}
+.ac-perf{font-size:12px;color:var(--electric);font-weight:600;font-variant-numeric:tabular-nums}
+.ac-svg{width:100%;height:auto;aspect-ratio:220/90;border-radius:10px;background:linear-gradient(180deg,#EEF4FD,#F8FAFE)}
+.ac-svg .b{fill:#0B1430}.ac-svg .w{fill:var(--electric)}.ac-svg .g{fill:#9ED8FF}
+.ac-auto{display:grid;place-items:center;aspect-ratio:220/90;border-radius:10px;background:linear-gradient(180deg,#EEF4FD,#F8FAFE);color:var(--electric)}
+.ac-auto .ico{width:34px;height:34px}

@@ -1535,8 +1535,11 @@
   }
 
   /* ================= simulator ================= */
-  ui.sim = ui.sim || { wind: 'calm', start: 'ground' };
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = '/flight-sim.js?v=6'; s.onload = () => window.BoploSim ? res(window.BoploSim) : rej(new Error('The simulator couldn’t load.')); s.onerror = () => { window.__simLib = null; rej(new Error('The simulator couldn’t load. Check your connection.')); }; document.head.append(s); }));
+  ui.sim = ui.sim || { wind: 'calm', start: 'ground', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
+  const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
+  const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=1', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-sim.js?v=7', () => !!window.BoploSim)]).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
     if (mode === 'fly' && !isAdv()) return upgradeSheet('Flying the simulator yourself is part of Advanced. Replays are free.');
@@ -1563,7 +1566,7 @@
         id: isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: ui.sim.start, title, subtitle, points, waypoints: wps, wind,
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: true,
+        runwayHdg: rwyHdg(dep), land: true, aircraftId: simAircraft(src),
         depAirport: dep ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
     } catch (x) { toast(x.message); }
@@ -1584,9 +1587,19 @@
           <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
         </form>
       </section>
+      <section class="ac-pick" aria-labelledby="ac-h"><div class="ac-head"><h2 class="section-h" id="ac-h">Aircraft</h2><span class="hint" data-acnote></span></div><div class="ac-grid" data-acgrid><p class="hint">Loading aircraft…</p></div></section>
       <p class="footnote" style="margin:10px 2px 18px">A game-like practice toy for fun and route familiarisation. It isn’t an approved training device, and its flight model is simplified.</p>
       ${list.length ? `<h2 class="section-h">Logged flights</h2><div class="sim-grid">${list.slice(0, 24).map(card).join('')}</div>` : `<div class="tile empty center"><h3>Log a flight to fly it again.</h3><p>Flights with a plotted route or a GPS track replay best. A flight from a known airfield gives you a circuit.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
       ${plans.length ? `<h2 class="section-h">Nav plans</h2><div class="sim-grid">${plans.map((s, i) => `<article class="tile sim-pick"><div class="sim-thumb">${trackSVG([{ id: 'p' + i, points: s.points, departure: s.points[0]?.code, arrival: s.points[s.points.length - 1]?.code, routeKind: 'route' }], 320, 180)}</div><div class="sim-pick-body"><b>${esc(s.name || 'Plan')}</b><small>${esc(s.points.map(x => x.code).filter(Boolean).join(' → ') || s.points.length + ' points')}${s.inp?.alt ? ` · ${esc(s.inp.alt)} ft` : ''}</small></div><div class="sim-pick-actions"><button class="btn btn-line btn-sm" data-simpr="${i}">Replay</button><button class="btn btn-blue btn-sm" data-simpf="${i}">Fly it</button></div></article>`).join('')}</div>` : ''}`);
+    const paintAc = () => {
+      const A = window.BoploAircraft, grid = $('[data-acgrid]'); if (!A || !grid) return;
+      const auto = A.match(state.profile.aircraft), cur = ui.sim.ac || 'auto';
+      grid.innerHTML = `<button type="button" class="ac-card ${cur === 'auto' ? 'on' : ''}" data-ac="auto" aria-pressed="${cur === 'auto'}"><span class="ac-auto">${ico('logbook')}</span><b>Match my logbook</b><small>Flies each flight in the aircraft you logged${auto ? `, or the ${esc(A.byId(auto).name)}` : ''}.</small></button>`
+        + A.TYPES.map(t => `<button type="button" class="ac-card ${cur === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${cur === t.id}">${A.profileSVG(t.id)}<b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf">${t.perf.cruise} kt cruise · ${t.perf.climb} fpm · stalls ${t.perf.vs} kt</span></button>`).join('');
+      $$('[data-ac]').forEach(b => b.onclick = () => { ui.sim.ac = b.dataset.ac; try { localStorage.setItem('boplo-sim-ac', ui.sim.ac); } catch { } paintAc(); });
+      const note = $('[data-acnote]'); if (note) note.textContent = 'Simplified models with typical book performance.';
+    };
+    loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
     const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; };
     $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
     $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));

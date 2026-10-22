@@ -510,8 +510,10 @@ window.BoploSim = (() => {
     root.classList.toggle('is-google', scenery === 'google');
 
     // aircraft
-    const AC = aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
+    const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId) : aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
     cleanups.push(() => URL.revokeObjectURL(glbUrl));
+    const PF = window.BoploAircraft ? BoploAircraft.model(O.aircraftId) : { vs: 47, vr: 55, appr: 62, cruise: 98, vmax: 115, thrust: 2.645, drag: .0002 };
+    AC.groundAtt = AC.groundAtt || 0;
     let model = null, bladeNode = null, discNode = null;
     try {
       model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
@@ -683,7 +685,7 @@ window.BoploSim = (() => {
     function place(s, airborne) {
       const [x, z, h] = path.at(s); st.x = x; st.z = z; st.hdg = h * R2D; st.trk = st.hdg; st.bank = 0; st.crashed = st.landed = false;
       st.airT = airborne ? 10 : 0; st.flaps = 0; flapT = 0; st.landedOnce = false; st.touch = null;
-      if (airborne) { st.ground = false; st.alt = Math.max(prof(s), (elevAt(x, z) ?? g0) + 150); st.v = (circuit ? 85 : 95) * KT; st.thr = .72; st.pitch = 0; }
+      if (airborne) { st.ground = false; st.alt = Math.max(prof(s), (elevAt(x, z) ?? g0) + 150); st.v = PF.cruise * (circuit ? .82 : .92) * KT; st.thr = .72; st.pitch = 0; }
       else { st.ground = true; st.alt = rwHeight(x, z) ?? elevAt(x, z) ?? g0; st.v = 0; st.thr = 0; st.pitch = 0; }
       const gh = rwHeight(x, z) ?? elevAt(x, z, true); st.gk = gh != null || (!airborne && s === 0); st.gnd = gh ?? (airborne ? st.alt - 300 : st.alt);
       path.reset(); path.seed(s);
@@ -762,13 +764,13 @@ window.BoploSim = (() => {
         // take-off or landing roll: steer along the route, keep the wings level
         ctl.roll = clamp(wrap180(des - st.hdg) / 20, -1, 1);
         if (st.landedOnce) { thrTarget = 0; ctl.pitch = 0; return; }
-        thrTarget = 1; ctl.pitch = vk > 58 ? .8 : 0; return;
+        thrTarget = 1; ctl.pitch = vk > PF.vr + 3 ? .8 : 0; return;
       }
       const lowWings = st.agl < 15 && landEnd && remain < (circuit ? 1500 : 5000), err = wrap180(des - st.trk), desBank = clamp(err * 1.4, lowWings ? -4 : -30, lowWings ? 4 : 30);
       ctl.roll = clamp((desBank - st.bank) * .09, -1, 1);
       const agl = st.agl, approach = landEnd && remain < (circuit ? 1500 : 5000);
       let ta = prof(pr.s + st.v * 5);
-      flapT = approach && vk < 100 ? 1 : 0;
+      flapT = approach && vk < PF.appr + 35 ? 1 : 0;
       if (approach && remain < 3500) ta = Math.min(ta, st.gnd + Math.max(0, remain - TDZ) * DG);
       if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + (approach ? 0 : 120)); }
       let desVS = clamp((ta - st.alt) * .22, -3.8, 4.2);
@@ -777,11 +779,11 @@ window.BoploSim = (() => {
       flareNow = approach && agl < 4.5;
       let desPitch = Math.asin(clamp(desVS / Math.max(st.v, 20), -.35, .35)) * R2D + 0;
       // speed protection: never trade airspeed below the climb speed for height
-      const vMin = approach ? (agl < 15 ? 52 : 62) : 70;
-      if (vk < vMin) desPitch = Math.min(desPitch, (vk - (vMin - 12)) * .7);
+      const vMin = approach ? (agl < 15 ? PF.appr - 10 : PF.appr - 3) : PF.vs * 1.45;
+      if (vk < vMin) desPitch = Math.min(desPitch, (vk - (vMin - PF.vs * .25)) * .7);
       desPitch = clamp(desPitch, -10, 12);
       ctl.pitch = clamp((desPitch - st.pitch) * .3, -1, 1);
-      const tgtV = approach ? (agl < 60 ? 62 : 72) : circuit ? 88 : 98;
+      const tgtV = approach ? (agl < 60 ? PF.appr : PF.appr + 10) : PF.cruise * (circuit ? .82 : .92);
       thrTarget = flareNow ? (agl < 1.5 ? 0 : .18) : desVS > 1.5 && !approach ? 1 : clamp(.62 + (tgtV - vk) * .05 + desVS * .04, .1, 1);
     }
 
@@ -797,20 +799,20 @@ window.BoploSim = (() => {
       if (st.ground) {
         st.bank += (0 - st.bank) * Math.min(1, dt * 6);
         st.pitch = clamp(st.pitch + ctl.pitch * 9 * dt * (vk > 40 ? 1 : 0) - (ctl.pitch <= 0 ? st.pitch * 2 * dt : 0), 0, 12);
-        const acc = 2.7 * st.thr - .0002 * vk * vk - (st.thr < .05 ? (st.landed ? 4 : 1.2) : .25);
+        const acc = PF.thrust * 1.02 * st.thr - PF.drag * vk * vk - (st.thr < .05 ? (st.landed ? 4 : 1.2) : .25);
         vk = Math.max(0, vk + acc * dt); st.v = vk * KT;
         st.hdg = norm360(st.hdg + ctl.roll * 18 * dt * Math.min(1, vk / 15 + .3));
         st.alt = st.gnd; st.vs = 0;
-        if (vk > 52 && st.pitch >= 4) { st.ground = false; st.landed = false; st.airT = 0; st.alt += .4; }
+        if (vk > PF.vr - 3 && st.pitch >= 4) { st.ground = false; st.landed = false; st.airT = 0; st.alt += .4; }
       } else {
-        const vsStall = (47 - 6 * st.flaps) / Math.sqrt(Math.max(.3, Math.cos(st.bank * D2R)));
+        const vsStall = PF.vs * (1 - .13 * st.flaps) / Math.sqrt(Math.max(.3, Math.cos(st.bank * D2R)));
         st.stall = vk < vsStall;
         st.bank = clamp(st.bank + ctl.roll * 48 * dt - (Math.abs(ctl.roll) < .05 && !apOn ? st.bank * .35 * dt : 0), -65, 65);
         st.pitch = clamp(st.pitch + ctl.pitch * 11 * dt, -25, 25);
         if (st.stall) { st.pitch -= 9 * dt; st.bank += Math.sin(st.t * 3) * 6 * dt; }
-        const acc = 2.645 * st.thr - .0002 * (1 + .9 * st.flaps) * vk * vk - 19.07 * Math.sin(st.pitch * D2R) - Math.abs(st.bank) * .004;
-        vk = clamp(vk + acc * dt, 0, 175); st.v = vk * KT;
-        const lift = clamp((vk - 26) / 20, 0, 1);
+        const acc = PF.thrust * st.thr - PF.drag * (1 + .9 * st.flaps) * vk * vk - 19.07 * Math.sin(st.pitch * D2R) - Math.abs(st.bank) * .004;
+        vk = clamp(vk + acc * dt, 0, PF.vmax * 1.6); st.v = vk * KT;
+        const lift = clamp((vk - PF.vs * .6) / (PF.vs * .45), 0, 1);
         st.vs = st.v * Math.sin(st.pitch * D2R) * lift - (1 - lift) * 7;
         st.hdg = norm360(st.hdg + G * Math.tan(st.bank * D2R) / Math.max(st.v, 15) * R2D * dt * lift);
         st.alt += st.vs * dt;
@@ -819,13 +821,15 @@ window.BoploSim = (() => {
       st.x += gx * dt; st.z += gz * dt; st.gs = Math.hypot(gx, gz); if (st.gs > 2) st.trk = norm360(Math.atan2(gx, gz) * R2D); else st.trk = st.hdg;
       st.agl = st.alt - st.gnd;
       // what the pilot sees: flight path plus angle of attack, which grows as the aircraft slows
-      const aoa = st.ground ? 0 : clamp(1.5 + 6 * ((62 / Math.max(st.v / KT, 38)) ** 2 - 1) - st.flaps * 1.5, -1, 13);
-      st.att = (st.ground ? st.pitch : st.pitch + aoa);
+      const aoa = st.ground ? 0 : clamp(1.5 + 6 * ((PF.appr / Math.max(st.v / KT, PF.vs * .8)) ** 2 - 1) - st.flaps * 1.5, -1, 13);
+      // tailwheel aircraft sit nose-up and lift the tail as they gather speed
+      const tailUp = AC.groundAtt ? AC.groundAtt * (1 - clamp((st.v / KT - PF.vr * .45) / (PF.vr * .35), 0, 1)) : 0;
+      st.att = (st.ground ? Math.max(st.pitch, tailUp) : st.pitch + aoa);
       if (!st.gk && !st.ground) st.agl = Math.max(st.agl, 300); // scenery under us not loaded yet
       if (!st.ground && st.agl <= .3 && (st.airT || 0) < 2.5) { st.alt = st.gnd + .3; st.agl = .3; st.vs = Math.max(st.vs, 0); }
       else if (!st.ground && st.agl <= .3) {
         const fpm = st.vs / FT * 60;
-        if (fpm > -800 && Math.abs(st.bank) < 14 && st.pitch > -5 && st.v / KT < 95) { st.ground = true; st.landed = true; st.landedOnce = true; st.alt = st.gnd; st.touch = { fpm, bank: st.bank, at: path.project(st.x, st.z).s, t: st.t }; st.pitch = Math.max(0, st.pitch); }
+        if (fpm > -800 && Math.abs(st.bank) < 14 && st.pitch > -5 && st.v / KT < PF.vmax * .85) { st.ground = true; st.landed = true; st.landedOnce = true; st.alt = st.gnd; st.touch = { fpm, bank: st.bank, at: path.project(st.x, st.z).s, t: st.t }; st.pitch = Math.max(0, st.pitch); }
         else { st.crashed = true; st.alt = st.gnd; st.crash = fpm <= -800 ? 'You hit the ground descending too fast.' : Math.abs(st.bank) >= 14 ? 'A wing touched the ground. Level the wings before landing.' : 'The aircraft hit the ground nose-first.'; }
       }
     }
@@ -867,13 +871,13 @@ window.BoploSim = (() => {
       if (st.crashed) w = 'Crashed';
       else if (st.stall) w = 'Stall';
       else if (!st.ground && st.agl < 100 && st.vs < -4 && !(landEnd && L - pr.s < 2500)) w = 'Pull up';
-      else if (!st.ground && vk > 150) w = 'Overspeed';
+      else if (!st.ground && vk > PF.vmax * 1.25) w = 'Overspeed';
       if (w !== warnText) { warnText = w; H.warn.textContent = w; H.warn.classList.toggle('on', !!w); }
       let tip = '';
       if (performance.now() < tipUntil) tip = tipNow;
       else if (!replay && !apOn && !st.crashed) {
         if (st.ground && !st.landedOnce && st.thr < .5) tip = coarse ? 'Push the power slider up to start your take-off roll' : 'Add power: hold R, or press 0 for full power';
-        else if (st.ground && !st.landedOnce && vk > 42) tip = coarse ? 'Gently pull the stick back to lift off' : 'Gently hold ↓ (or S) to lift off at about 55 kt';
+        else if (st.ground && !st.landedOnce && vk > PF.vr - 12) tip = coarse ? 'Gently pull the stick back to lift off' : `Gently hold ↓ (or S) to lift off at about ${PF.vr} kt`;
         else if (!st.ground && st.t < 60 && st.agl < 200) tip = 'Climb towards the first gate';
         else if (!st.ground && landEnd && L - pr.s < 2500 && L - pr.s > 300) tip = 'Line up with the route, reduce power and descend gently to land';
       }
@@ -900,7 +904,7 @@ window.BoploSim = (() => {
     const ctrlHelp = coarse
       ? `<li><b>Stick</b> bottom left: pull back to climb, push to descend, sideways to bank.</li><li><b>Power</b> slider on the right. Or turn on <b>Tilt to steer</b>.</li>`
       : `<li><b>↑ ↓</b> or <b>W S</b>: nose down / nose up (pull back to climb)</li><li><b>← →</b> or <b>A D</b>: bank left / right</li><li><b>R F</b> or <b>+ −</b>: more or less power · <b>1–0</b> set power</li><li><b>V</b> flaps (use them to slow down for landing) · <b>G</b> route gates</li><li><b>P</b> autopilot · <b>C</b> camera · <b>Space</b> pause · <b>M</b> sound</li><li>A gamepad works too.</li>`;
-    card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
+    card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>Planned height</span><b>${Math.round((cruise - geoN) / FT / 100) * 100} ft</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
       ${replay ? '' : `<ul class="sim-help">${ctrlHelp}</ul><label class="sim-check"><input type="checkbox" data-inv ${invert ? 'checked' : ''}> Invert pitch (push to climb)</label>`}
