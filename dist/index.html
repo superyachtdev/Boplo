@@ -391,5 +391,6 @@
   // remember which plan was chosen, so the desk opens checkout on that plan after sign-in
   document.querySelectorAll('[data-plan-cta]').forEach(a => a.addEventListener('click', () => { try { const p = document.querySelector('[data-plans]')?.dataset.period || 'yearly'; localStorage.setItem('boplo-intent', JSON.stringify({ plan: p, t: Date.now() })); } catch (e) { } }));
   </script>
+  <script src="/boplo-radio.js?v=1" defer></script>
 </body>
 </html>
