@@ -22,7 +22,11 @@ export function pickNudge({ profile = {}, lastFlight = null, flights = 0, sent =
   const today = isoDay(now), tomorrow = isoDay(now + DAY);
   const name = String(profile.name || '').trim().split(/\s+/)[0] || 'there';
   if (profile.lessonDate === tomorrow && !sent['lesson:' + tomorrow]) {
-    return { kind: 'lesson:' + tomorrow, subject: `Your lesson is tomorrow${profile.nextLesson ? `: ${profile.nextLesson}` : ''}`, lines: [`Hi ${name}, you have a lesson tomorrow${profile.nextLesson ? ` (${profile.nextLesson})` : ''}.`, 'Ten minutes tonight makes a difference: run through your preparation checklist, the circuit or route, and the questions you want to ask your instructor.'], cta: ['Prepare for it', '#prepare'] };
+    const gap0 = lastFlight ? daysBetween(lastFlight, today) : 0;
+    const lines = [`Hi ${name}, you have a lesson tomorrow${profile.nextLesson ? ` (${profile.nextLesson})` : ''}.`, 'Ten minutes tonight makes a difference: run through your preparation checklist, the circuit or route, and the questions you want to ask your instructor.'];
+    if (gap0 >= 10) lines.push(`It’s been ${gap0} days since you last flew, so your desk has a 15-minute refresher ready: chair-fly a circuit, a short final in the simulator and the points from your last debrief.`);
+    lines.push('If the weather scrubs it, tap “Lesson cancelled?” in Boplo and you’ll get a grounded hour built around the lesson instead.');
+    return { kind: 'lesson:' + tomorrow, subject: `Your lesson is tomorrow${profile.nextLesson ? `: ${profile.nextLesson}` : ''}`, lines, cta: [gap0 >= 10 ? 'Open your refresher' : 'Prepare for it', gap0 >= 10 ? '#overview' : '#prepare'] };
   }
   if (!flights || !lastFlight) return null;
   const gap = daysBetween(lastFlight, today);

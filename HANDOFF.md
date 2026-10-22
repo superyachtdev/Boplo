@@ -159,6 +159,12 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Leaderboards: the sim computes a 0–100 landing score (rate 40, touchdown point 25, centreline 20, speed 15) after a practice landing and calls O.onResult; the app posts it to /community/scores unless profile.boardsOff. Weekly and all-time boards per airfield and exercise; a daily challenge (rotating list in community.js) everyone flies as a short final with a fixed weather preset.
 - Students nearby: opt-in (profile.dirOn, dirBio, homeLat/homeLng saved from the home airfield), within 250 km, same airfield first. Messages: anyone listed can be messaged, others only replied to; block hides both ways.
 
+## Training coach (2026-10-23, Claude)
+- In flight-app.js (search "training coach"): recurringIssues() reads debrief notes from the last 8 flights, counts only sentences that read as something to fix (or a "Work on:" block), and matches 15 issue types (ISSUES). Shown on Overview and Prepare as "Keeps coming up" with drills, a matching sim practice preset and "Add the drills to my prep".
+- Rust refresher: when the last flight is 10+ days ago, a 15-minute checklist (chair-fly script with the type's speeds, short final in the sim, last debrief's points, one drill); ticks kept in localStorage per last-flight date. The lesson-tomorrow email (lib/nudges.js) now mentions it.
+- Lesson forecast: on the day before / day of a lesson, parseTAF() + lessonForecast() check the nearest TAF for the lesson window (lessonTime, or 09–17 local) against the Preflight personal minimums.
+- Lesson cancelled: scrubSheet() logs profile.scrubs (JSON) with the reason and an optional new date, then shows a grounded hour (sim exercise, theory subject, radio scenario, chair-fly) chosen from the lesson title.
+
 ## Open items
 
 - Question bank needs instructor review before marketing it as exam prep.

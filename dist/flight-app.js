@@ -448,6 +448,218 @@
     </button>`).join('');
   }
 
+  /* ================= training coach: recurring debrief issues, rust refresher, forecast check and weather scrubs ================= */
+  const ISSUES = [
+    { id: 'flare', title: 'The flare and touchdown', re: /\bflare|round ?out|hold ?off|balloon|\bfloat(ed|ing)?\b|bounc|touch ?down|hard landing|landed (flat|on the nose)|landing (was|were) (firm|hard)/i, sim: { kind: 'short', weather: 'clear' }, study: 'pof',
+      drills: ['Chair-fly the last 200 ft out loud: aim point, speed, then eyes to the far end of the runway as you start the flare.', 'In the sim, fly three short finals and aim for under 200 fpm at touchdown and less than 100 m past the aim point.', 'Ask your instructor to call “look ahead” at the flare on the next few landings.'] },
+    { id: 'drift', title: 'Drift and the centreline on final', re: /\bdrift|cross ?wind|centre ?line|center ?line|\bcrab|wing ?down|de-?crab|kick (it )?straight|blown (off|across)/i, sim: { kind: 'short', weather: 'gusty' }, study: 'pof', not: /downwind|spacing|circuit|\bwide\b/i,
+      drills: ['Pick a point at the far end of the runway and keep it fixed in the windscreen: ailerons for the line, rudder for the nose.', 'In the sim, fly two short finals in a gusty crosswind and keep the centreline error under 4 m at touchdown.', 'Work out the crosswind for your runway before you fly, so you know how much bank to expect.'] },
+    { id: 'approach', title: 'A stable approach', re: /approach (speed|path|angle)|on final|glide ?path|too (high|low|fast|slow)|\bunstab|stabili[sz]ed|\bpapi\b|aim(ing)? point|go[- ]?around|speed control/i, sim: { kind: 'long', weather: 'fair' }, study: 'ops', not: /centre ?line|center ?line|\bdrift|cross ?wind/i,
+      drills: ['Say your gates out loud: on the runway line, on speed, on the glidepath, by 300 ft; if not, go around.', 'In the sim, fly a long final holding two white and two red on the PAPI all the way down.', 'Note the power setting that holds approach speed at 3° in your aircraft and set it early.'] },
+    { id: 'circuit', title: 'The circuit shape and spacing', re: /\bcircuit|\bpattern\b|downwind|base (leg|turn)|crosswind leg|spacing|\btpa\b|circuit height|turn(ed|ing)? (base|final) (early|late)/i, sim: { kind: 'circuit', weather: 'clear' }, study: 'ops',
+      drills: ['Find two ground features for your downwind spacing and the base turn, and note them on your prep.', 'In the sim, fly a full circuit and keep within 100 ft of circuit height on downwind.', 'Draw your circuit from memory with heights, speeds and checks at each point.'] },
+    { id: 'radio', title: 'Radio calls', re: /\bradio|\br\/t\b|read ?back|\bcalls?\b|transmi|frequency|\batc\b|tower|phraseology/i, sim: { kind: 'circuit', weather: 'clear', radio: true }, study: 'comms', radio: true,
+      drills: ['Write your circuit calls on a card and say them out loud three times before the lesson.', 'Practise the take-off readback and downwind call in Radio practice.', 'Fly a circuit in the sim with radio calls switched on.'] },
+    { id: 'trim', title: 'Using the trim', re: /\btrim/i, study: 'pof',
+      drills: ['Chair-fly “power, attitude, trim” for each phase: climb, level off, descent.', 'After every attitude change, hold it, then trim until you can relax your hand.'] },
+    { id: 'lookout', title: 'Lookout', re: /look ?out|\bscan(ning)?\b|head (down|in)|eyes (inside|in the cockpit)|traffic/i, study: 'ops',
+      drills: ['Use a set scan: sectors left to right, ten degrees at a time, then a quick instrument check.', 'Before every turn, say “clear left, clear right, above, below” out loud.'] },
+    { id: 'checks', title: 'Checks from memory', re: /\bchecks?\b|checklist|\bfreda\b|has+ell|\bbumpfh?\b|vital actions|before landing/i, study: 'ops',
+      drills: ['Write each check (FREDA, HASELL, BUMPFH or your school’s) on a card and run them from memory twice a day.', 'Chair-fly where in the circuit each check happens.'] },
+    { id: 'balance', title: 'Balance and rudder', re: /\bbalance|\bball\b|\brudder|coordinat|\bslip|\bskid|\byaw/i, study: 'pof',
+      drills: ['Say “step on the ball” and practise rudder into every roll and every power change.', 'Watch the nose against the horizon as you roll in: it shouldn’t swing.'] },
+    { id: 'height', title: 'Holding height', re: /\baltitude|height keeping|holding (height|altitude|level)|level(l)?ing off|lost height|gained height|climbed (through|above)/i, study: 'pof',
+      drills: ['Pick a nose attitude for level flight and memorise where the horizon sits in the windscreen.', 'When levelling off: attitude, let the speed build, power, trim.'] },
+    { id: 'nav', title: 'Navigation and timing', re: /\bheading|\btiming|turn(ing)? point|\btrack(ing)?\b|map read|\bnav(igation)?\b|landmark|got lost|unsure of position/i, study: 'nav',
+      drills: ['Re-plan the last route in the Nav log and mark a feature every 5 minutes.', 'Practise “clock, compass, map”: time, heading, then the ground.'] },
+    { id: 'takeoff', title: 'The take-off', re: /take-?off|rotat(e|ion)|lift ?off|\bswing|initial climb/i, sim: { kind: 'takeoff', weather: 'fair' }, study: 'perf',
+      drills: ['Chair-fly the take-off: centreline, rotate speed, climb attitude, climb speed, checks at 500 ft.', 'In the sim, practise a take-off and hold Vy within 5 kt to 1,000 ft.'] },
+    { id: 'forced', title: 'Forced landings and engine failures', re: /\bpfl\b|forced landing|\befato\b|engine failure|glide approach|field selection/i, study: 'ops',
+      drills: ['Learn your best glide speed and say the actions for an engine failure after take-off from memory.', 'On every drive, pick a field and imagine the approach to it.'] },
+    { id: 'stall', title: 'Stalls and slow flight', re: /\bstall|slow flight|\bspin/i, study: 'pof',
+      drills: ['Say the stall recovery out loud: “nose down, full power, wings level, climb away”.', 'Study what changes the stall speed (weight, flap, bank) in Principles of flight.'] },
+    { id: 'taxi', title: 'Taxiing', re: /\btaxi/i,
+      drills: ['Taxi at walking pace and steer with rudder pedals, brakes only to stop.', 'Before the lesson, study the airfield chart and say your taxi route.'] }
+  ];
+  const BAD_CUE = /\b(work on|again|late|early|too\b|high|low|fast|slow|drift|struggl|forgot|missed|need|improv|wide|close|bounc|balloon|hard|not\b|didn|don['’]t|keep|remember|focus|practi[cs]e|unstab|behind|over-?correct|rushed|lost|wobbl|tense|tight|messy|sloppy|inconsistent|nervous|confus|wrong|mistake|issue|problem|tricky|difficult|wasn['’]t|weren['’]t)/i;
+  // which issues come up in the debrief notes of recent lessons: only sentences that read as something to fix count
+  function recurringIssues(n = 8) {
+    const fl = sorted().filter(f => String(f.notes || '').trim()).slice(0, n), hits = {};
+    for (const f of fl) {
+      let mode = 'any'; const seen = new Set();
+      for (const raw of String(f.notes).split(/\n|(?<=[.!?])\s+/)) {
+        const s = raw.trim(); if (!s) continue;
+        if (/^(went well|good|positives?)\s*:/i.test(s)) { mode = 'good'; if (!s.replace(/^[^:]*:\s*/, '')) continue; }
+        if (/^(work on|to work on|improve|next time|prepare next time|ask my instructor)\s*:/i.test(s)) { mode = 'fix'; }
+        if (/^(summary|lesson)\s*:/i.test(s)) mode = 'any';
+        if (mode === 'good' && !/^[-•*]/.test(s) && s.length > 60) mode = 'any';
+        if (mode === 'good') continue;
+        if (mode !== 'fix' && !BAD_CUE.test(s)) continue;
+        for (const I of ISSUES) if (!seen.has(I.id) && I.re.test(s) && !(I.not && I.not.test(s))) { seen.add(I.id); (hits[I.id] = hits[I.id] || { I, n: 0, dates: [], quotes: [] }).n++; hits[I.id].dates.push(f.date); if (hits[I.id].quotes.length < 2) hits[I.id].quotes.push(s.replace(/^[-•*]\s*/, '').slice(0, 140)); }
+      }
+    }
+    return { of: fl.length, list: Object.values(hits).filter(h => h.n >= 2).sort((a, b) => b.n - a.n || b.dates[0].localeCompare(a.dates[0])) };
+  }
+  const homeCode = () => upper(state.profile.airport).split(/[\s·]/)[0];
+  const daysSinceFlight = () => { const f = sorted()[0]; return f ? -daysUntil(f.date) : null; };
+  const rustKey = () => 'boplo-rust-' + (sorted()[0]?.date || '');
+  const rustDone = () => { try { return JSON.parse(localStorage.getItem(rustKey()) || '{}'); } catch { return {}; } };
+  const simBtn = (sim, label) => sim ? `<button type="button" class="btn btn-line btn-sm" data-cosim="${sim.kind}|${sim.weather || ''}|${sim.radio ? 1 : 0}">${esc(label || 'Practise it in the sim')}</button>` : '';
+
+  function issueTile(cls = 'span-6') {
+    const r = recurringIssues(); if (!r.list.length) return '';
+    const top = r.list[0], I = top.I;
+    return `<section class="tile ${cls} coach-issue"><div class="tile-head"><h2>Keeps coming up</h2><span class="chip warn">${top.n} of your last ${r.of} lessons</span></div>
+      <h3 class="coach-h">${esc(I.title)}</h3>
+      ${top.quotes.length ? `<p class="coach-q">“${esc(top.quotes[0])}”</p>` : ''}
+      <ol class="coach-drills">${I.drills.slice(0, 3).map(d => `<li>${esc(d)}</li>`).join('')}</ol>
+      <div class="coach-acts">${simBtn(I.sim)}${I.radio ? '<a class="btn btn-line btn-sm" href="#radio">Radio practice</a>' : ''}<button type="button" class="btn btn-line btn-sm" data-coprep="${I.id}">Add the drills to my prep</button></div>
+      ${r.list.length > 1 ? `<p class="footnote">Also coming up: ${r.list.slice(1, 4).map(h => `${esc(h.I.title.toLowerCase())} (${h.n})`).join(', ')}. Spotted from your debrief notes.</p>` : '<p class="footnote">Spotted from your debrief notes.</p>'}</section>`;
+  }
+  function rustTile(cls = 'span-6') {
+    const gap = daysSinceFlight(), p = state.profile; if (gap == null || gap < 10) return '';
+    const T = window.BoploPreflight?.TYPES?.[pfType(p)], sp = T?.speeds || {}, d = rustDone(), r = recurringIssues();
+    const last = sorted()[0], fix = String(last?.notes || '').split(/\n|(?<=[.!?])\s+/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(s => s && BAD_CUE.test(s)).slice(0, 3);
+    const steps = [
+      ['chair', 'Chair-fly one circuit out loud', `<details class="coach-script"><summary>The script</summary><p>Lined up: checks complete, full power, keep straight on the centreline${sp.vr ? `, rotate at ${sp.vr} kt` : ''}, climb${sp.vy ? ` at ${sp.vy} kt` : ''}. At 500 ft: checks, turn crosswind. At circuit height: level off, power, trim, turn downwind and make your call. Abeam the threshold: before-landing checks. Base: power back, flap, start down. Final: on the line${sp.vref ? `, ${sp.vref} kt` : ''}, aim point fixed, landing flap. Flare: eyes to the far end, hold off, let it settle.</p></details>`],
+      ['sim', `Fly a short final${homeCode() ? ` at ${homeCode()}` : ''} in the simulator`, simBtn({ kind: 'short', weather: 'clear' }, 'Open the sim')],
+      ['debrief', 'Re-read your last debrief', fix.length ? `<ul class="coach-mini">${fix.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : `<a class="link" href="#logbook">Open your last flight</a>`],
+      ...(r.list[0] ? [['drill', `Run one drill for ${r.list[0].I.title.toLowerCase()}`, `<p class="coach-mini">${esc(r.list[0].I.drills[0])}</p>`]] : [])
+    ];
+    const n = steps.filter(s => d[s[0]]).length;
+    return `<section class="tile ${cls} coach-rust"><div class="tile-head"><h2>Shake off the rust</h2><span class="chip">${gap} days since you flew</span></div>
+      <p class="hint">${gap >= 60 ? 'After a break this long most students restart with a dual lesson; that’s normal. ' : ''}Skills fade fastest in the first few weeks off. Fifteen minutes before your next lesson gets most of it back.</p>
+      <div class="coach-steps">${steps.map(([k, t, extra]) => `<label class="coach-step ${d[k] ? 'done' : ''}"><input type="checkbox" data-rust="${k}" ${d[k] ? 'checked' : ''}><span><b>${esc(t)}</b>${extra}</span></label>`).join('')}</div>
+      <div class="progress" style="margin-top:12px"><span class="progress-bar"><i style="width:${n / steps.length * 100}%"></i></span>${n} of ${steps.length} done</div></section>`;
+  }
+  const lessonWxTile = (cls = 'span-6') => { const p = state.profile, d = p.lessonDate ? daysUntil(p.lessonDate) : null; if (d == null || d < 0 || d > 1 || !homeCode()) return ''; return `<section class="tile ${cls} coach-wx" data-cowx><div class="tile-head"><h2>Lesson forecast</h2><span class="chip">${d === 0 ? 'Today' : 'Tomorrow'}${p.lessonTime ? ' · ' + esc(p.lessonTime) : ''}</span></div><p class="hint">Checking the TAF against your minimums…</p></section>`; };
+  function coachTiles() { const t = [lessonWxTile(), rustTile(), issueTile()].filter(Boolean); if (t.length === 1) return t[0].replace(/span-6/, 'span-12'); if (t.length === 3) return t.map((x, i) => i === 2 ? x.replace(/span-6/, 'span-12') : x).join(''); return t.join(''); }
+
+  // TAF: split into the base forecast and its change groups, each with a UTC time range and conditions
+  function parseTAF(raw, now = new Date()) {
+    const tok = String(raw || '').replace(/\s+/g, ' ').trim().replace(/^TAF\s+(AMD\s+|COR\s+)?/, '').split(' ').filter(Boolean); if (tok.length < 3) return null;
+    const iss = tok[1].match(/^(\d{2})(\d{2})(\d{2})Z$/); const Y = now.getUTCFullYear(), M = now.getUTCMonth();
+    const at = (dd, hh, mm = 0) => { let d = new Date(Date.UTC(Y, M, +dd, +hh, +mm)); if (iss && +dd < +iss[1] - 15) d = new Date(Date.UTC(Y, M + 1, +dd, +hh, +mm)); else if (iss && +dd > +iss[1] + 15) d = new Date(Date.UTC(Y, M - 1, +dd, +hh, +mm)); return d; };
+    const per = s => { const m = s.match(/^(\d{2})(\d{2})\/(\d{2})(\d{2})$/); return m ? [at(m[1], m[2]), at(m[3], m[4])] : null; };
+    let i = 2; const valid = per(tok[i] || ''); if (valid) i++; else return null;
+    const groups = [], blank = type => ({ type, prob: 0, from: valid[0], to: valid[1], wind: null, gust: 0, visKm: null, ceil: null, wx: [] });
+    let g = blank('BASE'); groups.push(g);
+    for (; i < tok.length; i++) {
+      const t = tok[i]; let m;
+      if ((m = t.match(/^FM(\d{2})(\d{2})(\d{2})$/))) { g.to = at(m[1], m[2], m[3]); g = blank('FM'); g.from = at(m[1], m[2], m[3]); groups.push(g); continue; }
+      if (t === 'BECMG' || t === 'TEMPO') { const p = per(tok[i + 1] || ''); const prob = g.type === 'PROB' && g.wind == null && g.visKm == null && !g.wx.length ? g.prob : 0; if (prob) groups.pop(); g = blank(t); g.prob = prob; if (p) { [g.from, g.to] = p; i++; } groups.push(g); continue; }
+      if ((m = t.match(/^PROB(\d{2})$/))) { const p = per(tok[i + 1] || ''); g = blank('PROB'); g.prob = +m[1]; if (p) { [g.from, g.to] = p; i++; } groups.push(g); continue; }
+      if ((m = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)$/))) { const k = m[4] === 'MPS' ? 1.944 : 1; g.wind = Math.round(+m[2] * k); g.gust = m[3] ? Math.round(+m[3] * k) : 0; continue; }
+      if (t === 'CAVOK') { g.visKm = 10; g.ceil = 99999; continue; }
+      if (/^\d{4}$/.test(t)) { g.visKm = +t >= 9999 ? 10 : +t / 1000; continue; }
+      if ((m = t.match(/^(P)?(\d+)(?:\/(\d+))?SM$/))) { g.visKm = m[1] ? 10 : Math.min(10, (m[3] ? +m[2] / +m[3] : +m[2]) * 1.609); continue; }
+      if ((m = t.match(/^(BKN|OVC|VV)(\d{3})/))) { const b = +m[2] * 100; g.ceil = g.ceil == null || g.ceil === 99999 ? b : Math.min(g.ceil, b); continue; }
+      if (t === 'NSC' || t === 'SKC' || t === 'NSW') { if (t !== 'NSW') g.ceil = 99999; continue; }
+      if (/^[-+]?(VC)?(MI|BC|PR|DR|BL|SH|TS|FZ)?(RA|DZ|SN|SG|GR|GS|PL|BR|FG|HZ|FU|DU|SA|SQ|FC|UP)*$/.test(t) && /TS|FG|SN|GR|FZ|SQ|FC|\+RA|\+SHRA|BR/.test(t)) g.wx.push(t);
+    }
+    return { valid, groups };
+  }
+  // the lesson window against the forecast and the pilot's minimums
+  function lessonForecast(taf, mins, dateISO, time) {
+    const T = parseTAF(taf); if (!T) return null;
+    const [h, m] = (time || '').split(':').map(Number), start = new Date(`${dateISO}T${Number.isFinite(h) ? String(h).padStart(2, '0') + ':' + String(m || 0).padStart(2, '0') : '09:00'}:00`);
+    const from = new Date(start.getTime() - (Number.isFinite(h) ? 90 : 0) * 6e4), to = new Date(start.getTime() + (Number.isFinite(h) ? 150 : 8 * 60) * 6e4);
+    if (from > T.valid[1]) return { notYet: true };
+    let state = null; const reasons = []; let worst = 'go';
+    const fmt = d => d.toISOString().slice(11, 13) + 'Z';
+    const check = (g, temp) => {
+      const issues = [], close = [];
+      const t = (bad, near, msg) => { if (bad) issues.push(msg); else if (near) close.push(msg); };
+      const W = g.wind, G = g.gust || g.wind;
+      if (W != null && mins.wind !== '' && mins.wind != null) t(W > +mins.wind, W > +mins.wind * .85, `wind ${W} kt (your max ${mins.wind})`);
+      if (G != null && g.gust && mins.gust !== '' && mins.gust != null) t(G > +mins.gust, G > +mins.gust * .85, `gusts ${G} kt (your max ${mins.gust})`);
+      if (g.visKm != null && mins.visKm) t(g.visKm < +mins.visKm, g.visKm < +mins.visKm * 1.15, `visibility ${g.visKm >= 10 ? '10+' : g.visKm.toFixed(1)} km (your min ${mins.visKm})`);
+      if (g.ceil != null && g.ceil !== 99999 && mins.ceil) t(g.ceil < +mins.ceil, g.ceil < +mins.ceil * 1.15, `cloud base ${g.ceil} ft (your min ${mins.ceil})`);
+      if (g.wx.some(w => /TS/.test(w))) issues.push('thunderstorms'); else if (g.wx.some(w => /FG|FZ|SN|GR|SQ/.test(w))) issues.push(g.wx.join(' ').replace(/FG/g, 'fog').replace(/SN/g, 'snow').replace(/BR/g, 'mist'));
+      const when = `${fmt(g.from)}–${fmt(g.to)}`, pre = g.prob ? `${g.prob}% chance${g.type === 'TEMPO' ? ', temporarily,' : ''} ${when}` : g.type === 'TEMPO' ? `Temporarily ${when}` : g.type === 'BECMG' ? `Becoming from ${fmt(g.from)}` : g.type === 'FM' ? `From ${fmt(g.from)}` : 'Forecast';
+      const R = { go: 0, caution: 1, nogo: 2 }, up = v => { if (R[v] > R[worst]) worst = v; };
+      if (issues.length) { const sv = temp ? 'caution' : 'nogo'; reasons.push({ s: sv, t: `${pre}: ${issues.join(', ')}` }); up(sv); }
+      else if (close.length) { reasons.push({ s: 'caution', t: `${pre}: close to your limit, ${close.join(', ')}` }); up('caution'); }
+    };
+    for (const g of T.groups) {
+      if (g.to <= from || g.from >= to) continue;
+      if (g.type === 'BASE' || g.type === 'FM') { state = { ...g }; check(state, false); }
+      else if (g.type === 'BECMG') { state = { ...(state || {}), ...Object.fromEntries(Object.entries(g).filter(([k, v]) => v != null && !(Array.isArray(v) && !v.length) && k !== 'type')), type: 'BECMG' }; check(state, false); }
+      else check(g, true);
+    }
+    if (!reasons.length) reasons.push({ s: 'go', t: 'Nothing in the forecast outside your minimums for the lesson window.' });
+    return { worst, reasons, from, to };
+  }
+  async function fillForecast() {
+    const box = $('[data-cowx]'); if (!box) return;
+    const p = state.profile, code = homeCode(), mins = { wind: 15, gust: 20, cross: 10, visKm: 8, ceil: 1500, ...(pfStore().mins || {}) };
+    try {
+      const af = await anyAirfield(code), d = preview ? EX_WX : await api(`weather?ids=${encodeURIComponent(code)}${af ? `&lat=${af.lat}&lng=${af.lng}` : ''}`);
+      const st = (d.stations || []).find(s => s.taf) || null;
+      if (!st) { box.querySelector('.hint').textContent = 'No TAF is published near your airfield. Check the forecast in your official briefing.'; return; }
+      const f = lessonForecast(st.taf, mins, p.lessonDate, p.lessonTime);
+      if (!f) { box.querySelector('.hint').textContent = 'The forecast couldn’t be read.'; return; }
+      if (f.notYet) { box.querySelector('.hint').textContent = `The ${st.id} forecast doesn’t reach your lesson time yet. Check again in the morning.`; return; }
+      const word = { go: 'Looks flyable', caution: 'Marginal', nogo: 'Unlikely to fly' }[f.worst];
+      box.innerHTML = `<div class="tile-head"><h2>Lesson forecast</h2><span class="chip go-${f.worst}">${word}</span></div>
+        <ul class="coach-wxl">${f.reasons.map(r => `<li class="go-${r.s}">${esc(r.t)}</li>`).join('')}</ul>
+        <p class="footnote">TAF ${esc(st.id)}${st.id !== code ? ` (nearest to ${esc(code)})` : ''} for ${f.from.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}–${f.to.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}, against your personal minimums (<a class="link" href="#preflight">change them</a>). ${f.worst !== 'go' ? 'If it’s scrubbed, tap “Lesson cancelled?” for a grounded plan.' : 'Your instructor makes the call on the day.'}</p>`;
+    } catch (x) { box.querySelector('.hint').textContent = 'The forecast didn’t load.'; }
+  }
+  function wireCoach(again) {
+    $$('[data-cosim]').forEach(b => b.onclick = () => { const [kind, wx, radio] = b.dataset.cosim.split('|'); if (!homeCode()) { toast('Set your home airfield in your profile first.'); return; } if (radio === '1') ui.sim.radio = true; openPractice(homeCode(), '', kind, { weather: wx || undefined }); });
+    $$('[data-coprep]').forEach(b => b.onclick = async () => { const I = ISSUES.find(x => x.id === b.dataset.coprep); const checks = parseChecks(state.profile.checklist); I.drills.forEach(t => { if (!checks.some(c => c.text === t)) checks.push({ done: false, text: t }); }); try { await saveProfile({ checklist: writeChecks(checks) }); toast('Added to your preparation checklist.'); b.disabled = true; b.textContent = 'Added to your prep'; } catch (x) { toast(x.message); } });
+    $$('[data-rust]').forEach(i => i.onchange = () => { const d = rustDone(); d[i.dataset.rust] = i.checked; try { localStorage.setItem(rustKey(), JSON.stringify(d)); } catch { } again(); });
+    $$('[data-scrub]').forEach(b => b.onclick = scrubSheet);
+    fillForecast();
+  }
+
+  // lesson cancelled: log it, then turn the slot into a grounded hour built around the lesson that was planned
+  const scrubsOf = () => { const x = readJSON(state.profile.scrubs, []); return Array.isArray(x) ? x : []; };
+  function groundedPlan(lesson) {
+    const L = String(lesson || '').toLowerCase(), faa = regimeOf(state.profile) === 'faa', top = recurringIssues().list[0]?.I;
+    const kind = /circuit|pattern|landing|touch/.test(L) ? 'circuit' : /nav|cross ?country|xc/.test(L) ? 'nav' : /stall|slow/.test(L) ? 'stall' : /pfl|forced|efato|emergenc/.test(L) ? 'forced' : /take ?off|departure/.test(L) ? 'takeoff' : /solo/.test(L) ? 'circuit' : 'general';
+    const P = {
+      circuit: { sim: { kind: 'circuit', weather: 'clear', radio: true }, simT: 'Fly the circuit in the sim, with radio calls', study: 'ops', radio: faa ? 'f-ctaf' : 'u-dw' },
+      nav: { sim: null, simT: '', nav: true, study: 'nav', radio: faa ? 'f-gnd' : 'u-check' },
+      stall: { sim: { kind: 'long', weather: 'clear' }, simT: 'Fly a long final in the sim and hold the speed exactly', study: 'pof', radio: faa ? 'f-to' : 'u-dep' },
+      forced: { sim: { kind: 'long', weather: 'fair' }, simT: 'Fly a long final and practise judging the descent', study: 'ops', radio: faa ? 'f-may' : 'u-may' },
+      takeoff: { sim: { kind: 'takeoff', weather: 'fair' }, simT: 'Practise the take-off in the sim', study: 'perf', radio: faa ? 'f-to' : 'u-dep' },
+      general: { sim: top?.sim || { kind: 'short', weather: 'clear' }, simT: top?.sim ? `Work on ${top.title.toLowerCase()} in the sim` : 'Fly a few short finals in the sim', study: top?.study || 'met', radio: faa ? 'f-to' : 'u-dep' }
+    }[kind];
+    const subj = (QB?.subjects || []).find(s => s.id === P.study);
+    return [
+      P.sim ? ['sim', P.simT, '20 min', simBtn(P.sim, 'Open the sim')] : ['nav', 'Re-plan the route in the Nav log and mark a feature every 5 minutes', '20 min', '<a class="btn btn-line btn-sm" href="#navlog">Open the Nav log</a>'],
+      ['study', `Theory: ${subj ? subj.name : 'today’s review'}`, '15 min', `<button type="button" class="btn btn-line btn-sm" data-costudy="${esc(P.study)}">Start</button>`],
+      ['radio', 'Radio: say the calls for this lesson out loud', '10 min', `<button type="button" class="btn btn-line btn-sm" data-coradio="${esc(P.radio)}">Practise</button>`],
+      ['chair', 'Chair-fly the lesson from start to finish', '10 min', '']
+    ];
+  }
+  function scrubSheet() {
+    const p = state.profile;
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Lesson cancelled</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body" data-scbody><p>Sorry. It happens to everyone and it isn’t wasted: turn the slot into a grounded hour built around ${p.nextLesson ? `<b>${esc(p.nextLesson)}</b>` : 'your next lesson'}.</p>
+        <div class="segmented" data-screason>${[['weather', 'Weather'], ['aircraft', 'Aircraft'], ['instructor', 'Instructor'], ['me', 'Me'], ['other', 'Other']].map(([v, l], i) => `<label><input type="radio" name="r" value="${v}" ${i ? '' : 'checked'}><span>${l}</span></label>`).join('')}</div>
+        <label class="field"><span>New lesson date <i>(optional)</i></span><input type="date" data-scdate value=""></label><p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-scgo>Show my grounded hour</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
+    sheet.querySelector('[data-scgo]').onclick = async e => {
+      e.target.disabled = true;
+      const reason = sheet.querySelector('[name=r]:checked')?.value || 'other', nd = sheet.querySelector('[data-scdate]').value, lesson = p.nextLesson || '';
+      const list = [...scrubsOf(), { d: p.lessonDate || todayISO(), r: reason, l: lesson.slice(0, 120), at: todayISO() }].slice(-50);
+      try { await saveProfile({ scrubs: JSON.stringify(list), ...(nd ? { lessonDate: nd } : {}) }); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; e.target.disabled = false; return; }
+      const plan = groundedPlan(lesson), month = list.filter(s => s.at?.slice(0, 7) === todayISO().slice(0, 7)).length;
+      sheet.querySelector('[data-scbody]').innerHTML = `<p>${reason === 'weather' ? 'Grounded by the weather. ' : ''}Here’s an hour that keeps you moving${nd ? `, and your lesson is now on ${esc(fmtDate(nd, { weekday: 'long', day: 'numeric', month: 'long' }))}` : ''}.</p>
+        <div class="coach-plan">${plan.map(([k, t, mins, btn]) => `<div class="coach-pl"><span class="coach-min">${mins}</span><b>${esc(t)}</b>${btn}</div>`).join('')}</div>
+        <p class="hint">${month > 1 ? `${month} cancellations this month. ` : ''}Students who use cancelled slots for ground work lose far less between lessons.</p>`;
+      sheet.querySelector('.sheet-foot').innerHTML = '<div class="right" style="margin-left:auto"><button type="button" class="btn btn-blue" data-close>Done</button></div>';
+      sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => { sheet.close(); render(); });
+      sheet.querySelectorAll('[data-cosim]').forEach(b => b.onclick = () => { sheet.close(); const [kind, wx, radio] = b.dataset.cosim.split('|'); if (!homeCode()) { toast('Set your home airfield in your profile first.'); return; } if (radio === '1') ui.sim.radio = true; openPractice(homeCode(), '', kind, { weather: wx || undefined }); });
+      sheet.querySelectorAll('[data-costudy]').forEach(b => b.onclick = () => { sheet.close(); if (!isAdv()) return upgradeSheet('Theory practice is part of Advanced.'); location.hash = '#study'; setTimeout(() => startQuiz(b.dataset.costudy), 60); });
+      sheet.querySelectorAll('[data-coradio]').forEach(b => b.onclick = () => { sheet.close(); if (!isAdv()) return upgradeSheet('Radio practice is part of Advanced.'); location.hash = '#radio'; setTimeout(() => radioPage(b.dataset.coradio), 60); });
+    };
+  }
+
   function overview() {
     const p = state.profile, list = sorted(), last30 = inLast(30), checks = parseChecks(p.checklist);
     const done = checks.filter(c => c.done).length, goal = Number(p.goalHours || 0), total = totalMin() / 60;
@@ -467,7 +679,7 @@
           ${firstQ ? `<p class="next-q">${esc(firstQ)}</p>` : ''}
           <div class="next-foot">
             ${checks.length ? `<span class="progress"><span class="progress-bar"><i style="width:${checks.length ? done / checks.length * 100 : 0}%"></i></span>${done} of ${checks.length} prepared</span>` : '<span class="progress">No preparation checklist yet</span>'}
-            <a class="btn btn-light btn-has-spark" href="#prepare">Prepare ${spark}</a>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${p.lessonDate && dLesson >= 0 && dLesson <= 3 ? '<button type="button" class="link light" data-scrub>Lesson cancelled?</button>' : ''}<a class="btn btn-light btn-has-spark" href="#prepare">Prepare ${spark}</a></span>
           </div>
         </section>
 
@@ -488,6 +700,7 @@
           ${goal ? '' : '<p class="footnote">Set an hours goal in your profile to see progress here.</p>'}
         </section>
 
+        ${coachTiles()}
         <section class="stats span-12" aria-label="Totals">
           <div class="stat"><span>Total time</span><b>${hrs(totalMin())}<small>h</small></b><em>${p.openingMinutes ? `Includes ${hrs(p.openingMinutes)} h from before` : 'From your logged flights'}</em></div>
           <div class="stat"><span>Last 30 days</span><b>${hrs(sum(last30, f => f.minutes))}<small>h</small></b><em>${last30.length} flight${last30.length === 1 ? '' : 's'}</em></div>
@@ -515,7 +728,7 @@
           ${latest ? `<div class="mini-meta"><span><b>${esc(upper(latest.departure))} → ${esc(upper(latest.arrival))}</b> · ${esc(fmtDate(latest.date))}</span><span>${hm(latest.minutes)} · ${esc(roleName(latest.role))}</span></div>` : ''}
         </section>
       </div>`);
-    wireMomentum();
+    wireMomentum(); wireCoach(overview);
   }
 
   function logbook() {
@@ -690,7 +903,7 @@
             ${input('Lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"')}
             ${input('Date', 'lessonDate', p.lessonDate, 'date')}
             ${input('Start time', 'lessonTime', p.lessonTime, 'time')}
-            <div class="field cal-add"><span>Calendar</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-icsone ${p.lessonDate ? '' : 'disabled'}>Add this lesson to my calendar</button><button type="button" class="btn btn-line btn-sm" data-calsub>${p.calOn ? 'Calendar sync is on' : 'Sync with my calendar'}</button></div></div>
+            <div class="field cal-add"><span>Calendar</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-line btn-sm" data-icsone ${p.lessonDate ? '' : 'disabled'}>Add this lesson to my calendar</button><button type="button" class="btn btn-line btn-sm" data-calsub>${p.calOn ? 'Calendar sync is on' : 'Sync with my calendar'}</button>${p.lessonDate ? '<button type="button" class="btn btn-line btn-sm" data-scrub>Lesson cancelled?</button>' : ''}</div></div>
           </div>
           <div class="group" style="margin-top:22px"><h3>Preparation checklist</h3>
             <div class="checklist" data-checks></div>
@@ -703,11 +916,13 @@
           <p class="form-error" role="alert" style="margin-top:12px"></p>
           <div class="actions" style="margin-top:16px"><span class="hint">${preview ? 'Example desk: changes aren’t saved.' : 'Saved to your account.'}</span><div class="right"><button class="btn btn-blue btn-has-spark" type="submit">Save preparation ${spark}</button></div></div>
         </section>
-        <section class="tile span-5"><div class="tile-head"><h2>From your last flights</h2>${recent.length ? '<a class="link" href="#logbook">Logbook</a>' : ''}</div>
+        <div class="span-5" style="display:grid;gap:16px;align-content:start">${lessonWxTile('')}${issueTile('')}${rustTile('')}
+        <section class="tile"><div class="tile-head"><h2>From your last flights</h2>${recent.length ? '<a class="link" href="#logbook">Logbook</a>' : ''}</div>
           ${recent.length ? recent.map(f => `<div class="debrief"><small>${esc(fmtDate(f.date))} · ${esc(f.lesson || `${upper(f.departure)} → ${upper(f.arrival)}`)}</small><p class="${f.notes ? '' : 'none'}">${esc(f.notes || 'No debrief notes for this flight.')}</p></div>`).join('') : '<p class="hint">Debrief notes from your flights will show here.</p>'}
-        </section>
+        </section></div>
       </form>`);
     const form = $('[data-prep]'), box = $('[data-checks]'), nw = $('[data-new]');
+    wireCoach(prepare);
     const one = $('[data-icsone]'); if (one) one.onclick = () => { const v = Object.fromEntries(new FormData(form)); downloadICS(v.nextLesson, v.lessonDate || p.lessonDate, v.lessonTime, p.airport); };
     $('[data-calsub]').onclick = calendarSheet;
     const draw = () => {

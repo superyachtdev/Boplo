@@ -1132,3 +1132,21 @@ details.more .fields{padding:0 16px 16px}
 @media (max-width:900px){.c-challenge{grid-template-columns:1fr}.c-bform{grid-template-columns:1fr 1fr!important}.c-bform .field:first-child{grid-column:1/-1}}
 @media (max-width:640px){.c-q{grid-template-columns:48px minmax(0,1fr)}.c-ans{display:none}.c-full.ans{margin-left:0}}
 @media (max-width:960px){.tabbar{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}.tabbar a{font-size:10px;padding:7px 0;letter-spacing:-.01em}}
+/* ===== training coach ===== */
+.coach-h{margin:0 0 6px;font-size:18px}
+.coach-q{margin:0 0 10px;color:var(--ink-2);font-style:italic;font-size:14px}
+.coach-drills{margin:0 0 12px;padding-left:20px;display:grid;gap:6px;font-size:14px;color:var(--ink)}
+.coach-acts{display:flex;gap:8px;flex-wrap:wrap}
+.coach-steps{display:grid;gap:8px;margin-top:10px}
+.coach-step{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;border:1px solid var(--hair-l);cursor:pointer}
+.coach-step input{margin-top:3px;width:17px;height:17px;accent-color:var(--electric);flex:none}
+.coach-step b{display:block;font-size:14px;font-weight:600}.coach-step.done b{text-decoration:line-through;color:var(--ink-3)}
+.coach-step .btn{margin-top:6px}.coach-mini{margin:4px 0 0;font-size:13px;color:var(--ink-2);padding-left:16px}
+.coach-script summary{cursor:pointer;font-size:13px;color:var(--electric);margin-top:4px}.coach-script p{margin:6px 0 0;font-size:13px;color:var(--ink-2);line-height:1.55}
+.coach-wxl{margin:0 0 10px;padding:0;list-style:none;display:grid;gap:6px}
+.coach-wxl li{padding:9px 12px;border-radius:12px;background:var(--well);border-left:4px solid var(--hair-l);font-size:14px}
+.coach-wxl .go-go{border-color:var(--ok)}.coach-wxl .go-caution{border-color:#E0A21B}.coach-wxl .go-nogo{border-color:var(--danger)}
+.coach-plan{display:grid;gap:8px;margin:12px 0}
+.coach-pl{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border-radius:14px;background:var(--well)}
+.coach-min{font-size:12px;font-weight:700;color:var(--electric)}
+.link.light{color:rgba(222,233,255,.85);background:none;border:0;font:inherit;font-size:14px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
