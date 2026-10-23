@@ -541,10 +541,12 @@ window.BoploSim = (() => {
       const direct = () => fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(`[out:json][timeout:10];way["aeroway"="runway"](around:4000,${ap.lat.toFixed(5)},${ap.lng.toFixed(5)});out geom tags;`) })
         .then(r => r.ok ? r.json() : { elements: [] }).then(j => (j.elements || []).filter(e => e.type === 'way' && e.geometry?.length >= 2).map(e => { const g = e.geometry.map(p => [p.lat, p.lon]), t = e.tags || {}; let w = parseFloat(t.width); if (/ft|'/.test(String(t.width))) w *= .3048; return { ref: t.ref || '', width: w > 5 && w < 120 ? w : null, surface: t.surface || '', area: (g.length > 3 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1]) || t.area === 'yes', pts: g }; }));
       const save = r => { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), r })); } catch { } return r; };
-      return Promise.race([
-        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : { unavailable: true })
-          .then(j => j.unavailable ? direct().then(save) : save(j.runways || [])).catch(() => direct().then(save)).catch(() => []),
-        new Promise(res => setTimeout(() => res([]), 7000))]);
+      return new Promise(res => {
+        let left = 2; const done = r => { if (r?.length) { res(save(r)); left = -9; } else if (--left === 0) res([]); };
+        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : {}).then(j => done(j.runways)).catch(() => done(null));
+        direct().then(done).catch(() => done(null));
+        setTimeout(() => res([]), 8000);
+      });
     };
     const normId = id => String(id || '').toUpperCase().trim().replace(/^0+(?=\d)/, '');
     // the centreline of an OSM runway: a line way end to end, or the long axis of a runway drawn as an area
@@ -790,7 +792,7 @@ window.BoploSim = (() => {
     // the detailed samples can time out on slow connections: then wait (up to 25 s) for the scenery under the start
     // and read the ground directly, so the runway and the aircraft are placed once, on the real surface
     if (tileset && (h0 == null || rwSt.some((r, i) => !r.pts.some((_, j) => Number.isFinite(hs[2 + rwSt.slice(0, i).reduce((n, q) => n + q.pts.length, 0) + j]))))) {
-      for (let i = 0; i < 80 && alive && elevAt(P[0][0], P[0][1], true) == null; i++) await new Promise(r => setTimeout(r, 300));
+      for (let i = 0; i < 80 && alive && (elevAt(P[0][0], P[0][1], true) == null || (i < 40 && !tileset.tilesLoaded)); i++) await new Promise(r => setTimeout(r, 300));
       if (h0 == null) h0 = elevAt(P[0][0], P[0][1], true);
       let k = 2; for (const r of rwSt) for (const pt of r.pts) { if (!Number.isFinite(hs[k])) hs[k] = elevAt(pt[0], pt[1], true); k++; }
     }
@@ -1227,13 +1229,41 @@ window.BoploSim = (() => {
       thrTarget = fc.throttle;
     }
 
+    // Photo tiles load coarse first, and a coarse tile can be tens of metres off. Once the detailed tiles around a runway
+    // have loaded (we're within a few km and the tileset says it's settled), measure the runway again; if it moved,
+    // move the runway, its lights, the glidepath and, early in an approach or on the ground, the aircraft with it.
+    let refineT = 0;
+    function refineRunways(dt) {
+      if (!tileset || replay) return; refineT += dt; if (refineT < 1.5) return; refineT = 0;
+      if (!tileset.tilesLoaded) return;
+      for (const r of rwSt) {
+        if ((r.refined || 0) >= 2 || r.pending) continue;
+        const c = add(r.rw.A, r.f, r.rw.len / 2), d = Math.hypot(c[0] - st.x, c[1] - st.z);
+        if (d > (r.refined ? 2500 : 7000)) continue;
+        const vals = r.pts.map(pt => elevAt(pt[0], pt[1], true)); if (vals.filter(Number.isFinite).length < r.pts.length * .6) continue;
+        const old = r.h.slice(), all = [null, null]; for (const q of rwSt) for (let j = 0; j < q.pts.length; j++) all.push(q === r ? vals[j] : null);
+        shapeRunways(all, r); r.refined = (r.refined || 0) + 1;
+        const dif = r.h.map((v, i) => v - old[i]).sort((a, b) => a - b), shift = dif[dif.length >> 1];
+        if (Math.abs(shift) < .6) continue;
+        const onIt = fs.ground && rwAt(fs.x, fs.z) && rwSt.find(q => q === r);
+        drawRunways(); buildRunwayLights();
+        if (arrE && r.rw === arrE.rw) { const b = rwHeight(landPt[0], landPt[1]); if (b != null) g1 = b; }
+        if (depE && r.rw === depE.rw) { const a = rwHeight(P[0][0], P[0][1]); if (a != null && fs.ground) g0 = a; }
+        const n = geoFrom(depE, O.fromElevFt) ?? geoFrom(arrE, O.toElevFt); if (n != null) geoN = n;
+        planCruise(); planGates();
+        if (onIt) { fs.alt = groundAt(fs.x, fs.z); fs.v[1] = 0; lastG = fs.alt; }
+        else if (!fs.ground && PRF && arrE && r.rw === arrE.rw && st.t < 45) fs.alt += shift;
+        sync();
+      }
+    }
+
     /* ---- flight model ---- */
     function step(dt) {
       st.t += dt;
       FM.step(dt, windAt(dt));
       if (!datumFixed) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
       st.gk = elevAt(st.x, st.z) != null || !!rwAt(st.x, st.z);
-      rwLazyT += dt;
+      rwLazyT += dt; refineRunways(dt);
       if (rwLazyT > 2 && rwSt.some(r => r.pending)) { rwLazyT = 0;
         for (const r of rwSt) { if (!r.pending || rwAt(st.x, st.z)) continue; const c = add(r.rw.A, r.f, r.rw.len / 2); if (Math.hypot(c[0] - st.x, c[1] - st.z) > 9000) continue;
           const vals = r.pts.map(pt => elevAt(pt[0], pt[1], true)); if (vals.filter(Number.isFinite).length < r.pts.length / 2) continue;

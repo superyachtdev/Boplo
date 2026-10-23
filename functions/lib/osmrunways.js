@@ -24,7 +24,7 @@ export async function osmRunways(env, code, lat, lng, fetcher = fetch) {
   let runways = null; const errs = [];
   for (const url of MIRRORS) {
     try {
-      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 9000);
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 3500);
       const r = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BoploFlight/1.0 (boplo.app)' }, body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
       clearTimeout(timer);
       if (!r.ok) { errs.push(r.status); continue; }
