@@ -1202,6 +1202,17 @@ window.BoploSim = (() => {
       const expo = v => { const a = Math.abs(v), e = CS.expo; return Math.sign(v) * ((1 - e) * a + e * a * a * a); };
       ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? expo(y) : ramp(ctl.yaw, y, 3);
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
+      // auto-rudder on the runway: steer for a point on the centreline ahead (like a pilot looking down the runway),
+      // so the take-off and landing rolls stay straight; your own rudder input always takes priority
+      if (!apOn && !replay && fc.autoRudder && fs.ground && Math.abs(ctl.yaw) < .05 && fs.gs > 1.5) {
+        const r = rwSt.find(q => { const dx = fs.x - q.rw.A[0], dz = fs.z - q.rw.A[1], u = dx * q.f[0] + dz * q.f[1], w = dx * q.l[0] + dz * q.l[1]; return u > -10 && u < q.rw.len + 10 && Math.abs(w) < q.rw.wid / 2 + 8; });
+        if (r) {
+          const sgn = Math.cos((fs.hdg - Math.atan2(r.f[0], r.f[1]) * R2D) * D2R) >= 0 ? 1 : -1, dir = [r.f[0] * sgn, r.f[1] * sgn];
+          const off = -((fs.x - r.rw.A[0]) * r.l[0] + (fs.z - r.rw.A[1]) * r.l[1]), look = 30 + fs.gs * 1.5;
+          const want = Math.atan2(dir[0] * look + r.l[0] * off, dir[1] * look + r.l[1] * off) * R2D, err = wrap180(want - fs.hdg);
+          fc.rudder = clamp(err * .09 - (fs.w?.[2] || 0) * 1.2, -1, 1);
+        }
+      }
       if (Math.abs(thrRange.value / 100 - thrTarget) > .02 && document.activeElement !== thrRange) thrRange.value = Math.round(thrTarget * 100);
     }
     let padName = null, padAxes = [], padThr0 = null, detecting = null;
