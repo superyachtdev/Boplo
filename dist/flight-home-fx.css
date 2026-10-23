@@ -1,0 +1,75 @@
+/* Boplo Flight landing: interaction layer (pairs with flight-home-fx.js) */
+
+/* nav: flight progress along the bottom of the pill, and the section you're in */
+.nav-prog{position:absolute;left:26px;right:26px;bottom:-1px;height:2px;border-radius:2px;overflow:hidden;pointer-events:none}
+.nav-prog i{position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--p,0));background:linear-gradient(90deg,var(--electric),var(--ice));border-radius:inherit}
+.nav-prog::after{content:"";position:absolute;top:50%;left:calc(var(--p,0) * 100%);width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;box-shadow:0 0 10px 2px rgba(158,216,255,.9);opacity:calc(var(--p,0) * 40)}
+.nav.on-light .nav-prog i{background:linear-gradient(90deg,var(--electric),#5B9BFF)}
+.nav-links a.is-here{background:rgba(255,255,255,.1);color:#fff}
+.nav.on-light .nav-links a.is-here{background:rgba(5,11,31,.07);color:var(--ink)}
+
+/* hero: a way past the example lesson */
+.skip-flight{position:absolute;right:clamp(16px,3vw,40px);bottom:108px;z-index:3;font:inherit;font-size:13.5px;font-weight:550;color:#E8F0FF;height:38px;padding:0 16px;border-radius:999px;border:1px solid var(--hair-d);background:rgba(4,11,30,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);cursor:pointer;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .4s var(--ease),transform .5s var(--ease),background-color .2s}
+.skip-flight.on{opacity:1;transform:none;pointer-events:auto}
+.skip-flight:hover{background:rgba(10,98,255,.35)}
+.scroll-hint[role="button"]{cursor:pointer;width:max-content}
+.scroll-hint[role="button"]:hover{color:var(--ice)}
+@media (max-width:640px){.skip-flight{bottom:auto;top:84px;left:16px;right:auto;height:34px;font-size:12.5px}}
+
+/* statement: words light up as you read */
+.statement p.lit{color:#fff}
+.statement p.lit .w{--k:0;opacity:calc(.14 + var(--k) * .26);transition:opacity .25s linear}
+.statement p.lit .w[data-b="1"]{opacity:calc(.14 + var(--k) * .86)}
+.statement p.lit span:not(.w){color:inherit}
+
+/* desk: the demo does its job */
+.checks li.just::before{animation:tick .6s var(--ease)}
+@keyframes tick{0%{transform:scale(.4)}60%{transform:scale(1.18)}100%{transform:none}}
+.checks li{transition:color .4s}
+@property --p{syntax:'<number>';inherits:true;initial-value:0}
+.ring.go{transition:--p 1.6s cubic-bezier(.3,.7,.1,1)}
+.mm-craft circle{fill:#fff;filter:drop-shadow(0 0 6px #9ED8FF)}
+.mm-craft .halo{fill:rgba(158,216,255,.18);filter:none;animation:halo 1.4s ease-out infinite}
+.mm-craft.landed .halo{animation:none;opacity:0;transition:opacity .6s}
+@keyframes halo{0%{transform:scale(.4);opacity:1}100%{transform:scale(1.6);opacity:0}}
+.bars>div{outline:none;cursor:default}
+.bars>div .bar-tip{position:absolute;left:50%;bottom:calc(100% - 6px);transform:translate(-50%,6px);font-style:normal;font-size:12px;font-weight:550;white-space:nowrap;color:#fff;background:var(--ink);padding:6px 9px;border-radius:9px;opacity:0;pointer-events:none;transition:opacity .2s,transform .3s var(--ease);z-index:2}
+.bars>div:hover .bar-tip,.bars>div:focus-visible .bar-tip{opacity:1;transform:translate(-50%,0)}
+.bars>div:hover::after,.bars>div:focus-visible::after{filter:brightness(1.15)}
+.bars>div:focus-visible{box-shadow:0 0 0 2px var(--electric);border-radius:8px}
+.bars>div:first-child .bar-tip{left:0;transform:translate(0,6px)}.bars>div:first-child:hover .bar-tip,.bars>div:first-child:focus-visible .bar-tip{transform:none}
+.bars>div:last-child .bar-tip{left:auto;right:0;transform:translate(0,6px)}.bars>div:last-child:hover .bar-tip,.bars>div:last-child:focus-visible .bar-tip{transform:none}
+
+/* pricing: sliding toggle and an altimeter-drum price */
+.billing.has-thumb{position:relative}
+.billing.has-thumb button{position:relative;z-index:1;transition:color .35s}
+.billing.has-thumb button[aria-pressed="true"]{background:transparent}
+.bill-thumb{position:absolute;top:4px;bottom:4px;left:4px;border-radius:999px;background:var(--ink);transition:transform .5s var(--ease),width .5s var(--ease);box-shadow:0 6px 18px -8px rgba(5,11,31,.6)}
+.tier-price.has-drum>strong:not(.drum){display:none!important}
+.drum{display:inline-flex;font-size:clamp(48px,5vw,72px);line-height:1;letter-spacing:-.045em;font-weight:620;font-style:italic;font-variation-settings:'wdth' 112;font-variant-numeric:tabular-nums;height:1em;overflow:hidden;padding:0 .06em;margin:0 -.06em;-webkit-mask:linear-gradient(transparent,#000 14%,#000 86%,transparent);mask:linear-gradient(transparent,#000 14%,#000 86%,transparent)}
+.drum .slot{display:inline-block;height:1em;overflow:hidden;max-width:.62em;transition:max-width .5s var(--ease)}
+.drum .slot.narrow{max-width:.3em}
+.drum .slot.blank{max-width:0}
+.drum .reel{display:flex;flex-direction:column;transform:translateY(calc(var(--i,0) * -1em));transition:transform .9s cubic-bezier(.25,.9,.2,1.05)}
+.drum .reel>span{display:block;height:1em;line-height:1;text-align:center}
+
+/* questions */
+.faq details{will-change:height}
+
+/* final card: a little light follows the pointer */
+.final-card::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(420px circle at var(--lx,50%) var(--ly,50%),rgba(158,216,255,.13),transparent 60%);opacity:0;transition:opacity .5s}
+.final-card.lit::after{opacity:1}
+
+/* rules: the spark turns like the buttons' */
+.rule .spark{transition:transform .6s var(--ease)}
+.rule:hover .spark{transform:rotate(90deg) scale(1.15)}
+
+/* phones: CTA dock once you're past the hero */
+.dock{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px 8px 8px;border-radius:999px;background:rgba(4,11,30,.78);border:1px solid var(--hair-d);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);transform:translateY(130%);transition:transform .5s var(--ease);box-shadow:0 18px 50px -18px rgba(10,98,255,.7)}
+.dock.on{transform:none}
+.dock .btn{flex:1;justify-content:space-between}
+.dock-alt{font-size:14px;font-weight:550;color:#E8F0FF;padding:0 14px 0 6px;white-space:nowrap}
+body:has(.dock.on) .bradio{bottom:86px}
+
+@media (prefers-reduced-motion:reduce){.drum .reel,.drum .slot,.bill-thumb{transition:none}}
+.tier-price .drum span{font-size:inherit;color:inherit;line-height:1}

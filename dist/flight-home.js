@@ -453,7 +453,7 @@
   };
   let lenis = null;
   if (window.Lenis && !mobile) {
-    lenis = new window.Lenis({ lerp: .09, smoothWheel: true });
+    lenis = new window.Lenis({ lerp: .09, smoothWheel: true }); window.__lenis = lenis;
     lenis.on('scroll', readScroll);
     $$('a[href^="#"]').forEach(a => a.addEventListener('click', e => { const id = a.getAttribute('href'); const t = id.length > 1 && $(id); if (t || id === '#top') { e.preventDefault(); lenis.scrollTo(t || 0, { offset: 0 }); } }));
   }

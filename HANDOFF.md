@@ -232,3 +232,20 @@ Built from market research: students quit over cost overruns, lost momentum and 
   - gates are off by default on practice finals (they have a PAPI), with their own remembered setting
   - the 3D engine downloads in parallel with the runway lookup
 - **Ground auto-rudder.** It now works on the runway too: it steers for a centreline point ahead, as a commanded yaw rate converted to a nosewheel angle (stable at low frame rates, where the earlier gain version swung full left and right). Measured live: 6 cm off the centreline on the take-off roll. The tested harness is in the session scratchpad (roll.js).
+
+## Landing page interaction layer
+- `dist/flight-home-fx.js` and `flight-home-fx.css` add to the page without changing it; with JS off or reduced motion on, it reads as before. `flight-home.js` exposes `window.__lenis` for smooth programmatic scrolls.
+- **Nav:** a flight-progress line along the bottom of the pill (whole-page progress, with a glowing dot), and the current section's link highlighted (`.is-here`, `aria-current`).
+- **Hero:** a "Skip the flight" button appears once you start scrolling the 560vh example lesson (it hides near the end). The "Scroll to fly" hint is clickable.
+- **Statement:** words light up as they scroll past; the problem half ends dim, Boplo's half bright.
+- **Desk demo plays once, when seen:**
+  - the last prep item ticks itself
+  - the licence ring fills (`@property --p`) and counts to 23.4
+  - the minimap route draws itself with an aircraft flying it
+  - the hour bars show their values on hover or keyboard focus
+- **Pricing:** the billing toggle has a sliding thumb, and the Advanced price is an altimeter-style rolling drum ($8.33 ↔ $11.99). The original price elements stay for no-JS.
+- **Smaller touches:**
+  - FAQ answers open and close smoothly
+  - the final card catches pointer light
+  - the rule sparks turn on hover
+  - on phones, a CTA dock appears after the hero and hides at the final card and footer; the ATC radio button moves up above it
