@@ -207,3 +207,28 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - In flight-app.js, `QB` is now a regime-aware view (`qbNow()`). Saved study progress is keyed by question id, so switching regime keeps it.
 - The landing hero says "For student pilots training under the FAA, UK CAA or EASA."
 - The questions are still early-access and unreviewed. Get a US CFI to review the FAA set before marketing hard in the US.
+
+## Simulator realism pass (runway alignment, ground, datum)
+- **Runways from OpenStreetMap.** OurAirports runway ends are often tens of metres out (KPAO was ~35 m east, more than the runway's 21 m width).
+  - `alignToOSM()` in flight-sim.js snaps each runway to the matching OSM `aeroway=runway` way: matched by `ref` (e.g. "13/31") or by bearing within 10° and midpoint within 600 m. Area-mapped runways use their long axis. An airfield with no OurAirports runway gets OSM's.
+  - With Google photo tiles, an OSM-matched runway isn't painted (the real one is in the scenery); its lights, PAPI and physics surface stay.
+- **Where the OSM data comes from.**
+  - Overpass refuses Cloudflare (521), so the browser fetches it (`fetchOSM`, trying overpass-api.de and the maps.mail.ru mirror) and caches it in localStorage (`boplo-osmrw:CODE`, 14 days; "none here" for 2 days).
+  - The simulator page prefetches when an airfield is picked (`BoploSim.prefetch`), so it's ready by Start.
+  - A signed-in browser shares the result: `POST /flight/runways/osm` (`contributeOSM` in functions/lib/osmrunways.js). It keeps only runways within 250 m of a published runway's ends and never overwrites a fresh entry. `GET /flight/runways/osm` serves the D1 cache (`flight_kv` key `osmrw:CODE`).
+  - The sim waits up to 12 s for OSM on a first visit, then falls back to OurAirports.
+- **Ground sampling fix.** `scene.sampleHeight` was hitting our own overlays: the yellow trail (always 1.5 m above the aircraft), gates, labels and lights. This made mid-air "touchdowns" and the random crashes.
+  - Excluding a collection doesn't exclude its items, so every point, line and label is now tagged with id `UI` (`tagged()`), and `UI` is in `exclude`.
+- **Physics ground off runways = elevation model + geoid.** Photo tiles under the aircraft are often off-screen and coarse (we saw +50 to +115 m errors). Off-runway ground is now AWS terrarium (MSL) + `geoN`; a tile height is used only within −8/+15 m of it. Runways keep their own measured surface.
+- **Geoid / altimeter datum.**
+  - `geoN` (ellipsoid − MSL) is measured on a runway (`geoFrom`: runway height − published field elevation), or at the start point (tile vs DEM). It's no longer taken from the terrain under a practice final's start. The altimeter is right at the field (KPAO: geoN −33 m).
+  - `refineRunways()` re-measures each runway once the detailed tiles near it have loaded (`tileset.tilesLoaded`, within 7 km, then again within 2.5 km). It moves the runway, lights, glidepath, geoid and, early in a final or on the ground, the aircraft.
+- **Smaller fixes:**
+  - clouds (a ReferenceError meant they never rendered)
+  - altimeter window reads 29.92 in the US and Canada
+  - "Climb towards the first gate" no longer shows on finals
+  - the autopilot never retracts flap on an approach, and disconnects at 200 ft ("land the aircraft")
+  - the yellow trail only shows in replays
+  - gates are off by default on practice finals (they have a PAPI), with their own remembered setting
+  - the 3D engine downloads in parallel with the runway lookup
+- **Ground auto-rudder.** It now works on the runway too: it steers for a centreline point ahead, as a commanded yaw rate converted to a nosewheel angle (stable at low frame rates, where the earlier gain version swung full left and right). Measured live: 6 cm off the centreline on the take-off roll. The tested harness is in the session scratchpad (roll.js).
