@@ -107,7 +107,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
   if (!u.on) throw Object.assign(new Error('Ask Boplo is switched off right now.'), { status: 503 });
   if (u.left <= 0) throw Object.assign(new Error(plan === 'advanced' ? `You’ve used today’s ${u.limit} questions. They reset at midnight UTC.` : `You’ve used today’s ${u.limit} free questions. Advanced gives you ${Number(env.AI_DAILY_ADV ?? 40)} a day.`), { status: plan === 'advanced' ? 429 : 402 });
   const exam = input?.mode === 'examiner';
-  if (exam && plan !== 'advanced') throw Object.assign(new Error('Mock checkrides are part of Advanced. Start a free trial from Plan & billing.'), { status: 402 });
+  if (exam && plan !== 'advanced') throw Object.assign(new Error('Mock checkrides are part of Advanced. Upgrade from Plan & billing.'), { status: 402 });
   // a checkride needs the whole exchange for the debrief; it starts with a short "begin" message from the app
   const messages = cleanMessages(input, exam ? 48 : 12), ctx = contextBlock(input?.context) + (exam ? examinerBlock(input?.setup) : '');
   const provider = env.AI_PROVIDER === 'gemini' || !env.ANTHROPIC_API_KEY ? 'gemini' : 'claude';

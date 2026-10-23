@@ -54,7 +54,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
  const smem=await schoolMembership(env,user.id).catch(()=>null);let brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null));if(smem&&schoolActive(smem.school))brow={...(brow||{}),school:{name:smem.school.name,role:smem.role}};const plan=effectivePlan(env,brow);
- const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
+ const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Upgrade from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='runways/osm'&&request.method==='POST')return json(await contributeOSM(env,await body(),async cc=>{try{const r=await (env.ASSETS?env.ASSETS.fetch(new Request(url.origin+'/runways/'+cc+'.json')):fetch(url.origin+'/runways/'+cc+'.json'));return r.ok?(await r.json()).rows:{};}catch{return {};}}));
  if(path==='workspace'&&request.method==='GET'){
@@ -67,7 +67,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const prevRow=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const prev=prevRow?JSON.parse(prevRow.data):{};const p=validateProfile(await body(),prev);await env.DB.prepare('INSERT INTO flight_profiles(user_id,data,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at').bind(user.id,JSON.stringify(p),Date.now()).run();return json({profile:p});
  }
  if(path==='flights'&&request.method==='POST'){
- if(plan!=='advanced'){const c=await env.DB.prepare('SELECT COUNT(*) n FROM flight_records WHERE user_id=?').bind(user.id).first();if((c?.n||0)>=FREE_LIMITS.flights)fail(402,`The Free plan holds ${FREE_LIMITS.flights} flights. Start a free trial of Advanced for an unlimited logbook.`);}
+ if(plan!=='advanced'){const c=await env.DB.prepare('SELECT COUNT(*) n FROM flight_records WHERE user_id=?').bind(user.id).first();if((c?.n||0)>=FREE_LIMITS.flights)fail(402,`The Free plan holds ${FREE_LIMITS.flights} flights. Upgrade to Advanced for an unlimited logbook.`);}
  const flight=validateFlight(await body()),id=crypto.randomUUID();await env.DB.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,JSON.stringify(flight),Date.now(),Date.now()).run();return json({flight:{id,...flight}},201);
  }
  const match=path.match(/^flights\/([a-f0-9-]{36})$/);

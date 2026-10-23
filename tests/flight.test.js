@@ -108,7 +108,7 @@ test('free plan limits, paid features and billing state',async()=>{
  assert.equal((await call('flights','POST',valid)).status,201);
  db.prepare("DELETE FROM flight_records WHERE rowid=(SELECT MAX(rowid) FROM flight_records)").run();
  delete env.OWNER_EMAILS;
- const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,true);assert.equal(ws.billing.ready,true);assert.equal(publicBilling({},null).plan,'advanced');
+ const ws=await (await call('workspace')).json();assert.equal(ws.billing.plan,'free');assert.equal(ws.billing.trialAvailable,false);assert.equal(ws.billing.ready,true);assert.equal(publicBilling({},null).plan,'advanced');
  // an abandoned trial checkout stays free; a paid subscription unlocks everything
  db.prepare("INSERT INTO flight_billing(user_id,customer_id,status,updated_at) VALUES('fr','cus_1','incomplete',0)").run();
  assert.equal(planOf(db.prepare("SELECT * FROM flight_billing WHERE user_id='fr'").get()),'free');
@@ -136,7 +136,7 @@ test('stripe webhook signatures are verified',async()=>{
  const good=await onRequest({env,request:new Request('https://boplo.app/flight/billing/webhook',{method:'POST',headers:{'Stripe-Signature':`t=${t},v1=${sig}`},body:payload})});
  assert.equal(good.status,200);
 });
-test('checkout creates prices once, starts a trial and stays free until confirmed',async()=>{
+test('checkout creates prices once, charges straight away (no trial) and stays free until confirmed',async()=>{
  const {subscribe}=await import('../functions/lib/billing.js');
  const db=new DatabaseSync(':memory:');
  for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
@@ -150,12 +150,12 @@ test('checkout creates prices once, starts a trial and stays free until confirme
   if(u.pathname==='/v1/products')return r({id:'prod_1'});
   if(u.pathname==='/v1/prices')return r({id:'price_1',currency:'usd'});
   if(u.pathname==='/v1/subscriptions'&&init.method==='GET')return r({data:[]});
-  if(u.pathname==='/v1/subscriptions')return r({id:'sub_1',status:'trialing',pending_setup_intent:{client_secret:'seti_secret'},latest_invoice:{amount_due:0,currency:'usd'}});
+  if(u.pathname==='/v1/subscriptions')return r({id:'sub_1',status:'incomplete',latest_invoice:{amount_due:9999,currency:'usd',payment_intent:{client_secret:'pi_secret'}}});
   return new Response('{}',{status:404});};
  const out=await subscribe(env,{id:'u1',email:'u1@example.com'},{interval:'yearly'},'https://boplo.app',fake);
- assert.equal(out.clientSecret,'seti_secret');assert.equal(out.mode,'setup');assert.equal(out.trial,true);
+ assert.equal(out.clientSecret,'pi_secret');assert.equal(out.mode,'payment');assert.equal(out.trial,false);assert.equal(out.amountDue,9999);
  const price=calls.find(c=>c.p==='/v1/prices'&&c.m==='POST');assert.equal(price.b.get('unit_amount'),'9999');assert.equal(price.b.get('recurring[interval]'),'year');assert.equal(price.b.get('lookup_key'),'boplo_flight_advanced_yearly');
- const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('items[0][price]'),'price_1');assert.equal(sub.b.get('trial_period_days'),'7');assert.equal(sub.b.get('payment_behavior'),'default_incomplete');assert.deepEqual(sub.b.getAll('expand[]'),['latest_invoice.payment_intent','pending_setup_intent']);
+ const sub=calls.find(c=>c.p==='/v1/subscriptions'&&c.m==='POST');assert.equal(sub.b.get('items[0][price]'),'price_1');assert.equal(sub.b.get('trial_period_days'),null);assert.equal(sub.b.get('payment_behavior'),'default_incomplete');assert.deepEqual(sub.b.getAll('expand[]'),['latest_invoice.payment_intent','pending_setup_intent']);
  const row=db.prepare("SELECT * FROM flight_billing WHERE user_id='u1'").get();assert.equal(row.customer_id,'cus_1');assert.equal(row.status,'incomplete');
 });
 test('promotion codes discount the first payment and can skip the trial',async()=>{

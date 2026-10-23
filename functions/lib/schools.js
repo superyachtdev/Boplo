@@ -1,6 +1,6 @@
 // Boplo for flight schools: one yearly Stripe subscription covers Advanced for every student and instructor who joins with the school's code.
 // The school admin is the paying customer. Students choose to join (and can leave); while they're members, the school's instructors see their training progress.
-// Options (Cloudflare env): SCHOOL_TRIAL_DAYS (default 14, 0 disables).
+// No free trial: the school pays for the year at checkout.
 import { stripe } from './billing.js';
 
 export const SCHOOL_PLANS = {
@@ -54,7 +54,7 @@ export async function publicSchool(env, m, origin = 'https://boplo.app') {
     ...(m.role === 'admin' ? { periodEnd: s.current_period_end, cancelAtPeriodEnd: !!s.cancel_at_period_end, trialEnd: s.trial_end, amount: plan.amount, currency: plan.currency } : {})
   };
 }
-export const schoolPlans = env => ({ trialDays: Number(env.SCHOOL_TRIAL_DAYS ?? 14), plans: Object.fromEntries(Object.entries(SCHOOL_PLANS).map(([k, p]) => [k, { label: p.label, amount: p.amount, currency: p.currency, seats: p.seats, staff: p.staff }])) });
+export const schoolPlans = env => ({ trialDays: 0, plans: Object.fromEntries(Object.entries(SCHOOL_PLANS).map(([k, p]) => [k, { label: p.label, amount: p.amount, currency: p.currency, seats: p.seats, staff: p.staff }])) });
 
 async function ensureSchoolPrice(env, key, fetcher) {
   const plan = SCHOOL_PLANS[key]; if (!plan) fail(400, 'Choose a school plan.');
@@ -66,7 +66,7 @@ async function ensureSchoolPrice(env, key, fetcher) {
 }
 
 async function checkoutFor(env, user, school, key, origin, fetcher) {
-  const price = await ensureSchoolPrice(env, key, fetcher), days = Number(env.SCHOOL_TRIAL_DAYS ?? 14), trial = days > 0 && !school.trial_used;
+  const price = await ensureSchoolPrice(env, key, fetcher), days = 0, trial = false;
   const session = await stripe(env, 'POST', 'checkout/sessions', {
     mode: 'subscription', customer: school.customer_id, client_reference_id: school.id,
     line_items: [{ price: price.id, quantity: 1 }],

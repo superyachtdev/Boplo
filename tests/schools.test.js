@@ -40,9 +40,9 @@ test('a school admin pays through Checkout, and the school turns active only onc
   const { db, D1 } = setup(); await addUser(db, 'owner');
   const env = { DB: D1, STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_PUBLISHABLE_KEY: 'pk_test_x' }, s = fakeStripe();
   const r = await createSchool(env, { id: 'owner', email: 'owner@example.com' }, { name: 'Popham Flying School', plan: 'school' }, 'https://boplo.app', s.fetcher);
-  assert.match(r.url, /checkout\.stripe\.com/); assert.equal(r.trial, true); assert.equal(r.trialDays, 14);
+  assert.match(r.url, /checkout\.stripe\.com/); assert.equal(r.trial, false); assert.equal(r.trialDays, 0);
   const cs = s.calls.find(c => c.path === 'checkout/sessions').body;
-  assert.equal(cs.mode, 'subscription'); assert.equal(cs['line_items[0][price]'], 'price_boplo_flight_school_yearly'); assert.equal(cs['subscription_data[trial_period_days]'], '14');
+  assert.equal(cs.mode, 'subscription'); assert.equal(cs['line_items[0][price]'], 'price_boplo_flight_school_yearly'); assert.equal(cs['subscription_data[trial_period_days]'], undefined);
   assert.equal(cs['tax_id_collection[enabled]'], 'true'); assert.match(cs.success_url, /school_checkout=done#school$/);
   const price = s.calls.find(c => c.path === 'prices' && c.method === 'POST').body; assert.equal(price.unit_amount, '99900'); assert.equal(price['recurring[interval]'], 'year');
   let row = db.prepare('SELECT * FROM flight_schools').get(); assert.equal(row.status, 'none'); assert.equal(row.customer_id, 'cus_school'); assert.equal(row.seats, 25);

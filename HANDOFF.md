@@ -278,3 +278,7 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - **App:** `#school` page (works before onboarding, standalone frame): join with code / set up school; student view with what's shared + leave; staff dashboard (stats, roster with "needs a nudge" flags at 21+ quiet days or not started, student detail sheet, invite codes and links, rename, billing portal). Join links `flight-app.html#join=CODE` survive sign-in via localStorage. Example: `/flight-app.html?preview=1#school`.
 - **Public page:** `dist/schools.html` (screenshot `assets/school-dashboard.webp` from the example dashboard). Linked from landing nav, footer and pricing; terms and privacy have School sections.
 - **Upgrades School → Plus** are manual for now (FAQ says email support).
+
+## No free trials (2026-10-24, Claude)
+
+- Free trials removed everywhere at the user's request: individual Advanced and school plans charge at checkout. `BILLING_TRIAL_DAYS` / `SCHOOL_TRIAL_DAYS` are no longer read. `publicBilling.trialAvailable` is always false, so the app shows "Upgrade for $…" and the Payment Element takes the payment straight away. Code for the `trialing` status stays for anyone who started a trial before. Landing, schools page, terms and refunds copy updated; the 14-day money-back guarantee is unchanged.

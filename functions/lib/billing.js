@@ -1,6 +1,7 @@
 // Boplo Flight billing: Stripe subscriptions through the REST API (no SDK needed on Cloudflare).
 // Secrets (Cloudflare env): STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_FLIGHT_WEBHOOK_SECRET (this endpoint's own signing secret).
-// Options (Cloudflare env, optional): STRIPE_TAX=on to calculate VAT/sales tax with Stripe Tax; BILLING_TRIAL_DAYS (default 7).
+// Options (Cloudflare env, optional): STRIPE_TAX=on to calculate VAT/sales tax with Stripe Tax.
+// There are no free trials (removed 2026-10-24); subscribers pay at checkout. The 'trialing' handling stays for anyone who started one before.
 
 export const PLANS = {
   monthly: { lookup: 'boplo_flight_advanced_monthly', amount: 1199, currency: 'usd', interval: 'month', label: 'Advanced monthly' },
@@ -113,8 +114,8 @@ export async function syncCustomer(env, customerId, fetcher = fetch) {
 export function publicBilling(env, row) {
   return {
     plan: effectivePlan(env, row), owner: !!row?.owner, school: row?.school || null, enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
-    cancelAtPeriodEnd: !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: !row?.trial_used,
-    trialDays: Number(env.BILLING_TRIAL_DAYS ?? 7), publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
+    cancelAtPeriodEnd: !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: false,
+    trialDays: 0, publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
     tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS
   };
 }
@@ -160,7 +161,7 @@ export async function subscribe(env, user, input, origin, fetcher = fetch) {
     await stripe(env, 'POST', `customers/${row.customer_id}`, { address: { country: a.country, postal_code: a.postal_code || undefined, line1: a.line1 || undefined, city: a.city || undefined, state: a.state || undefined }, expand: ['tax'] }, fetcher);
   }
   const promo = input?.promo ? await findPromo(env, input.promo, fetcher) : null;
-  const days = Number(env.BILLING_TRIAL_DAYS ?? 7), useTrial = days > 0 && !row.trial_used && promo?.metadata?.skip_trial !== 'true';
+  const days = 0, useTrial = false;
   const sub = await stripe(env, 'POST', 'subscriptions', {
     customer: row.customer_id, items: [{ price: price.id }], payment_behavior: 'default_incomplete',
     payment_settings: { save_default_payment_method: 'on_subscription' },

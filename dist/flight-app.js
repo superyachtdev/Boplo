@@ -2747,7 +2747,7 @@
     sheet.showModal();
   }
   /* ================= plan and billing ================= */
-  const B = () => state.billing || { plan: 'free', status: 'none', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false };
+  const B = () => state.billing || { plan: 'free', status: 'none', trialAvailable: false, trialDays: 0, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false };
   const isAdv = () => preview || B().plan === 'advanced';
   const money2 = (cents, cur = 'usd') => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur.toUpperCase() }).format(cents / 100); } catch { return '$' + (cents / 100).toFixed(2); } };
   const longDate = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -3152,7 +3152,7 @@
 
   /* ================= more (mobile) ================= */
   function morePage() {
-    const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced with a free trial', 'plan'], ['school', 'Flight school', SCH() ? SCH().name : 'Join your school with its code, or set up your school', 'school']];
+    const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced', 'plan'], ['school', 'Flight school', SCH() ? SCH().name : 'Join your school with its code, or set up your school', 'school']];
     shell('more', { title: 'Account', sub: state.user?.email ? `Signed in as ${esc(state.user.email)}` : '' }, `<div class="more-grid">${items.map(([id, t, d, ic]) => `<a class="tile more-item" href="#${id}">${ico(ic)}<span><b>${t}</b><small>${esc(d)}</small></span></a>`).join('')}</div>
       <div class="acct-links"><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact support</a><button type="button" class="link" data-logout>${preview ? 'Leave example desk' : 'Sign out'}</button></div>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
@@ -3321,7 +3321,7 @@
   /* ================= flight schools ================= */
   const SCH = () => state.school || null;
   const isStaffSch = () => ['admin', 'instructor'].includes(SCH()?.role);
-  ui.schoolMeta = { trialDays: 14, plans: { school: { label: 'School', amount: 99900, currency: 'usd', seats: 25, staff: 10 }, school_plus: { label: 'School Plus', amount: 199900, currency: 'usd', seats: 75, staff: 25 } } };
+  ui.schoolMeta = { trialDays: 0, plans: { school: { label: 'School', amount: 99900, currency: 'usd', seats: 25, staff: 10 }, school_plus: { label: 'School Plus', amount: 199900, currency: 'usd', seats: 75, staff: 25 } } };
   ui.schoolPlan = 'school'; ui.rosterFilter = 'all';
   function addSchoolNav() {
     if (!isStaffSch() || HUBS.some(h => h[0] === 'school')) return;
@@ -3605,7 +3605,7 @@
   if ('serviceWorker' in navigator && !preview && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
   async function start() {
     const jm = location.hash.match(/^#join=([A-Za-z0-9-]{4,20})$/); if (jm) { try { localStorage.setItem('boplo-join', jm[1]); } catch { } history.replaceState(null, '', location.pathname + location.search + '#school'); }
-    if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
+    if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: false, trialDays: 0, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
     try {
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
