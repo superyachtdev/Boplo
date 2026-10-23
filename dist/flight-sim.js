@@ -1210,7 +1210,10 @@ window.BoploSim = (() => {
           const sgn = Math.cos((fs.hdg - Math.atan2(r.f[0], r.f[1]) * R2D) * D2R) >= 0 ? 1 : -1, dir = [r.f[0] * sgn, r.f[1] * sgn];
           const off = -((fs.x - r.rw.A[0]) * r.l[0] + (fs.z - r.rw.A[1]) * r.l[1]), look = 30 + fs.gs * 1.5;
           const want = Math.atan2(dir[0] * look + r.l[0] * off, dir[1] * look + r.l[1] * off) * R2D, err = wrap180(want - fs.hdg);
-          fc.rudder = clamp(err * .09 - (fs.w?.[2] || 0) * 1.2, -1, 1);
+          // ask for a gentle yaw rate towards that heading, then work out the nosewheel angle that gives it
+          // (the steering gets weaker with speed, as in the flight model), so it settles instead of swinging
+          const tail = !!FM.p.tail, wr = clamp(err * D2R * 1.1, -.18, .18), vf = Math.max(2, fs.gs), maxS = (tail ? 18 : 28) * D2R * (1 - clamp(vf / 35, 0, .75));
+          fc.rudder = clamp(Math.atan(wr * (FM.p.wb || 1.7) / vf) / maxS, -1, 1);
         }
       }
       if (Math.abs(thrRange.value / 100 - thrTarget) > .02 && document.activeElement !== thrRange) thrRange.value = Math.round(thrTarget * 100);
