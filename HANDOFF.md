@@ -249,3 +249,8 @@ Built from market research: students quit over cost overruns, lost momentum and 
   - the final card catches pointer light
   - the rule sparks turn on hover
   - on phones, a CTA dock appears after the hero and hides at the final card and footer; the ATC radio button moves up above it
+- **Hero aircraft remodelled** (flight-home.js): a procedural PA-28-style low-wing trainer with smooth normals and per-vertex paint (white, a blue cheatline and fin tip, tinted glass, dark gear and tyres).
+  - Superellipse fuselage sections, an airfoil-lofted tapered wing with 7° dihedral, a stabilator, and a swept fin with dorsal fillet.
+  - Spinner, fixed tricycle gear with wheel fairings. The model sits 0.41·scale above the track so the wheels are on the runway.
+  - Shading: sun, sky hemisphere, gloss specular and fresnel rim.
+  - Extras: an additive spinning propeller disc, a soft ground shadow (cast away from the sun, fading with height), and a red fin-top beacon alongside the nav lights and strobe.

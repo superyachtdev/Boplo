@@ -320,79 +320,120 @@
     pVao.count = d.length / 4;
   }
 
-  /* the aircraft: a small low-wing trainer, flat-shaded, built from a few lofted parts */
+  /* the aircraft: a low-wing four-seat trainer (PA-28 proportions), smooth-shaded, painted white with a blue cheatline.
+     Built procedurally: superellipse fuselage sections, airfoil wing/tail lofts, wheel fairings, a spinner. */
   const PLANE_VS = `#version 300 es
-  in vec3 aPos; in vec3 aNor;
+  in vec3 aPos; in vec3 aNor; in vec4 aCol;
   uniform mat4 uVP; uniform mat4 uM;
-  out vec3 vW; out vec3 vN;
-  void main(){ vec4 w=uM*vec4(aPos,1.); vW=w.xyz; vN=mat3(uM)*aNor; gl_Position=uVP*w; }`;
+  out vec3 vW; out vec3 vN; out vec4 vC;
+  void main(){ vec4 w=uM*vec4(aPos,1.); vW=w.xyz; vN=mat3(uM)*aNor; vC=aCol; gl_Position=uVP*w; }`;
   const PLANE_FS = `#version 300 es
   precision highp float;
-  in vec3 vW; in vec3 vN;
+  in vec3 vW; in vec3 vN; in vec4 vC;
   uniform vec3 uCam; uniform float uVis;
   out vec4 o;
   void main(){
     vec3 n=normalize(vN), v=normalize(uCam-vW);
     if(dot(n,v)<0.) n=-n;
-    float diff=max(dot(n,normalize(vec3(-.35,.85,.4))),0.);
-    float rim=pow(1.-max(dot(n,v),0.),2.2);
-    vec3 col=mix(vec3(.10,.17,.36),vec3(.9,.95,1.),.18+.82*diff);
-    col+=vec3(.18,.5,1.)*rim*1.1;
+    vec3 L=normalize(vec3(-.35,.85,.4));
+    float diff=max(dot(n,L),0.), wrap=max(dot(n,L)*.5+.5,0.);
+    vec3 sky=mix(vec3(.05,.08,.18),vec3(.34,.46,.75),n.y*.5+.5);
+    float gloss=vC.a;
+    float spec=pow(max(dot(reflect(-L,n),v),0.),mix(18.,90.,gloss))*mix(.25,1.1,gloss);
+    float fres=pow(1.-max(dot(n,v),0.),3.);
+    vec3 col=vC.rgb*(sky*.75+vec3(1.,.97,.92)*(diff*1.05+wrap*.28));
+    col+=vec3(1.)*spec + vec3(.55,.75,1.)*fres*(.12+.55*gloss) + vec3(.18,.5,1.)*fres*.35;
     o=vec4(col*uVis,1.);
   }`;
   const aProg = program(PLANE_VS, PLANE_FS);
   const aU = uni(aProg, ['uVP', 'uM', 'uCam', 'uVis']);
   const aVao = gl.createVertexArray(); gl.bindVertexArray(aVao);
   {
+    // indexed meshes with smooth normals, flattened for drawArrays
     const out = [];
-    const tri = (a, b, c) => {
-      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-      let n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-      const l = Math.hypot(...n) || 1; n = n.map(x => x / l);
-      for (const p of [a, b, c]) out.push(...p, ...n);
-    };
-    const quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
-    // hexahedron from a bottom ring and a top ring of four points
-    const hexa = (b, t) => {
-      quad(b[0], b[1], b[2], b[3]); quad(t[3], t[2], t[1], t[0]);
-      for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; quad(b[i], b[j], t[j], t[i]); }
-    };
-    // fuselage sections: [z, centreY, width, height]; x right, y up, z forward
-    const S = [[1.05, .02, .12, .12], [.86, .03, .26, .26], [.45, .07, .34, .38], [.0, .08, .32, .36], [-.55, .07, .22, .24], [-1.25, .1, .1, .12], [-1.5, .12, .05, .08]];
-    const ring = ([z, y, w, h]) => [[-w / 2, y - h / 2, z], [w / 2, y - h / 2, z], [w / 2, y + h / 2, z], [-w / 2, y + h / 2, z]];
-    for (let i = 0; i < S.length - 1; i++) {
-      const A = ring(S[i]), B = ring(S[i + 1]);
-      for (let k = 0; k < 4; k++) { const j = (k + 1) % 4; quad(A[k], A[j], B[j], B[k]); }
+    const WHITE = [.9, .92, .96, .35], BLUE = [.04, .34, .95, .45], GLASS = [.05, .09, .2, 1], DARK = [.12, .14, .2, .3], TYRE = [.05, .05, .07, .1], TIP = [.9, .92, .96, .35];
+    function mesh(P, F, colorAt, flat) {
+      const N = P.map(() => [0, 0, 0]);
+      const fn = (a, b, c) => { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]; return [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]; };
+      for (const [a, b, c] of F) { const n = fn(P[a], P[b], P[c]); for (const k of [a, b, c]) for (let i = 0; i < 3; i++) N[k][i] += n[i]; }
+      for (const [a, b, c] of F) {
+        const nf = flat ? fn(P[a], P[b], P[c]) : null;
+        for (const k of [a, b, c]) { const n = nf || N[k], l = Math.hypot(...n) || 1; out.push(...P[k], n[0] / l, n[1] / l, n[2] / l, ...colorAt(P[k], k)); }
+      }
     }
-    { const A = ring(S[0]), B = ring(S[S.length - 1]); quad(A[0], A[1], A[2], A[3]); quad(B[3], B[2], B[1], B[0]); }
-    // canopy: a raised glasshouse over the cabin
-    hexa([[-.15, .25, .62], [.15, .25, .62], [.15, .25, -.1], [-.15, .25, -.1]], [[-.1, .3, .4], [.1, .3, .4], [.1, .32, .02], [-.1, .32, .02]]);
-    // low wing with dihedral, both halves
+    // loft: an array of rings (each an array of points, same count), optionally capped
+    function loft(rings, colorAt, capA = true, capB = true) {
+      const n = rings[0].length, P = [], F = [];
+      rings.forEach(r => P.push(...r));
+      for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < n; k++) { const j = (k + 1) % n, a = i * n + k, b = i * n + j, c = (i + 1) * n + j, d = (i + 1) * n + k; F.push([a, b, c], [a, c, d]); }
+      const cap = (ri, rev) => { const r = rings[ri], c = r.reduce((m, p) => [m[0] + p[0] / n, m[1] + p[1] / n, m[2] + p[2] / n], [0, 0, 0]); const ci = P.length; P.push(c); for (let k = 0; k < n; k++) { const j = (k + 1) % n; F.push(rev ? [ci, ri * n + j, ri * n + k] : [ci, ri * n + k, ri * n + j]); } };
+      if (capA) cap(0, true); if (capB) cap(rings.length - 1, false);
+      mesh(P, F, colorAt);
+    }
+    const se = (a, e) => Math.sign(a) * Math.pow(Math.abs(a), 2 / e);
+    // ---- fuselage: [z, centreY, halfWidth, top, bottom]; x right, y up, z forward
+    const FS = [[1.04, .03, .07, .07, .08], [.98, .03, .13, .13, .15], [.86, .04, .18, .17, .19], [.66, .05, .2, .19, .21], [.48, .06, .21, .21, .22], [.3, .07, .215, .26, .22],
+      [.05, .07, .21, .27, .21], [-.2, .07, .2, .25, .2], [-.45, .08, .17, .2, .17], [-.75, .09, .13, .15, .13], [-1.05, .1, .09, .11, .09], [-1.32, .12, .055, .08, .06], [-1.56, .13, .025, .05, .035]];
+    const SEG = 20, fusRings = FS.map(([z, cy, hw, top, bot]) => Array.from({ length: SEG }, (_, i) => { const a = i / SEG * Math.PI * 2, cx = Math.cos(a), sy = Math.sin(a); return [se(cx, 2.7) * hw, cy + se(sy, 2.4) * (sy > 0 ? top : bot), z]; }));
+    const cyAt = z => { for (let i = 0; i < FS.length - 1; i++) if (z <= FS[i][0] && z >= FS[i + 1][0]) { const t = (FS[i][0] - z) / (FS[i][0] - FS[i + 1][0]); return FS[i][1] + (FS[i + 1][1] - FS[i][1]) * t; } return .08; };
+    loft(fusRings, p => {
+      const cy = cyAt(p[2]), rel = p[1] - cy;
+      if (p[2] < .5 && p[2] > -.42 && rel > .07) return GLASS; // windscreen and cabin windows
+      if (p[2] < .62 && p[2] > .48 && rel > .1) return GLASS;
+      if (rel > -.035 && rel < .015 && p[2] < .9) return BLUE; // cheatline
+      return WHITE;
+    }, false, true);
+    // ---- spinner
+    { const rings = []; for (let i = 0; i <= 6; i++) { const t = i / 6, z = 1.04 + t * .16, r = .075 * Math.sqrt(Math.max(0, 1 - t * t)) + .002; rings.push(Array.from({ length: 14 }, (_, k) => { const a = k / 14 * Math.PI * 2; return [Math.cos(a) * r, .03 + Math.sin(a) * r, z]; })); } loft(rings, () => WHITE, true, false); }
+    // ---- airfoil (NACA 24xx-like, x 0..1 chord, upper then lower) and a lifting-surface loft
+    const AF = (() => { const pts = []; const yt = x => 5 * (1.008930 * .29690 * Math.sqrt(x) - .12600 * x - .35160 * x * x + .28430 * x ** 3 - .10150 * x ** 4) * .2; const yc = x => x < .4 ? .02 / .16 * (.8 * x - x * x) : .02 / .36 * (.2 + .8 * x - x * x);
+      const N = 10; for (let i = N; i >= 0; i--) { const x = (1 - Math.cos(i / N * Math.PI)) / 2; pts.push([x, yc(x) + yt(x)]); } for (let i = 1; i < N; i++) { const x = (1 - Math.cos(i / N * Math.PI)) / 2; pts.push([x, yc(x) - yt(x)]); } return pts; })();
+    // stations: [spanX, LEz, chord, y, thicknessScale] → rings in the plane perpendicular to span (x)
+    const surface = (st, colorAt, vertical = false) => loft(st.map(([sx, le, ch, y, th]) => AF.map(([u, v]) => vertical ? [v * ch * th * 4, sx, le - u * ch] : [sx, y + v * ch * th * 4, le - u * ch])), colorAt);
     for (const s of [-1, 1]) {
-      const r = .14, tip = 1.62;
-      hexa(
-        [[s * r, -.13, .5], [s * tip, -.04, .4], [s * tip, -.04, .1], [s * r, -.13, .02]],
-        [[s * r, -.08, .48], [s * tip, -.015, .39], [s * tip, -.015, .11], [s * r, -.08, .04]]
-      );
+      // wing: constant-chord inboard, tapered outboard, 7° dihedral, slight washout via thinner tip
+      const dh = Math.tan(7 * Math.PI / 180), st = [[.14, .44, .62, -.1, .14], [.8, .44, .62, -.1, .13], [1.58, .37, .42, -.1, .11], [1.74, .33, .3, -.1, .09]].map(([x, le, ch, y, th]) => [s * x, le, ch, y + (x - .14) * dh, th]);
+      surface(s < 0 ? st : st.slice().reverse(), p => Math.abs(p[0]) > 1.6 ? TIP : WHITE);
+      // stabilator
+      surface((s < 0 ? [[.03, -1.22, .3, .14, .09], [.62, -1.3, .2, .16, .08]] : [[.62, -1.3, .2, .16, .08], [.03, -1.22, .3, .14, .09]]).map(([x, le, ch, y, th]) => [s * x, le, ch, y, th]), () => WHITE);
+      // main gear: strut + wheel fairing under each wing
+      const gx = s * .62, gy = -.1 + (.62 - .14) * dh;
+      loft([0, 1].map(t => Array.from({ length: 6 }, (_, k) => { const a = k / 6 * Math.PI * 2; return [gx + Math.cos(a) * .018, gy - .02 - t * .17, .2 + Math.sin(a) * .03]; })), () => DARK);
+      { const rings = []; for (let i = 0; i <= 8; i++) { const t = i / 8, z = .32 - t * .34, r = Math.sin(Math.PI * Math.min(1, (t * .92 + .04))) ; rings.push(Array.from({ length: 12 }, (_, k) => { const a = k / 12 * Math.PI * 2; return [gx + Math.cos(a) * .045 * r, gy - .23 + Math.sin(a) * .07 * r, z]; })); } loft(rings, p => p[1] < gy - .28 ? TYRE : WHITE); }
     }
-    // tailplane
-    for (const s of [-1, 1]) hexa(
-      [[s * .04, .09, -1.18], [s * .6, .11, -1.3], [s * .6, .11, -1.46], [s * .04, .09, -1.5]],
-      [[s * .04, .12, -1.18], [s * .6, .13, -1.3], [s * .6, .13, -1.46], [s * .04, .12, -1.5]]
-    );
-    // fin, swept
-    hexa([[-.02, .14, -1.0], [.02, .14, -1.0], [.02, .14, -1.52], [-.02, .14, -1.52]], [[-.015, .62, -1.42], [.015, .62, -1.42], [.015, .62, -1.6], [-.015, .62, -1.6]]);
-    // spinner + two blades
-    tri([0, .02, 1.22], [-.06, -.04, 1.05], [.06, -.04, 1.05]); tri([0, .02, 1.22], [.06, -.04, 1.05], [.06, .08, 1.05]);
-    tri([0, .02, 1.22], [.06, .08, 1.05], [-.06, .08, 1.05]); tri([0, .02, 1.22], [-.06, .08, 1.05], [-.06, -.04, 1.05]);
-    hexa([[-.02, -.36, 1.07], [.02, -.36, 1.07], [.02, .4, 1.07], [-.02, .4, 1.07]], [[-.02, -.36, 1.1], [.02, -.36, 1.1], [.02, .4, 1.1], [-.02, .4, 1.1]]);
+    // fin with dorsal fillet (vertical surface: "span" along y)
+    surface([[.16, -.98, .62, 0, .09], [.3, -1.18, .46, 0, .09], [.62, -1.4, .24, 0, .085], [.68, -1.43, .2, 0, .08]], p => p[1] > .58 ? BLUE : WHITE, true);
+    // nose gear: strut + wheel fairing
+    loft([0, 1].map(t => Array.from({ length: 6 }, (_, k) => { const a = k / 6 * Math.PI * 2; return [Math.cos(a) * .016, -.12 - t * .17, .86 + Math.sin(a) * .016]; })), () => DARK);
+    { const rings = []; for (let i = 0; i <= 8; i++) { const t = i / 8, z = .98 - t * .26, r = Math.sin(Math.PI * Math.min(1, (t * .92 + .04))); rings.push(Array.from({ length: 12 }, (_, k) => { const a = k / 12 * Math.PI * 2; return [Math.cos(a) * .04 * r, -.33 + Math.sin(a) * .06 * r, z]; })); } loft(rings, p => p[1] < -.37 ? TYRE : WHITE); }
     const d = new Float32Array(out);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
-    const l1 = gl.getAttribLocation(aProg, 'aPos'), l2 = gl.getAttribLocation(aProg, 'aNor');
-    gl.enableVertexAttribArray(l1); gl.vertexAttribPointer(l1, 3, gl.FLOAT, false, 24, 0);
-    gl.enableVertexAttribArray(l2); gl.vertexAttribPointer(l2, 3, gl.FLOAT, false, 24, 12);
-    aVao.count = d.length / 6;
+    const l1 = gl.getAttribLocation(aProg, 'aPos'), l2 = gl.getAttribLocation(aProg, 'aNor'), l3 = gl.getAttribLocation(aProg, 'aCol');
+    gl.enableVertexAttribArray(l1); gl.vertexAttribPointer(l1, 3, gl.FLOAT, false, 40, 0);
+    gl.enableVertexAttribArray(l2); gl.vertexAttribPointer(l2, 3, gl.FLOAT, false, 40, 12);
+    gl.enableVertexAttribArray(l3); gl.vertexAttribPointer(l3, 4, gl.FLOAT, false, 40, 24);
+    aVao.count = d.length / 10;
   }
+  // propeller disc and the soft ground shadow: one textured-quad shader, drawn blended
+  const QUAD_VS = `#version 300 es
+  in vec2 aUV; uniform mat4 uVP; uniform vec3 uO; uniform vec3 uA; uniform vec3 uB;
+  out vec2 vUV;
+  void main(){ vUV=aUV; vec3 p=uO+uA*aUV.x+uB*aUV.y; gl_Position=uVP*vec4(p,1.); }`;
+  const QUAD_FS = `#version 300 es
+  precision highp float; in vec2 vUV; uniform float uKind; uniform float uAlp; uniform float uT; out vec4 o;
+  void main(){
+    float r=length(vUV);
+    if(uKind<.5){ // propeller: a faint disc with two blurred blade arcs sweeping round, darker tips
+      float ang=atan(vUV.y,vUV.x)+uT; float blade=pow(abs(cos(ang)),18.);
+      float a=smoothstep(1.,.92,r)*smoothstep(.12,.2,r)*(.07+.22*blade)*(1.-.4*smoothstep(.75,1.,r));
+      o=vec4(vec3(.8,.88,1.)*a*uAlp,a*uAlp);
+    } else { // shadow: a soft dark ellipse
+      float a=smoothstep(1.,.15,r)*uAlp; o=vec4(0.,0.,.01,a);
+    }
+  }`;
+  const qProg = program(QUAD_VS, QUAD_FS), qU = uni(qProg, ['uVP', 'uO', 'uA', 'uB', 'uKind', 'uT', 'uAlp']);
+  const qVao = gl.createVertexArray(); gl.bindVertexArray(qVao);
+  { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const l = gl.getAttribLocation(qProg, 'aUV'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0); }
   // nav lights: red port tip, green starboard tip, white strobe on the tail
   const NAV_VS = `#version 300 es
   in vec3 aPos; uniform mat4 uVP; uniform float uSize;
@@ -403,7 +444,7 @@
   const nProg = program(NAV_VS, NAV_FS);
   const nU = uni(nProg, ['uVP', 'uSize', 'uColor', 'uA']);
   const nVao = gl.createVertexArray(); gl.bindVertexArray(nVao);
-  const nBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, nBuf); gl.bufferData(gl.ARRAY_BUFFER, 9 * 4, gl.DYNAMIC_DRAW);
+  const nBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, nBuf); gl.bufferData(gl.ARRAY_BUFFER, 12 * 4, gl.DYNAMIC_DRAW);
   { const l = gl.getAttribLocation(nProg, 'aPos'); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 3, gl.FLOAT, false, 0, 0); }
   let roll = 0;
 
@@ -544,7 +585,7 @@
     const cr = Math.cos(roll), sr = Math.sin(roll);
     const r2 = [0, 1, 2].map(i => right[i] * cr + up[i] * sr), u2 = [0, 1, 2].map(i => up[i] * cr - right[i] * sr);
     const sc = lerp(mobile ? 2.3 : 1.7, mobile ? .75 : .62, chaseW);
-    const lift = .14 * sc;
+    const lift = .41 * sc; // wheels on the runway during the roll
     const pos = [ac.x + u2[0] * lift, ac.y + u2[1] * lift, ac.z + u2[2] * lift];
     const M = new Float32Array([r2[0] * sc, r2[1] * sc, r2[2] * sc, 0, u2[0] * sc, u2[1] * sc, u2[2] * sc, 0, fwd[0] * sc, fwd[1] * sc, fwd[2] * sc, 0, pos[0], pos[1], pos[2], 1]);
     const toW = p => [0, 1, 2].map(i => pos[i] + (r2[i] * p[0] + u2[i] * p[1] + fwd[i] * p[2]) * sc);
@@ -554,6 +595,23 @@
       gl.uniformMatrix4fv(aU.uVP, false, VP); gl.uniformMatrix4fv(aU.uM, false, M);
       gl.uniform3fv(aU.uCam, camE); gl.uniform1f(aU.uVis, planeVis);
       gl.drawArrays(gl.TRIANGLES, 0, aVao.count);
+    }
+    if (planeVis > 0) {
+      gl.enable(gl.BLEND); gl.depthMask(false);
+      gl.useProgram(qProg); gl.bindVertexArray(qVao); gl.uniformMatrix4fv(qU.uVP, false, VP);
+      // soft shadow on the ground, cast away from the sun, fading as the aircraft climbs
+      const agl = Math.max(0, ac.y - ac.g), sa = .5 * planeVis * clamp(1 - agl / (4.5 * sc));
+      if (sa > .01) {
+        const hf = norm([fwd[0], 0, fwd[2]]), hr = norm([r2[0], 0, r2[2]]);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.uniform3f(qU.uO, ac.x + .41 * agl, ac.g + .03, ac.z - .47 * agl); gl.uniform3fv(qU.uA, hr.map(v => v * 1.85 * sc)); gl.uniform3fv(qU.uB, hf.map(v => v * 1.45 * sc));
+        gl.uniform1f(qU.uKind, 1); gl.uniform1f(qU.uAlp, sa); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      }
+      // spinning propeller disc
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.uniform3fv(qU.uO, toW([0, .03, 1.13])); gl.uniform3fv(qU.uA, r2.map(v => v * .43 * sc)); gl.uniform3fv(qU.uB, u2.map(v => v * .43 * sc));
+      gl.uniform1f(qU.uKind, 0); gl.uniform1f(qU.uT, time * 37); gl.uniform1f(qU.uAlp, planeVis); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.depthMask(true); gl.disable(gl.BLEND);
     }
 
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.depthMask(false);
@@ -581,12 +639,15 @@
     if (planeVis > 0) {
       gl.useProgram(nProg); gl.bindVertexArray(nVao); gl.uniformMatrix4fv(nU.uVP, false, VP);
       gl.bindBuffer(gl.ARRAY_BUFFER, nBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array([...toW([-1.64, -.03, .26]), ...toW([1.64, -.03, .26]), ...toW([0, .64, -1.58])]));
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array([...toW([-1.77, .1, .2]), ...toW([1.77, .1, .2]), ...toW([0, .69, -1.62]), ...toW([0, .71, -1.38])]));
       gl.uniform1f(nU.uSize, 26 * DPR * sc);
       gl.uniform3f(nU.uColor, 1, .25, .3); gl.uniform1f(nU.uA, planeVis); gl.drawArrays(gl.POINTS, 0, 1);
       gl.uniform3f(nU.uColor, .3, 1, .55); gl.drawArrays(gl.POINTS, 1, 1);
       const strobe = (time % 1.4) < .08 ? 1 : 0;
       gl.uniform3f(nU.uColor, 1, 1, 1); gl.uniform1f(nU.uA, planeVis * strobe); gl.uniform1f(nU.uSize, 60 * DPR * sc); gl.drawArrays(gl.POINTS, 2, 1);
+      // anti-collision beacon on top of the fin, a slower red pulse
+      const bp = time % 1.1, beacon = bp < .12 ? 1 - bp / .12 * .3 : bp < .3 ? Math.max(0, 1 - (bp - .12) / .18) * .5 : 0;
+      gl.uniform3f(nU.uColor, 1, .18, .12); gl.uniform1f(nU.uA, planeVis * beacon); gl.uniform1f(nU.uSize, 34 * DPR * sc); gl.drawArrays(gl.POINTS, 3, 1);
     }
 
     // ---- overlay projection
