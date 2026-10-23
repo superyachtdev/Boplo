@@ -21,17 +21,17 @@ export async function osmRunways(env, code, lat, lng, fetcher = fetch) {
   const key = 'osmrw:' + code, row = await env.DB.prepare('SELECT v FROM flight_kv WHERE k=?').bind(key).first();
   if (row) { try { const c = JSON.parse(row.v); if (Date.now() - c.t < (c.runways.length ? 30 : 2) * DAY) return { runways: c.runways, cached: true }; } catch { } }
   const q = `[out:json][timeout:12];way["aeroway"="runway"](around:4000,${lat.toFixed(5)},${lng.toFixed(5)});out geom tags;`;
-  let runways = null;
+  let runways = null; const errs = [];
   for (const url of MIRRORS) {
     try {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 9000);
       const r = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BoploFlight/1.0 (boplo.app)' }, body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
       clearTimeout(timer);
-      if (!r.ok) continue;
+      if (!r.ok) { errs.push(r.status); continue; }
       runways = shapeOSM((await r.json()).elements); break;
-    } catch { }
+    } catch (e) { errs.push(String(e?.name || e).slice(0, 40)); }
   }
-  if (!runways) { if (row) { try { return { runways: JSON.parse(row.v).runways, cached: true, stale: true }; } catch { } } return { runways: [], unavailable: true }; }
+  if (!runways) { if (row) { try { return { runways: JSON.parse(row.v).runways, cached: true, stale: true }; } catch { } } return { runways: [], unavailable: true, errs }; }
   await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(key, JSON.stringify({ t: Date.now(), runways })).run();
   return { runways };
 }

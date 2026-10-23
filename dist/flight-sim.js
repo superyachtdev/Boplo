@@ -537,10 +537,14 @@ window.BoploSim = (() => {
     const osmFor = ap => {
       const k = 'boplo-osmrw:' + ap.code;
       try { const c = JSON.parse(localStorage.getItem(k) || 'null'); if (c && Date.now() - c.t < 7 * 864e5) return Promise.resolve(c.r); } catch { }
+      // straight from Overpass when the server can't reach it (same query, same shape)
+      const direct = () => fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(`[out:json][timeout:10];way["aeroway"="runway"](around:4000,${ap.lat.toFixed(5)},${ap.lng.toFixed(5)});out geom tags;`) })
+        .then(r => r.ok ? r.json() : { elements: [] }).then(j => (j.elements || []).filter(e => e.type === 'way' && e.geometry?.length >= 2).map(e => { const g = e.geometry.map(p => [p.lat, p.lon]), t = e.tags || {}; let w = parseFloat(t.width); if (/ft|'/.test(String(t.width))) w *= .3048; return { ref: t.ref || '', width: w > 5 && w < 120 ? w : null, surface: t.surface || '', area: (g.length > 3 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1]) || t.area === 'yes', pts: g }; }));
+      const save = r => { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), r })); } catch { } return r; };
       return Promise.race([
-        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : { runways: [] })
-          .then(j => { const r = j.runways || []; if (!j.unavailable) try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), r })); } catch { } return r; }).catch(() => []),
-        new Promise(res => setTimeout(() => res([]), 6000))]);
+        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : { unavailable: true })
+          .then(j => j.unavailable ? direct().then(save) : save(j.runways || [])).catch(() => direct().then(save)).catch(() => []),
+        new Promise(res => setTimeout(() => res([]), 7000))]);
     };
     const normId = id => String(id || '').toUpperCase().trim().replace(/^0+(?=\d)/, '');
     // the centreline of an OSM runway: a line way end to end, or the long axis of a runway drawn as an area
