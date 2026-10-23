@@ -783,7 +783,18 @@ window.BoploSim = (() => {
 
     // ground height under a point: rendered 3D tiles, or the terrain globe
     const gcache = new Map();
-    const rawGround = (x, z) => { try { const c = carto(x, z); const h = tileset ? scene.sampleHeight(c, exclude, .6) : scene.terrainProvider.sampleAt(C.Math.toDegrees(c.longitude), C.Math.toDegrees(c.latitude)); return Number.isFinite(h) ? h : null; } catch { return null; } };
+    // With photo tiles, the ground right under the aircraft is often off-screen and drops to a coarse tile that can be
+    // 50-100 m wrong, which used to make the aircraft "touch down" in mid-air. So the physics ground away from runways
+    // is the elevation model (AWS terrain, MSL) lifted by the local geoid; a tile height is used only when it agrees.
+    const dem = tileset ? terrariumTerrain(C) : null;
+    let geoN = 0, geoKnown = !tileset; // local geoid (ellipsoid − MSL); set from a runway or the start point below
+    const rawGround = (x, z) => { try {
+      const c = carto(x, z), lng = C.Math.toDegrees(c.longitude), lat = C.Math.toDegrees(c.latitude);
+      if (!tileset) { const h = scene.terrainProvider.sampleAt(lng, lat); return Number.isFinite(h) ? h : null; }
+      const t = scene.sampleHeight(c, exclude, .6), d = dem.sampleAt(lng, lat);
+      if (d != null && geoKnown) { const g = d + geoN; return Number.isFinite(t) && t > g - 8 && t < g + 15 ? t : g; }
+      return Number.isFinite(t) ? t : null;
+    } catch { return null; } };
     const elevAt = (x, z, fresh) => { const k = Math.round(x / 20) + ',' + Math.round(z / 20), now = performance.now(), c = gcache.get(k); if (c && !fresh && now - c.t < 1500 && c.e != null) return c.e; const e = rawGround(x, z); gcache.set(k, { e, t: now }); if (gcache.size > 600) gcache.delete(gcache.keys().next().value); return e ?? c?.e ?? null; };
     // wait for the scenery at the start, then read the ground height there (most detailed)
     const mostDetailed = async pts => {
@@ -809,8 +820,7 @@ window.BoploSim = (() => {
     }
     if (!alive) return { close: destroy };
     // Google tiles use heights above the ellipsoid; the airfield's published elevation tells us the local geoid offset
-    let geoN = 0;
-    if (tileset && h0 != null && O.fromElevFt != null) { const n = h0 - O.fromElevFt * FT; if (Math.abs(n) < 110) geoN = n; }
+    if (tileset && h0 != null && O.fromElevFt != null) { const n = h0 - O.fromElevFt * FT; if (Math.abs(n) < 110) { geoN = n; geoKnown = true; } }
     let g0 = h0 ?? ((O.fromElevFt || 0) * FT + geoN);
     let g1 = sameEnd ? g0 : (h1 ?? (O.toElevFt != null ? O.toElevFt * FT + geoN : g0));
     // if the detailed start height wasn't ready in time, fix the datum from the first real ground reading at the start
@@ -896,7 +906,15 @@ window.BoploSim = (() => {
     // Google tiles are heights above the ellipsoid: the gap to the published field elevation is the local geoid, which
     // the altimeter has to take off. Measure it on a runway (not under the aircraft, which may be miles out on final).
     const geoFrom = (E, ft) => { if (!tileset || !E || ft == null) return null; const r = rwSt.find(q => q.rw === E.rw); if (!r || r.pending) return null; const h = rwHeight(...add(E.T, E.dir, Math.min(150, E.rw.len / 4))); if (h == null) return null; const n = h - .35 - ft * FT; return Math.abs(n) < 110 ? n : null; };
-    { const n = geoFrom(depE, O.fromElevFt) ?? geoFrom(arrE, O.toElevFt); if (n != null) { geoN = n; datumFixed = true; } }
+    { const n = geoFrom(depE, O.fromElevFt) ?? geoFrom(arrE, O.toElevFt); if (n != null) { geoN = n; geoKnown = true; datumFixed = true; } }
+    // no runway to measure on: compare the detailed tile height at the start with the elevation model there
+    if (tileset && !geoKnown && h0 != null) {
+      const [lng, lat] = F.ll(P[0][0], P[0][1]); let d = null;
+      for (let i = 0; i < 25 && alive && (d = dem.sampleAt(lng, lat)) == null; i++) await new Promise(r => setTimeout(r, 200));
+      if (d != null && Math.abs(h0 - d) < 110) { geoN = h0 - d; geoKnown = true; }
+    }
+    // warm the elevation model along the first few kilometres of the route
+    if (dem) for (let s0 = 0; s0 < Math.min(L, 6000); s0 += 250) { const [x, z] = path.at(s0); const [lng, lat] = F.ll(x, z); dem.sampleAt(lng, lat); }
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
