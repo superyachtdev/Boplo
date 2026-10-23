@@ -190,3 +190,10 @@ Built from market research: students quit over cost overruns, lost momentum and 
   - the daily nudges (sent even if email reminders are off)
 
   Expired subscriptions (404/410) are deleted. iOS only allows push from the installed Home Screen app.
+
+## Pushing yearly plans
+- Landing page and Plan & billing put **Yearly first** and select it by default. Yearly is shown as **$8.33 a month, billed $99.99 yearly**, with the $43.89 saving spelled out. Monthly shows "That's $143.88 a year" and a one-tap link to switch to yearly.
+- The upgrade sheet's hint now reads "7 days free, then $8.33 a month, billed yearly".
+- Active **monthly** subscribers get a "Switch to yearly and save $43.89" tile on Plan & billing. It confirms in a sheet, then calls `POST /flight/billing/switch` (`switchInterval` in functions/lib/billing.js):
+  - During a trial it swaps the price with no charge, and the trial carries on.
+  - Otherwise Stripe charges the year now, minus a credit for the unused part of the month (`proration_behavior: always_invoice`). If the card is declined, the switch is refused and nothing changes (`payment_behavior: error_if_incomplete`).

@@ -2769,7 +2769,7 @@
     const b = B();
     sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Part of Advanced</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
       <div class="sheet-body"><p>${esc(message)}</p><ul class="check-list">${ADV_FEATURES.slice(0, 5).map(([t]) => `<li>${esc(t)}</li>`).join('')}</ul></div>
-      <footer class="sheet-foot"><span class="hint">${b.trialAvailable ? `${b.trialDays} days free, then ${money2(b.prices.yearly.amount)} a year or ${money2(b.prices.monthly.amount)} a month.` : ''}</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Not now</button><a class="btn btn-blue btn-has-spark" href="#plan">${b.trialAvailable ? 'Start free trial' : 'Upgrade'} ${spark}</a></div></footer>`;
+      <footer class="sheet-foot"><span class="hint">${b.trialAvailable ? `${b.trialDays} days free, then ${money2(Math.round(b.prices.yearly.amount / 12))} a month, billed yearly.` : ''}</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Not now</button><a class="btn btn-blue btn-has-spark" href="#plan">${b.trialAvailable ? 'Start free trial' : 'Upgrade'} ${spark}</a></div></footer>`;
     sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
     sheet.querySelector('a[href="#plan"]').onclick = () => sheet.close();
     sheet.showModal();
@@ -2779,7 +2779,7 @@
   function planPage() {
     const b = B(), adv = b.plan === 'advanced' && !preview && b.enforced !== false;
     const iv = ui.billInterval, pr = b.prices[iv], other = b.prices[iv === 'yearly' ? 'monthly' : 'yearly'];
-    const save = Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100);
+    const save = Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100), saveAmt = money2(b.prices.monthly.amount * 12 - b.prices.yearly.amount, b.prices.yearly.currency);
     const statusLine = !adv ? '' : b.status === 'trialing' ? `Free trial until ${longDate(b.trialEnd)}. ${b.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money2(b.prices[b.interval || 'yearly'].amount)} ${b.interval === 'monthly' ? 'a month' : 'a year'}.`}`
       : b.cancelAtPeriodEnd ? `Cancelled. You keep Advanced until ${longDate(b.periodEnd)}.` : b.status === 'past_due' ? 'Your last payment didn’t go through. Update your card to keep Advanced.' : `Renews on ${longDate(b.periodEnd)}.`;
     shell('plan', { title: 'Plan & billing', sub: adv ? 'Your subscription and payment details.' : 'Start free. Go Advanced when the hours add up.' },
@@ -2793,10 +2793,11 @@
             <button class="btn btn-light" data-portal>Payment method and invoices</button>
             ${b.cancelAtPeriodEnd ? '<button class="btn btn-ghost" data-resume>Keep my subscription</button>' : '<button class="btn btn-ghost" data-cancel>Cancel subscription</button>'}
           </div>
-        </section>` : `
+        </section>
+        ${b.interval === 'monthly' && !b.cancelAtPeriodEnd && b.status !== 'past_due' ? `<section class="tile plan-upsell"><div><h3>Switch to yearly and save ${saveAmt}</h3><p>${money2(Math.round(b.prices.yearly.amount / 12))} a month instead of ${money2(b.prices.monthly.amount)}, billed ${money2(b.prices.yearly.amount)} once a year.${b.status === 'trialing' ? ' Your free trial carries on.' : ' What’s left of this month is credited.'}</p></div><button class="btn btn-blue" data-toyearly>Switch to yearly</button></section>` : ''}` : `
         <div class="bill-toggle" role="group" aria-label="Billing period">
-          <button type="button" data-iv="monthly" aria-pressed="${iv === 'monthly'}">Monthly</button>
           <button type="button" data-iv="yearly" aria-pressed="${iv === 'yearly'}">Yearly <span>Save ${save}%</span></button>
+          <button type="button" data-iv="monthly" aria-pressed="${iv === 'monthly'}">Monthly</button>
         </div>
         <div class="grid plan-grid">
           <section class="tile span-5 plan-card">
@@ -2806,7 +2807,8 @@
           </section>
           <section class="tile dark span-7 plan-card adv">${contours('b')}
             <h2>Advanced</h2>
-            <p class="plan-price"><b>${money2(pr.amount, pr.currency)}</b><span>${iv === 'yearly' ? `a year · ${money2(Math.round(pr.amount / 12), pr.currency)} a month` : 'a month'}</span></p>
+            <p class="plan-price"><b>${money2(iv === 'yearly' ? Math.round(pr.amount / 12) : pr.amount, pr.currency)}</b><span>${iv === 'yearly' ? `a month, billed ${money2(pr.amount, pr.currency)} yearly` : 'a month'}</span></p>
+            <p class="plan-save">${iv === 'yearly' ? `You save ${saveAmt} a year compared with monthly. One payment covers a full year of training.` : `That’s ${money2(pr.amount * 12, pr.currency)} a year. <button type="button" class="link" data-iv="yearly">Switch to yearly and save ${saveAmt}</button>`}</p>
             <ul class="feat-list">${ADV_FEATURES.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
             <button class="btn btn-light btn-has-spark" data-checkout ${preview || !b.ready ? 'disabled' : ''}>${b.trialAvailable ? `Start ${b.trialDays}-day free trial` : `Upgrade for ${money2(pr.amount, pr.currency)}`} ${spark}</button>
             <p class="plan-small">${b.trialAvailable ? `Free for ${b.trialDays} days, then ${money2(pr.amount, pr.currency)} ${iv === 'yearly' ? 'a year' : 'a month'}${b.tax ? ' plus any tax' : ''}. Cancel before the trial ends and you won’t be charged.` : `Billed ${iv === 'yearly' ? 'yearly' : 'monthly'}${b.tax ? ', plus any tax' : ''}. Cancel any time.`} <a class="link" href="/refunds.html" target="_blank" style="color:var(--ice)">Refunds</a></p>
@@ -2817,7 +2819,17 @@
     const co = $('[data-checkout]'); if (co) co.onclick = () => checkoutSheet(ui.billInterval);
     const pt = $('[data-portal]'); if (pt) pt.onclick = async () => { pt.disabled = true; try { location.href = (await api('billing/portal', 'POST', {})).url; } catch (x) { toast(x.message); pt.disabled = false; } };
     const cn = $('[data-cancel]'); if (cn) cn.onclick = () => confirmCancel();
+    const ty = $('[data-toyearly]'); if (ty) ty.onclick = () => confirmYearly(saveAmt);
     const rs = $('[data-resume]'); if (rs) rs.onclick = async () => { rs.disabled = true; try { state.billing = await api('billing/resume', 'POST', {}); toast('Your subscription will continue.'); planPage(); } catch (x) { toast(x.message); rs.disabled = false; } };
+  }
+  function confirmYearly(saveAmt) {
+    const b = B(), yr = money2(b.prices.yearly.amount, b.prices.yearly.currency);
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Switch to yearly?</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body"><p>${b.status === 'trialing' ? `Your free trial carries on until ${longDate(b.trialEnd)}. After that you’re billed ${yr} a year instead of ${money2(b.prices.monthly.amount)} a month.` : `You’re charged ${yr} today, minus a credit for the unused part of this month. After that it renews once a year.`} That saves you ${saveAmt} a year.</p><p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Not now</button><button type="button" class="btn btn-blue" data-yes>Switch to yearly</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.querySelector('[data-yes]').onclick = async e => { e.target.disabled = true; try { state.billing = await api('billing/switch', 'POST', { interval: 'yearly' }); sheet.close(); toast('You’re on yearly now.'); planPage(); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; e.target.disabled = false; } };
+    sheet.showModal();
   }
   function confirmCancel() {
     const b = B();

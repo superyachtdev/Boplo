@@ -184,6 +184,23 @@ export async function setCancel(env, user, cancel, fetcher = fetch) {
   await stripe(env, 'POST', `subscriptions/${row.subscription_id}`, { cancel_at_period_end: !!cancel }, fetcher);
   return syncCustomer(env, row.customer_id, fetcher);
 }
+// monthly → yearly: swap the price on the same subscription. During a trial nothing is charged and the trial carries on;
+// otherwise Stripe charges the year now minus a credit for the unused month, and stops if the card is declined.
+export async function switchInterval(env, user, input, fetcher = fetch) {
+  const row = await billingRow(env, user.id), key = input?.interval === 'monthly' ? 'monthly' : 'yearly';
+  if (!row?.subscription_id || planOf(row) !== 'advanced') throw Object.assign(new Error('There’s no active subscription.'), { status: 400 });
+  if (row.price_key === key) return syncCustomer(env, row.customer_id, fetcher);
+  if (row.status === 'past_due') throw Object.assign(new Error('Update your card first, then switch.'), { status: 400 });
+  const sub = await stripe(env, 'GET', `subscriptions/${row.subscription_id}`, null, fetcher), item = sub.items?.data?.[0];
+  if (!item) throw Object.assign(new Error('That subscription couldn’t be found.'), { status: 400 });
+  const price = await ensurePrice(env, key, fetcher), trialing = sub.status === 'trialing';
+  await stripe(env, 'POST', `subscriptions/${row.subscription_id}`, {
+    items: [{ id: item.id, price: price.id }],
+    proration_behavior: trialing ? 'none' : 'always_invoice',
+    ...(trialing ? {} : { payment_behavior: 'error_if_incomplete' })
+  }, fetcher);
+  return syncCustomer(env, row.customer_id, fetcher);
+}
 export async function portal(env, user, origin, fetcher = fetch) {
   const row = await billingRow(env, user.id);
   if (!row?.customer_id) throw Object.assign(new Error('There’s no billing account yet.'), { status: 400 });

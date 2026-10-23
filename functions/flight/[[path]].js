@@ -2,7 +2,7 @@ import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
 import { pushRoutes } from '../lib/push.js';
-import { health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
+import {switchInterval, health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
 const text = (value,max=200) => String(value ?? '').trim().slice(0,max);
@@ -115,6 +115,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,withOwner(env,user,r)));}
  if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,true))));
  if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,false))));
+ if(path==='billing/switch'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await switchInterval(env,user,await body()))));
  if(path==='billing/portal'&&request.method==='POST')return json(await portal(env,user,url.origin));
  // ---------- your data ----------
  if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}
