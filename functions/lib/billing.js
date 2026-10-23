@@ -10,7 +10,7 @@ export const FREE_LIMITS = { flights: 15, navPlans: 1, shortFinals: 2 };
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const STRIPE_VERSION = '2024-06-20'; // pinned so response shapes stay stable
 
-export const planOf = row => (row && (row.owner || ACTIVE.has(row.status)) ? 'advanced' : 'free');
+export const planOf = row => (row && (row.owner || row.school || ACTIVE.has(row.status)) ? 'advanced' : 'free');
 // OWNER_EMAILS (Cloudflare env, comma-separated): these accounts always have Advanced, free, with no Stripe subscription
 export const isOwner = (env, user) => !!user?.email && String(env.OWNER_EMAILS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean).includes(String(user.email).trim().toLowerCase());
 export const withOwner = (env, user, row) => (isOwner(env, user) ? { ...(row || {}), owner: true } : row);
@@ -112,7 +112,7 @@ export async function syncCustomer(env, customerId, fetcher = fetch) {
 
 export function publicBilling(env, row) {
   return {
-    plan: effectivePlan(env, row), owner: !!row?.owner, enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
+    plan: effectivePlan(env, row), owner: !!row?.owner, school: row?.school || null, enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
     cancelAtPeriodEnd: !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: !row?.trial_used,
     trialDays: Number(env.BILLING_TRIAL_DAYS ?? 7), publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
     tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS
@@ -223,12 +223,12 @@ export async function verifySignature(payload, header, secret, now = Date.now(),
   const hex = [...mac].map(b => b.toString(16).padStart(2, '0')).join('');
   return sigs.some(s => s.length === hex.length && [...s].reduce((d, c, i) => d | (c.charCodeAt(0) ^ hex.charCodeAt(i)), 0) === 0);
 }
-export async function webhook(env, request, fetcher = fetch) {
+export async function webhook(env, request, fetcher = fetch, onOther = null) {
   const payload = await request.text();
   if (!(await verifySignature(payload, request.headers.get('Stripe-Signature'), env.STRIPE_FLIGHT_WEBHOOK_SECRET))) return new Response('Bad signature', { status: 400 });
   let event; try { event = JSON.parse(payload); } catch { return new Response('Bad payload', { status: 400 }); }
   const obj = event?.data?.object || {};
   const customer = typeof obj.customer === 'string' ? obj.customer : obj.customer?.id;
-  if (customer && /^(customer\.subscription\.|invoice\.|checkout\.session\.|setup_intent\.|payment_intent\.)/.test(event.type || '')) await syncCustomer(env, customer, fetcher);
+  if (customer && /^(customer\.subscription\.|invoice\.|checkout\.session\.|setup_intent\.|payment_intent\.)/.test(event.type || '')) { const r = await syncCustomer(env, customer, fetcher); if (!r && onOther) await onOther(customer); }
   return new Response(JSON.stringify({ received: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

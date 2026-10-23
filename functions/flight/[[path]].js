@@ -3,6 +3,7 @@ import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
 import { pushRoutes } from '../lib/push.js';
+import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
 import {switchInterval, health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
@@ -38,20 +39,21 @@ export async function onRequest({request,env,waitUntil}) {
  const url=new URL(request.url),path=url.pathname.replace(/^\/flight\/?/,'');
  if(!['GET','POST','PUT','DELETE'].includes(request.method))return json({error:'Method not allowed.'},405);
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
- if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request);
+ if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request,fetch,c=>syncSchool(env,c));
  if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');return json(await runNudges(env,{origin:env.APP_ORIGIN||url.origin}));}
  if(path==='nudges/off'&&request.method==='GET')return await nudgesOff(env,url);
  if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(path==='cal/feed.ics'&&request.method==='GET')return await calFeed(url,env);
  if(path==='runways/osm'&&request.method==='GET'){const r=await osmRunways(env,url.searchParams.get('code'),url.searchParams.get('lat'),url.searchParams.get('lng'));return new Response(JSON.stringify(r),{headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=86400'}});}
+ if(path==='school/lead'&&request.method==='POST'){const raw=await request.text();if(raw.length>8000)fail(413,'That message is too long.');let input;try{input=JSON.parse(raw);}catch{fail(400,'Invalid request.');}return json(await schoolLead(env,request,input));}
  if(path==='simkey'&&request.method==='GET')return json({key:env.GOOGLE_MAPS_BROWSER_KEY||''});
  const token=(request.headers.get('Cookie')||'').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1];
  if(!token)fail(401,'Sign in to open your flight desk.');
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
- const brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null)),plan=effectivePlan(env,brow);
+ const smem=await schoolMembership(env,user.id).catch(()=>null);let brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null));if(smem&&schoolActive(smem.school))brow={...(brow||{}),school:{name:smem.school.name,role:smem.role}};const plan=effectivePlan(env,brow);
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='runways/osm'&&request.method==='POST')return json(await contributeOSM(env,await body(),async cc=>{try{const r=await (env.ASSETS?env.ASSETS.fetch(new Request(url.origin+'/runways/'+cc+'.json')):fetch(url.origin+'/runways/'+cc+'.json'));return r.ok?(await r.json()).rows:{};}catch{return {};}}));
@@ -59,7 +61,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const profile=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();
  const records=await env.DB.prepare('SELECT id,data FROM flight_records WHERE user_id=? ORDER BY created_at DESC').bind(user.id).all();
  const prof=profile?JSON.parse(profile.data):null;if(prof){prof.shareOn=!!prof.shareHash;delete prof.shareHash;prof.calOn=!!prof.calHash;delete prof.calHash;}
- return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||'',billing:publicBilling(env,brow)});
+ return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||'',billing:publicBilling(env,brow),school:await publicSchool(env,smem,url.origin).catch(()=>null)});
  }
  if(path==='profile'&&request.method==='PUT'){
  const prevRow=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const prev=prevRow?JSON.parse(prevRow.data):{};const p=validateProfile(await body(),prev);await env.DB.prepare('INSERT INTO flight_profiles(user_id,data,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at').bind(user.id,JSON.stringify(p),Date.now()).run();return json({profile:p});
@@ -107,6 +109,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
+ if(path==='school'||path.startsWith('school/')){const r=await schoolRoutes(env,path,request.method,user,body,url.origin,!!brow?.owner);if(r)return json(r);}
  // ---------- plan and billing ----------
  if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));
  // ---------- Ask Boplo ----------
@@ -122,8 +125,8 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='billing/portal'&&request.method==='POST')return json(await portal(env,user,url.origin));
  // ---------- your data ----------
  if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}
- if(path==='account/delete'&&request.method==='POST'){const input=await body();if(input?.confirm!=='DELETE')fail(400,'Type DELETE to confirm.');await cancelNow(env,user.id).catch(()=>{});
-  for(const q of ['DELETE FROM flight_records WHERE user_id=?','DELETE FROM flight_profiles WHERE user_id=?','DELETE FROM flight_billing WHERE user_id=?','DELETE FROM darts_sessions WHERE user_id=?'])await env.DB.prepare(q).bind(user.id).run().catch(()=>{});
+ if(path==='account/delete'&&request.method==='POST'){const input=await body();if(input?.confirm!=='DELETE')fail(400,'Type DELETE to confirm.');if(smem?.role==='admin'&&schoolActive(smem.school))fail(400,`You manage ${smem.school.name}’s school plan. Cancel it from the School page first, then delete your account.`);await cancelNow(env,user.id).catch(()=>{});
+  for(const q of ['DELETE FROM flight_records WHERE user_id=?','DELETE FROM flight_profiles WHERE user_id=?','DELETE FROM flight_billing WHERE user_id=?','DELETE FROM flight_school_members WHERE user_id=?','DELETE FROM darts_sessions WHERE user_id=?'])await env.DB.prepare(q).bind(user.id).run().catch(()=>{});
   try{await env.DB.prepare('DELETE FROM darts_users WHERE id=?').bind(user.id).run();}catch{await env.DB.prepare("UPDATE darts_users SET email=?,display_name='' WHERE id=?").bind('deleted-'+user.id+'@deleted.invalid',user.id).run().catch(()=>{});}
   return new Response(JSON.stringify({ok:true}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':'boplo_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'}});}
  return json({error:'Not found.'},404);

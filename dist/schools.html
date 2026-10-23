@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Boplo for flight schools</title>
+  <meta name="description" content="One yearly plan gives every student at your flight school Boplo Advanced, and gives your instructors a dashboard of each student’s hours, progress and next lesson.">
+  <meta name="theme-color" content="#020611">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://boplo.app/schools.html">
+  <meta property="og:title" content="Boplo for flight schools">
+  <meta property="og:description" content="Every student on Boplo Advanced, and one dashboard for your instructors. From $999 a year.">
+  <meta property="og:image" content="https://boplo.app/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/icons/favicon-64.png" sizes="64x64" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="/flight-app.css?v=36">
+  <style>
+    body{background:var(--cloud)}
+    .s-hero{margin:10px;border-radius:var(--r-frame);padding:clamp(24px,4vw,48px) clamp(20px,5vw,64px) 0;box-shadow:inset 0 0 0 1px var(--hair-d);overflow:hidden}
+    .s-hero>*{position:relative}
+    .s-hero nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(40px,7vw,88px)}
+    .s-hero nav .links{display:flex;align-items:center;gap:18px}
+    .s-hero nav .links a:not(.btn){color:rgba(222,233,255,.76);font-size:14.5px;font-weight:550}
+    .s-hero h1{font-size:clamp(40px,6.4vw,92px);max-width:14ch}
+    .s-hero .lede{margin-top:20px;color:rgba(222,233,255,.78);font-size:clamp(16px,1.4vw,19.5px);max-width:36em;line-height:1.55}
+    .s-hero .ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:30px}
+    .s-hero .ctas .link{color:var(--ice);font-weight:550}
+    .s-shot{margin:clamp(40px,6vw,72px) auto 0;max-width:1120px;border-radius:18px 18px 0 0;overflow:hidden;box-shadow:0 -1px 0 rgba(158,216,255,.25),0 30px 80px rgba(10,98,255,.28);background:var(--cloud)}
+    .s-shot img{display:block;width:100%;height:auto}
+    .s-sec{max-width:1180px;margin:0 auto;padding:clamp(56px,8vw,104px) clamp(16px,3vw,32px) 0}
+    .s-sec>h2{font-size:clamp(30px,4vw,52px);max-width:18ch}
+    .s-sec>.sub{margin-top:14px;color:var(--ink-2);font-size:17px;max-width:40em;line-height:1.55}
+    .gets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px}
+    .gets .tile h3{font-size:19px;font-weight:620;letter-spacing:-.015em;font-variation-settings:'wdth' 106}
+    .gets .tile p{margin-top:8px;color:var(--ink-2);line-height:1.55}
+    .gets .tile.wide{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:24px;align-items:start}
+    .gets ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin:0;padding:0;list-style:none}
+    .gets li{padding-left:20px;position:relative;color:var(--ink-2)}
+    .gets li::before{content:'';position:absolute;left:0;top:.55em;width:8px;height:8px;border-radius:50%;background:var(--electric)}
+    .steps-s{padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px;counter-reset:s}
+    .steps-s li{list-style:none;counter-increment:s;padding:24px;border-radius:var(--r-tile);background:var(--paper);border:1px solid var(--hair-l)}
+    .steps-s li::before{content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;font-weight:620;margin-bottom:14px}
+    .steps-s b{display:block;font-size:17px;font-weight:620}
+    .steps-s span{display:block;margin-top:6px;color:var(--ink-2);line-height:1.5}
+    .prices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px;align-items:stretch}
+    .price{display:grid;align-content:start;gap:10px}
+    .price h3{font-size:20px;font-weight:620}
+    .price .amt{font-size:46px;font-weight:640;letter-spacing:-.04em;font-variation-settings:'wdth' 110;font-variant-numeric:tabular-nums;line-height:1}
+    .price .amt small{font-size:15px;font-weight:500;letter-spacing:0;color:var(--ink-3)}
+    .price .per{color:var(--ink-2)}
+    .price .btn{margin-top:10px;justify-self:start}
+    .price.dark .amt,.price.dark h3{color:#fff}.price.dark .per,.price.dark .amt small{color:rgba(222,233,255,.76)}
+    .price.dark>*{position:relative}
+    .trust{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:36px}
+    .trust .tile p{color:var(--ink-2);line-height:1.6;margin-top:8px}
+    .trust h3{font-size:18px;font-weight:620}
+    .faq{margin-top:28px;display:grid;gap:8px;max-width:860px}
+    .faq details{background:var(--paper);border:1px solid var(--hair-l);border-radius:16px;padding:18px 20px}
+    .faq summary{cursor:pointer;font-weight:600;font-size:16.5px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+    .faq summary::after{content:'+';color:var(--electric);font-weight:500;font-size:22px;line-height:1}
+    .faq details[open] summary::after{content:'–'}
+    .faq p{margin-top:10px;color:var(--ink-2);line-height:1.6}
+    .contact{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:24px;margin-top:36px;align-items:start}
+    .contact form{display:grid;gap:14px}
+    .contact .btn{justify-self:start}
+    .contact .ok{display:none}.contact.sent form{display:none}.contact.sent .ok{display:block}
+    .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+    footer.sf{max-width:1180px;margin:0 auto;padding:72px clamp(16px,3vw,32px) 48px;color:var(--ink-3);font-size:13.5px;display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:space-between}
+    footer.sf nav{display:flex;gap:18px;flex-wrap:wrap}
+    footer.sf a{color:var(--ink-2)}
+    @media (max-width:960px){.gets,.steps-s,.prices{grid-template-columns:1fr}.gets .tile.wide,.contact,.trust{grid-template-columns:1fr}.s-hero nav .links a:not(.btn){display:none}}
+    @media (max-width:640px){.gets ul{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></symbol></svg>
+  <header class="s-hero night">
+    <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>
+      <div class="links"><a href="#pricing">Pricing</a><a href="#faq">Questions</a><a class="btn btn-ghost btn-sm" href="/flight-app.html#school">Sign in</a></div></nav>
+    <h1 class="display">See every student’s training in one place.</h1>
+    <p class="lede">One plan gives every student at your school Boplo Advanced. Your instructors see each student’s hours, syllabus progress and next lesson, and who hasn’t flown in weeks.</p>
+    <div class="ctas"><a class="btn btn-light btn-has-spark" href="/flight-app.html#school">Start a 14-day free trial <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a><a class="link" href="/flight-app.html?preview=1#school">See the example dashboard</a></div>
+    <figure class="s-shot"><img src="/assets/school-dashboard.webp" width="1400" height="1145" alt="The Boplo school dashboard: students, hours, last flight, syllabus progress, hours goal and next lesson, with students who haven’t flown recently flagged."></figure>
+  </header>
+
+  <main>
+    <section class="s-sec" aria-labelledby="gets-h">
+      <h2 class="display" id="gets-h">What your school gets</h2>
+      <p class="sub">Boplo is the training companion your students use between lessons. The school plan connects it to your instructors.</p>
+      <div class="gets">
+        <article class="tile"><h3>Spot students before they drift</h3><p>The dashboard flags anyone who hasn’t flown in three weeks or hasn’t started, so an instructor can call before the gap costs them their progress.</p></article>
+        <article class="tile"><h3>Students arrive prepared</h3><p>Each student preps their next lesson in Boplo: the exercise, a checklist and questions for their instructor. Theory practice uses the FAA or UK CAA pass mark.</p></article>
+        <article class="tile"><h3>Progress without the paperwork</h3><p>Hours against the published minimum, syllabus exercises done, exam dates, mock exam scores and recent debriefs, for each student.</p></article>
+        <article class="tile wide"><div><h3>Every student gets Advanced</h3><p>Normally $99.99 a year per student. On a school plan, they pay nothing.</p></div>
+          <ul><li>Unlimited logbook with GPS recording</li><li>Lesson prep and voice debriefs</li><li>Study by subject and mock exams</li><li>Landing practice in the 3D simulator</li><li>Nav logs, weather and preflight tools</li><li>Ask Boplo, the training assistant</li></ul></article>
+      </div>
+    </section>
+
+    <section class="s-sec" aria-labelledby="how-h">
+      <h2 class="display" id="how-h">Set up in five minutes</h2>
+      <ol class="steps-s">
+        <li><b>Set up your school</b><span>Name your school and choose a plan. The first 14 days are free.</span></li>
+        <li><b>Share your student code</b><span>Pin it in the briefing room or send the link. Instructors get their own code.</span></li>
+        <li><b>Watch your dashboard fill</b><span>Students appear as they join, with their hours and progress up to date.</span></li>
+      </ol>
+    </section>
+
+    <section class="s-sec" id="pricing" aria-labelledby="pr-h">
+      <h2 class="display" id="pr-h">One price for the whole school</h2>
+      <p class="sub">Billed yearly in US dollars, plus tax where it applies. Start with 14 days free and cancel any time before the trial ends.</p>
+      <div class="prices">
+        <article class="tile price"><h3>School</h3><p class="amt">$999<small> a year</small></p><p class="per">Up to 25 students and 10 instructors. That’s under $40 a student.</p><a class="btn btn-blue" href="/flight-app.html#school">Start free trial</a></article>
+        <article class="tile dark price"><h3>School Plus</h3><p class="amt">$1,999<small> a year</small></p><p class="per">Up to 75 students and 25 instructors. That’s under $27 a student.</p><a class="btn btn-light" href="/flight-app.html#school">Start free trial</a></article>
+        <article class="tile price"><h3>Larger schools</h3><p class="amt">Custom</p><p class="per">More than 75 students, several bases, or paying by invoice. Tell us about your school.</p><a class="btn btn-line" href="#contact">Get in touch</a></article>
+      </div>
+    </section>
+
+    <section class="s-sec" aria-labelledby="tr-h">
+      <h2 class="display" id="tr-h">Built around your students’ consent</h2>
+      <div class="trust">
+        <article class="tile"><h3>Students choose to join</h3><p>Before joining, a student sees exactly what your instructors will see: their name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and next lesson. They can leave at any time and keep all their records.</p></article>
+        <article class="tile"><h3>It supports your training, it doesn’t replace it</h3><p>Boplo doesn’t replace your syllabus, your instructors or the official logbook. Instructors can see a student’s record but can’t change it, and nothing in Boplo authorises a flight.</p></article>
+      </div>
+    </section>
+
+    <section class="s-sec" id="faq" aria-labelledby="faq-h">
+      <h2 class="display" id="faq-h">Questions</h2>
+      <div class="faq">
+        <details><summary>Do students pay anything?</summary><p>No. While they’re members of your school, Advanced is covered by your plan. If a student already pays for Advanced themselves, they can cancel their own subscription from Plan &amp; billing.</p></details>
+        <details><summary>Does it work for FAA and UK schools?</summary><p>Yes. Students choose their country and licence, and Boplo follows the matching syllabus: FAA Private Pilot, UK PPL(A) and NPPL, and EASA PPL(A). Other countries get a general ICAO outline.</p></details>
+        <details><summary>What happens when the trial ends?</summary><p>Your card is charged for the year. Cancel before the trial ends and you won’t be charged. If the plan lapses, students move to the Free plan and keep their records.</p></details>
+        <details><summary>What if we grow past 25 students?</summary><p>Email <a class="link" href="mailto:support@boplo.app">support@boplo.app</a> and we’ll move you to School Plus.</p></details>
+        <details><summary>Can we pay by invoice or bank transfer?</summary><p>For larger schools, yes. <a class="link" href="#contact">Get in touch</a> with your details.</p></details>
+        <details><summary>Who can see the dashboard?</summary><p>The person who sets up the plan, and instructors who join with your instructor code. You can change either code at any time, and remove anyone from your school.</p></details>
+      </div>
+    </section>
+
+    <section class="s-sec" id="contact" aria-labelledby="ct-h">
+      <h2 class="display" id="ct-h">Talk to us</h2>
+      <div class="contact" data-contact>
+        <div><p class="sub" style="margin-top:0">For larger schools, several bases, invoices, or anything you’d like to ask first. We’ll reply by email.</p><p class="hint" style="margin-top:12px">Or email <a class="link" href="mailto:support@boplo.app">support@boplo.app</a>.</p></div>
+        <div class="tile">
+          <form data-lead novalidate>
+            <div class="fields">
+              <label class="field"><span>Your name</span><input name="name" autocomplete="name" maxlength="80" required></label>
+              <label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="160" required></label>
+              <label class="field"><span>School</span><input name="school" autocomplete="organization" maxlength="120" required></label>
+              <label class="field"><span>Country</span><input name="country" autocomplete="country-name" maxlength="60"></label>
+              <label class="field"><span>Number of students</span><input name="students" inputmode="numeric" maxlength="20" placeholder="e.g. 120"></label>
+            </div>
+            <label class="field full"><span>Message <i>(optional)</i></span><textarea name="message" maxlength="2000"></textarea></label>
+            <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+            <p class="form-error" role="alert"></p>
+            <button class="btn btn-blue">Send</button>
+          </form>
+          <div class="ok" role="status"><h3 style="font-size:20px;font-weight:620">Thanks. We’ll be in touch.</h3><p class="hint" style="margin-top:8px">We’ll reply to the email you gave.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="sf"><span>© <span data-year>2026</span> Boplo</span><nav><a href="/">For student pilots</a><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact</a></nav></footer>
+  <script>
+    (() => {
+      document.querySelectorAll('[data-year]').forEach(e => e.textContent = new Date().getFullYear());
+      // remember where they were heading, so sign-in lands on the school setup
+      document.querySelectorAll('a[href="/flight-app.html#school"]').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('boplo-school-intent', '1'); } catch { } }));
+      const f = document.querySelector('[data-lead]'), box = document.querySelector('[data-contact]');
+      f.onsubmit = async e => {
+        e.preventDefault();
+        const err = f.querySelector('.form-error'), btn = f.querySelector('button'), d = Object.fromEntries(new FormData(f));
+        err.textContent = '';
+        if (!d.name.trim() || !d.school.trim()) { err.textContent = 'Enter your name and your school’s name.'; return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) { err.textContent = 'Enter an email address we can reply to.'; return; }
+        btn.disabled = true; btn.textContent = 'Sending…';
+        try {
+          const r = await fetch('/flight/school/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) });
+          const out = await r.json().catch(() => ({}));
+          if (!r.ok && r.status !== 429) throw new Error(out.error || 'That didn’t send. Try again, or email support@boplo.app.');
+          box.classList.add('sent');
+        } catch (x) { err.textContent = x.message; btn.disabled = false; btn.textContent = 'Send'; }
+      };
+    })();
+  </script>
+</body>
+</html>

@@ -89,7 +89,7 @@
   const hubHref = h => '#' + (ui.lastSub[h[0]] && h[3].includes(ui.lastSub[h[0]]) ? ui.lastSub[h[0]] : h[3][0]);
   const TABS = HUBS.map(h => h[0]);
   const LEGACY = { today: 'overview', log: 'logbook', lesson: 'prepare', training: 'progress', planning: 'navlog', account: 'more' };
-  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more', 'plan'].includes(k) ? k : 'overview'; };
+  const current = () => { const h = location.hash.slice(1); const k = LEGACY[h] || h; return [...PAGES.map(p => p[0]), 'profile', 'more', 'plan', 'school'].includes(k) ? k : 'overview'; };
 
   /* checklist stored as text lines: "[x] item" / "[ ] item" */
   const parseChecks = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const m = l.match(/^\[( |x)\]\s?(.*)$/i); return m ? { done: m[1].toLowerCase() === 'x', text: m[2] } : { done: false, text: l }; }).filter(c => c.text);
@@ -2792,6 +2792,9 @@
       ${!b.ready && !preview ? '<p class="callout warn">Payments are being set up. You can keep using the Free plan in the meantime.</p>' : ''}
       ${adv && b.owner ? `<section class="tile dark plan-now">${contours('a')}
           <div><span class="kicker">Your plan</span><h2 class="display">Advanced · owner</h2><p>Complimentary owner access. It never expires and nothing is billed.</p></div>
+        </section>` : adv && b.school && !['active', 'trialing', 'past_due'].includes(b.status) ? `<section class="tile dark plan-now">${contours('a')}
+          <div><span class="kicker">Your plan</span><h2 class="display">Advanced · ${esc(b.school.name)}</h2><p>Paid for by your flight school while you’re a member. Nothing is billed to you.</p></div>
+          <div class="plan-now-actions"><a class="btn btn-light" href="#school">${b.school.role === 'student' ? 'Your school' : 'School dashboard'}</a></div>
         </section>` : adv ? `<section class="tile dark plan-now">${contours('a')}
           <div><span class="kicker">Your plan</span><h2 class="display">Advanced${b.interval ? ` · ${b.interval === 'monthly' ? 'monthly' : 'yearly'}` : ''}</h2><p>${esc(statusLine)}</p></div>
           <div class="plan-now-actions">
@@ -2819,6 +2822,7 @@
             <p class="plan-small">${b.trialAvailable ? `Free for ${b.trialDays} days, then ${money2(pr.amount, pr.currency)} ${iv === 'yearly' ? 'a year' : 'a month'}${b.tax ? ' plus any tax' : ''}. Cancel before the trial ends and you won’t be charged.` : `Billed ${iv === 'yearly' ? 'yearly' : 'monthly'}${b.tax ? ', plus any tax' : ''}. Cancel any time.`} <a class="link" href="/refunds.html" target="_blank" style="color:var(--ice)">Refunds</a></p>
           </section>
         </div>`}
+      ${!adv && !preview ? `<section class="tile plan-school"><div><h3>Training at a flight school?</h3><p>If your school is on Boplo, join with its code and Advanced is covered. Running a school? One plan covers every student, with a dashboard for your instructors.</p></div><div class="plan-school-actions"><a class="btn btn-line" href="#school">Enter a school code</a><a class="link" href="/schools.html">Plans for schools</a></div></section>` : ''}
       <p class="footnote" style="margin-top:16px">Payments are processed securely by Stripe. Boplo never sees or stores your card number. Prices in US dollars. <a class="link" href="/terms.html" target="_blank">Terms</a> · <a class="link" href="/privacy.html" target="_blank">Privacy</a> · <a class="link" href="/refunds.html" target="_blank">Refunds and cancellation</a></p>`);
     $$('[data-iv]').forEach(x => x.onclick = () => { ui.billInterval = x.dataset.iv; planPage(); });
     const co = $('[data-checkout]'); if (co) co.onclick = () => checkoutSheet(ui.billInterval);
@@ -3148,7 +3152,7 @@
 
   /* ================= more (mobile) ================= */
   function morePage() {
-    const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced with a free trial', 'plan']];
+    const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced with a free trial', 'plan'], ['school', 'Flight school', SCH() ? SCH().name : 'Join your school with its code, or set up your school', 'school']];
     shell('more', { title: 'Account', sub: state.user?.email ? `Signed in as ${esc(state.user.email)}` : '' }, `<div class="more-grid">${items.map(([id, t, d, ic]) => `<a class="tile more-item" href="#${id}">${ico(ic)}<span><b>${t}</b><small>${esc(d)}</small></span></a>`).join('')}</div>
       <div class="acct-links"><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact support</a><button type="button" class="link" data-logout>${preview ? 'Leave example desk' : 'Sign out'}</button></div>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
@@ -3314,11 +3318,240 @@
     };
   }
 
+  /* ================= flight schools ================= */
+  const SCH = () => state.school || null;
+  const isStaffSch = () => ['admin', 'instructor'].includes(SCH()?.role);
+  ui.schoolMeta = { trialDays: 14, plans: { school: { label: 'School', amount: 99900, currency: 'usd', seats: 25, staff: 10 }, school_plus: { label: 'School Plus', amount: 199900, currency: 'usd', seats: 75, staff: 25 } } };
+  ui.schoolPlan = 'school'; ui.rosterFilter = 'all';
+  function addSchoolNav() {
+    if (!isStaffSch() || HUBS.some(h => h[0] === 'school')) return;
+    PAGES.push(['school', 'My school', 'school']);
+    HUBS.push(['school', 'My school', 'school', ['school'], 'School']);
+  }
+  const money0 = (cents, cur = 'usd') => { try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur.toUpperCase(), maximumFractionDigits: 0 }).format(cents / 100); } catch { return '$' + Math.round(cents / 100); } };
+  const daysSince = s => s ? -daysUntil(s) : null;
+  // a page that works before the person has set up their own training desk (school owners, instructors)
+  function schoolFrame(head, body) {
+    if (state.profile?.complete) return shell('school', head, body);
+    document.title = `${head.title.replace(/<[^>]+>/g, '')} · Boplo Flight`;
+    root.innerHTML = `<div class="solo-shell"><header class="solo-top">${brand('/')}<div class="solo-acct">${state.user?.email ? `<span>${esc(state.user.email)}</span>` : ''}<button type="button" class="btn btn-line btn-sm" data-logout>${preview ? 'Leave example' : 'Sign out'}</button></div></header>
+      <main class="solo-main"><div class="page">${preview ? `<div class="preview-bar"><span><b>Example school.</b> Sample students; nothing is saved.</span><a class="btn btn-light btn-sm" href="/schools.html">Back to school plans</a></div>` : ''}<header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>${body}
+      <p class="footnote" style="margin-top:32px">Learning to fly yourself? <a class="link" href="#overview">Set up your own flight desk</a>.</p></div></main></div>`;
+    $$('[data-logout]').forEach(b => b.onclick = logout);
+  }
+  async function refreshSchool() {
+    if (preview) return;
+    try { const r = await api('school'); state.school = r.school; ui.schoolMeta = { trialDays: r.trialDays, plans: r.plans }; addSchoolNav(); } catch { }
+  }
+  function schoolPage() {
+    if (!ui.schoolLoaded) { ui.schoolLoaded = true; refreshSchool().then(() => { if (current() === 'school') schoolPage(); }); }
+    const s = SCH();
+    if (!s) return schoolSetup();
+    if (s.role === 'student') return schoolStudent();
+    return schoolDash();
+  }
+  const planCards = sel => { const m = ui.schoolMeta; return `<div class="sch-plans" role="radiogroup" aria-label="School plan">${Object.entries(m.plans).map(([k, p]) => `<label class="sch-plan${sel === k ? ' on' : ''}"><input type="radio" name="plan" value="${k}" ${sel === k ? 'checked' : ''}><b>${esc(p.label)}</b><span class="sch-price">${money0(p.amount, p.currency)}<small> a year</small></span><span>Up to ${p.seats} students and ${p.staff} instructors</span></label>`).join('')}</div>
+    <p class="hint">${m.trialDays ? `${m.trialDays} days free, then billed yearly. Cancel before the trial ends and you won’t be charged.` : 'Billed yearly. Cancel any time.'} More than 75 students? <a class="link" href="/schools.html#contact">Ask us for a quote</a>.</p>`; };
+  function setupForm(name = '') {
+    return `<form class="sch-setup" data-setup novalidate>${input('School name', 'name', name, 'text', 'maxlength="80" autocomplete="organization" required placeholder="e.g. Popham Flying School"')}
+      ${planCards(ui.schoolPlan)}
+      <p class="form-error" role="alert"></p>
+      <button class="btn btn-blue btn-has-spark" ${preview ? 'disabled' : ''}>Continue to payment ${spark}</button>
+      <p class="footnote">You’ll pay on Stripe’s secure checkout page. You can add your company’s tax ID there.</p></form>`;
+  }
+  function wireSetup() {
+    const f = $('[data-setup]'); if (!f) return;
+    f.querySelectorAll('[name=plan]').forEach(r => r.onchange = () => { ui.schoolPlan = r.value; f.querySelectorAll('.sch-plan').forEach(l => l.classList.toggle('on', l.querySelector('input').checked)); });
+    f.onsubmit = async e => {
+      e.preventDefault(); const err = f.querySelector('.form-error'), btn = f.querySelector('button'); err.textContent = '';
+      const name = f.querySelector('[name=name]').value.trim(); if (name.length < 2) { err.textContent = 'Enter your school’s name.'; return; }
+      btn.disabled = true; btn.textContent = 'Opening checkout…';
+      try { location.href = (await api('school/create', 'POST', { name, plan: ui.schoolPlan })).url; } catch (x) { err.textContent = x.message; btn.disabled = false; btn.innerHTML = `Continue to payment ${spark}`; }
+    };
+  }
+  function schoolSetup() {
+    schoolFrame({ title: 'Flight school', sub: 'Join your school with its code, or set Boplo up for your whole school.' },
+      `<div class="grid">
+        <section class="tile span-5"><div class="tile-head"><h2>Join your school</h2></div>
+          <p class="hint" style="margin-bottom:14px">Your school gives you a code. Joining gives you Advanced, paid for by your school.</p>
+          <form class="sch-join" data-joinform>${input('School code', 'code', '', 'text', 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="e.g. K7PX4M2Q"')}<p class="form-error" role="alert"></p><button class="btn btn-line">Join school</button></form>
+        </section>
+        <section class="tile span-7"><div class="tile-head"><h2>Set up your school</h2></div>
+          <p class="hint" style="margin-bottom:14px">One yearly plan covers every student and instructor. Instructors get a dashboard of each student’s hours, progress and next lesson.</p>
+          ${setupForm()}
+        </section>
+      </div>`);
+    const jf = $('[data-joinform]'); jf.onsubmit = e => { e.preventDefault(); const c = jf.querySelector('[name=code]').value.trim(); if (!c) { jf.querySelector('.form-error').textContent = 'Enter the code your school gave you.'; return; } joinSheet(c); };
+    wireSetup();
+  }
+  const SHARED = 'your name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and your next lesson';
+  function schoolStudent() {
+    const s = SCH();
+    schoolFrame({ title: esc(s.name), sub: 'Your flight school on Boplo.' },
+      `<section class="tile dark plan-now">${contours('a')}<div><span class="kicker">${s.active ? 'Covered by your school' : 'Plan not active'}</span><h2 class="display">${s.active ? 'Advanced, paid for by ' + esc(s.name) : esc(s.name) + '’s plan has lapsed'}</h2><p>${s.active ? 'Everything in Advanced is unlocked while you’re a member.' : 'You’re on Free until your school renews. Your records are all still here.'}</p></div></section>
+      <section class="tile" style="margin-top:16px"><div class="tile-head"><h2>What your instructors can see</h2></div>
+        <p>While you’re a member, ${esc(s.name)}’s instructors can see ${SHARED}. They can’t edit anything.</p>
+        <p class="hint" style="margin-top:10px">Leaving stops sharing straight away. You keep all your records, and your desk moves to Free unless you have your own plan.</p>
+        <button type="button" class="btn btn-line" data-leave style="margin-top:14px">Leave ${esc(s.name)}</button></section>`);
+    $('[data-leave]').onclick = () => {
+      sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Leave ${esc(s.name)}?</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+        <div class="sheet-body"><p>Your instructors will stop seeing your training. Your desk moves to Free unless you have your own plan. You can rejoin later with the school’s code.</p><p class="form-error" role="alert"></p></div>
+        <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Stay</button><button type="button" class="btn btn-danger" data-yes>Leave school</button></div></footer>`;
+      sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+      sheet.querySelector('[data-yes]').onclick = async e => { e.target.disabled = true; try { if (!preview) { state.school = (await api('school/leave', 'POST', {})).school; state.billing = await api('billing'); } sheet.close(); toast(`You’ve left ${s.name}.`); render(); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; e.target.disabled = false; } };
+      sheet.showModal();
+    };
+  }
+  async function joinSheet(code) {
+    let info;
+    try { info = preview ? { name: 'Popham Flying School', role: 'student', active: true } : await api('school/lookup', 'POST', { code }); } catch (x) { toast(x.message); return; }
+    const staff = info.role === 'instructor';
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Join ${esc(info.name)}${staff ? ' as an instructor' : ''}?</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body">${staff ? `<p>You’ll see the school’s students on Boplo: their hours, progress and next lessons. Your own desk gets Advanced, paid for by ${esc(info.name)}.</p>` : `<p>You get Boplo Advanced, paid for by ${esc(info.name)}.</p><p class="callout" style="margin-top:12px">${esc(info.name)}’s instructors will be able to see ${SHARED}. You can leave the school at any time.</p>`}
+      ${info.active ? '' : `<p class="callout warn" style="margin-top:12px">${esc(info.name)}’s plan isn’t active right now, so you can’t join yet.</p>`}<p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Not now</button><button type="button" class="btn btn-blue" data-yes ${info.active ? '' : 'disabled'}>Join school</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.querySelector('[data-yes]').onclick = async e => {
+      e.target.disabled = true;
+      try { if (!preview) { state.school = (await api('school/join', 'POST', { code })).school; state.billing = await api('billing'); addSchoolNav(); } sheet.close(); toast(`Welcome to ${info.name}.`); if (state.profile?.complete || staff) { location.hash = '#school'; render(); } }
+      catch (x) { sheet.querySelector('.form-error').textContent = x.message; e.target.disabled = false; }
+    };
+    sheet.showModal();
+  }
+  // per-student signals the roster sorts and flags on
+  function rosterRow(m) {
+    const reg = regimeOf(m), lic = R.licence(reg, m.licence), goal = m.goalHours || lic?.minHours || (reg === 'faa' ? 40 : 45);
+    let syl = null; try { const S = R.syllabusFor(reg), st = readJSON(m.syllabus)[S.id] || {}; syl = Math.round(S.items.filter(i => st[i.id] === 'd').length / S.items.length * 100); } catch { }
+    const quiet = m.lastFlight ? daysSince(m.lastFlight) : null;
+    const flag = m.role !== 'student' ? '' : !m.setup ? 'Hasn’t set up Boplo yet' : !m.flights ? (daysSince(new Date(m.joinedAt).toISOString().slice(0, 10)) > 7 ? 'No flights logged yet' : '') : quiet > 21 ? `Hasn’t flown in ${quiet} days` : '';
+    return { ...m, goal, goalPct: Math.min(100, Math.round(m.minutes / 60 / goal * 100)), syl, quiet, flag };
+  }
+  const lastFlew = r => r.lastFlight ? (r.quiet <= 0 ? 'Today' : r.quiet === 1 ? 'Yesterday' : `${r.quiet} days ago`) : '—';
+  async function loadRoster(force) {
+    if (preview) { ui.roster = demoRoster(); return; }
+    if (!force && ui.roster && Date.now() - ui.rosterAt < 60000) return;
+    try { ui.roster = (await api('school/roster')).members; ui.rosterAt = Date.now(); ui.rosterErr = ''; } catch (x) { ui.rosterErr = x.message; ui.roster = ui.roster || null; }
+  }
+  function schoolDash() {
+    const s = SCH(), admin = s.role === 'admin';
+    if (!s.active) {
+      schoolFrame({ title: esc(s.name), sub: admin ? 'Finish setting up your school’s plan.' : 'Your school on Boplo.' },
+        admin ? `<section class="tile"><div class="tile-head"><h2>${s.status === 'canceled' ? 'Renew your school plan' : 'Choose your school plan'}</h2></div>${setupForm(s.name)}</section>` : `<p class="callout warn">${esc(s.name)}’s Boplo plan isn’t active, so the student dashboard is closed. Ask the person who manages the plan to renew it.</p>`);
+      wireSetup(); return;
+    }
+    if (!ui.roster || ui.rosterAt < Date.now() - 60000) { if (!ui.rosterLoading) { ui.rosterLoading = true; loadRoster().finally(() => { ui.rosterLoading = false; if (current() === 'school') schoolDash(); }); } }
+    const rows = (ui.roster || []).map(rosterRow), students = rows.filter(r => r.role === 'student'), staff = rows.filter(r => r.role !== 'student');
+    const active14 = students.filter(r => r.quiet != null && r.quiet <= 14).length, flagged = students.filter(r => r.flag), hours30 = students.reduce((n, r) => n + r.recentMinutes, 0);
+    const f = ui.rosterFilter, list = (f === 'staff' ? staff : f === 'attention' ? flagged : students).slice().sort((a, b) => f === 'staff' ? a.name.localeCompare(b.name) : (!!b.flag - !!a.flag) || ((b.quiet ?? 9999) - (a.quiet ?? 9999)));
+    const status = !admin ? '' : s.status === 'trialing' ? `Free trial until ${longDate(s.trialEnd)}. ${s.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money0(s.amount, s.currency)} a year.`}` : s.cancelAtPeriodEnd ? `Cancelled. Your school keeps Boplo until ${longDate(s.periodEnd)}.` : s.status === 'past_due' ? 'The last payment didn’t go through. Update the card to keep your school on Boplo.' : `Renews on ${longDate(s.periodEnd)}.`;
+    schoolFrame({ title: esc(s.name), sub: `${esc(s.planLabel)} plan${status ? ' · ' + esc(status) : ''}`, actions: admin ? `<button class="btn btn-line" data-rename>Rename</button><button class="btn btn-line" data-billing ${preview ? 'disabled' : ''}>Billing and invoices</button>` : '' },
+      `${s.status === 'past_due' && admin ? '<p class="callout warn" style="margin-bottom:16px">Payment failed. Update the card under Billing and invoices so your students keep Advanced.</p>' : ''}
+      <section class="stats" aria-label="School at a glance" style="margin-bottom:16px">
+        <div class="stat"><span>Students</span><b>${s.students}<small>of ${s.seats}</small></b><em>${s.staff} instructor${s.staff === 1 ? '' : 's'}</em></div>
+        <div class="stat"><span>Flew in the last 14 days</span><b>${active14}</b><em>${students.length ? Math.round(active14 / students.length * 100) + '% of students' : 'No students yet'}</em></div>
+        <div class="stat"><span>Need a nudge</span><b>${flagged.length}</b><em>Quiet 3+ weeks, or not started</em></div>
+        <div class="stat"><span>Hours, last 30 days</span><b>${hrs(hours30)}<small>h</small></b><em>Logged by your students</em></div>
+      </section>
+      <div class="grid">
+        <section class="tile span-12 sch-invite" aria-label="Invite" ${students.length ? 'style="order:2"' : ''}>
+          <div class="sch-inv-col"><h2>Invite students</h2><p class="hint">Students join with this code or link and get Advanced straight away. They see exactly what’s shared before they join, and can leave any time.</p>
+            <div class="sch-code" aria-label="Student code">${esc(s.studentCode || '')}</div>
+            <div class="sch-code-actions"><button type="button" class="btn btn-blue btn-sm" data-copy="${esc(s.studentLink || '')}">Copy student link</button>${navigator.share ? `<button type="button" class="btn btn-line btn-sm" data-share="${esc(s.studentLink || '')}">Share</button>` : ''}${admin ? '<button type="button" class="btn btn-line btn-sm" data-newcode="student">New code</button>' : ''}</div></div>
+          <div class="sch-inv-col"><h2>Invite instructors</h2><p class="hint">Instructors see this dashboard and get Advanced for their own flying. Keep this code for your team.</p>
+            <div class="sch-code small" aria-label="Instructor code">${esc(s.staffCode || '')}</div>
+            <div class="sch-code-actions"><button type="button" class="btn btn-line btn-sm" data-copy="${esc(s.staffLink || '')}">Copy instructor link</button>${admin ? '<button type="button" class="btn btn-line btn-sm" data-newcode="staff">New code</button>' : ''}</div></div>
+        </section>
+        <section class="tile span-12 sch-roster" aria-labelledby="ro-h">
+          <div class="tile-head"><h2 id="ro-h">Students</h2><div class="filter" role="group" aria-label="Show">${[['all', `All ${students.length}`], ['attention', `Need a nudge ${flagged.length}`], ['staff', `Instructors ${staff.length}`]].map(([v, l]) => `<button data-rf="${v}" aria-pressed="${f === v}">${l}</button>`).join('')}</div></div>
+          ${ui.rosterErr ? `<p class="callout warn">${esc(ui.rosterErr)}</p>` : !ui.roster ? '<p class="hint">Loading your students…</p>' : !list.length ? `<div class="empty center"><h3>${f === 'attention' ? 'Everyone’s flying.' : f === 'staff' ? 'No other instructors yet.' : 'No students yet.'}</h3><p>${f === 'attention' ? 'Nobody has gone quiet for more than three weeks.' : f === 'staff' ? 'Share the instructor code with your team.' : 'Share your student code or link, and students appear here as they join.'}</p></div>` : f === 'staff'
+            ? `<div class="airports">${list.map(r => `<div><span>${esc(r.name)}${r.role === 'admin' ? ' <i class="hint">manages the plan</i>' : ''}</span><b>${esc(r.email)}</b></div>`).join('')}</div>`
+            : `<div class="table-wrap flat"><table><thead><tr><th>Student</th><th class="r">Hours</th><th>Last flew</th><th>Syllabus</th><th>Hours goal</th><th>Next lesson</th></tr></thead><tbody>${list.map(r => `<tr data-student="${esc(r.id)}" tabindex="0" aria-label="Open ${esc(r.name)}">
+                <td><b>${esc(r.name)}</b>${r.flag ? `<small class="sch-flag">${esc(r.flag)}</small>` : `<small>${esc([r.licence, r.authority].filter(Boolean).join(' · '))}</small>`}</td>
+                <td class="r"><b>${hrs(r.minutes)}</b><small>${hrs(r.soloMinutes)} solo</small></td>
+                <td>${lastFlew(r)}</td>
+                <td>${r.syl == null ? '—' : `<span class="sch-mini" role="img" aria-label="${r.syl}% of syllabus done"><i style="width:${r.syl}%"></i></span><small>${r.syl}%</small>`}</td>
+                <td><span class="sch-mini" role="img" aria-label="${r.goalPct}% of ${r.goal} hours"><i style="width:${r.goalPct}%"></i></span><small>${r.goalPct}% of ${r.goal} h</small></td>
+                <td>${r.nextLesson ? `${esc(r.nextLesson)}${r.lessonDate ? `<small>${esc(fmtDate(r.lessonDate))}</small>` : ''}` : '—'}</td></tr>`).join('')}</tbody></table></div>
+              <div class="cards">${list.map(r => `<button class="card" data-student="${esc(r.id)}"><span class="froute"><b>${esc(r.name)}</b><small>${r.flag ? esc(r.flag) : `Last flew ${lastFlew(r).toLowerCase()} · ${r.goalPct}% of ${r.goal} h`}</small></span><span class="ftime">${hrs(r.minutes)} h</span></button>`).join('')}</div>`}
+        </section>
+        </section>
+      </div>`);
+    $$('[data-rf]').forEach(b => b.onclick = () => { ui.rosterFilter = b.dataset.rf; schoolDash(); });
+    $$('[data-student]').forEach(el => { el.onclick = () => studentSheet(el.dataset.student); el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); } }; });
+    $$('[data-copy]').forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Link copied.'); } catch { toast(b.dataset.copy); } });
+    $$('[data-share]').forEach(b => b.onclick = () => navigator.share({ title: `Join ${s.name} on Boplo`, text: `Join ${s.name} on Boplo Flight. Your school covers Advanced.`, url: b.dataset.share }).catch(() => { }));
+    $$('[data-newcode]').forEach(b => b.onclick = async () => {
+      if (!b.classList.contains('armed')) { b.classList.add('armed'); b.textContent = 'The old code stops working. Confirm?'; return; }
+      b.disabled = true; try { if (!preview) state.school = (await api('school/codes', 'POST', { which: b.dataset.newcode })).school; toast('New code ready. The old one no longer works.'); schoolDash(); } catch (x) { toast(x.message); b.disabled = false; }
+    });
+    const bl = $('[data-billing]'); if (bl) bl.onclick = async () => { bl.disabled = true; try { location.href = (await api('school/portal', 'POST', {})).url; } catch (x) { toast(x.message); bl.disabled = false; } };
+    const rn = $('[data-rename]'); if (rn) rn.onclick = () => {
+      sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Rename your school</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+        <form class="sheet-body" data-rn>${input('School name', 'name', s.name, 'text', 'maxlength="80" required')}<p class="form-error" role="alert"></p></form>
+        <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button type="button" class="btn btn-blue" data-yes>Save</button></div></footer>`;
+      sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+      const go = async () => { const name = sheet.querySelector('[name=name]').value.trim(); try { state.school = preview ? { ...s, name } : (await api('school/rename', 'POST', { name })).school; sheet.close(); schoolDash(); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; } };
+      sheet.querySelector('[data-yes]').onclick = go; sheet.querySelector('[data-rn]').onsubmit = e => { e.preventDefault(); go(); };
+      sheet.showModal();
+    };
+  }
+  async function studentSheet(id) {
+    const s = SCH(), admin = s.role === 'admin';
+    let d; try { d = preview ? demoStudent(id) : await api('school/students/' + encodeURIComponent(id)); } catch (x) { toast(x.message); return; }
+    const st = d.student, reg = regimeOf(st), lic = R.licence(reg, st.licence), goal = st.goalHours || lic?.minHours || (reg === 'faa' ? 40 : 45);
+    let sylLine = ''; try { const S = R.syllabusFor(reg), all = readJSON(d.syllabus)[S.id] || {}, done = S.items.filter(i => all[i.id] === 'd'), prog = S.items.filter(i => all[i.id] === 'p'); sylLine = `<div class="tile-head" style="margin-top:18px"><h3>${esc(S.title)}</h3><span class="chip">${done.length} of ${S.items.length} done</span></div><div class="syl-bar"><i style="width:${Math.round(done.length / S.items.length * 100)}%"></i></div>${prog.length ? `<p class="hint" style="margin-top:8px">In progress: ${esc(prog.map(i => i.name).join(', '))}</p>` : ''}`; } catch { }
+    let exams = []; try { exams = (JSON.parse(d.exams || '[]') || []).filter(e => e.date && daysUntil(e.date) >= 0); } catch { }
+    const mocks = d.study?.mocks || [];
+    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">${esc(st.name || 'Student')}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      <div class="sheet-body sch-detail">
+        <p class="hint">${esc([st.licence, st.authority, st.airport, st.aircraft].filter(Boolean).join(' · '))}</p>
+        <div class="stats" style="margin-top:12px"><div class="stat"><span>Total</span><b>${hrs(d.totals.minutes)}<small>h</small></b><em>${Math.min(100, Math.round(d.totals.minutes / 60 / goal * 100))}% of ${goal} h</em></div><div class="stat"><span>Solo and PIC</span><b>${hrs(d.totals.solo)}<small>h</small></b></div><div class="stat"><span>Flights</span><b>${d.totals.flights}</b></div><div class="stat"><span>Landings</span><b>${d.totals.landings}</b></div></div>
+        <div class="tile-head" style="margin-top:18px"><h3>Next lesson</h3>${d.next.date ? `<span class="chip">${esc(fmtDate(d.next.date))}</span>` : ''}</div>
+        <p>${esc(d.next.lesson || 'Not set yet')}</p>
+        ${d.next.questions ? `<p class="hint" style="margin-top:6px"><b>Questions for you:</b></p><p class="pre">${esc(d.next.questions)}</p>` : ''}
+        ${sylLine}
+        ${exams.length || mocks.length ? `<div class="tile-head" style="margin-top:18px"><h3>Theory</h3></div><div class="airports">${exams.map(e => `<div><span>${esc(e.name)}</span><b>${esc(fmtDate(e.date, { day: 'numeric', month: 'short', year: 'numeric' }))}</b></div>`).join('')}${mocks.slice(-3).reverse().map(m => `<div><span>Mock exam, ${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b>${m.s}%</b></div>`).join('')}</div>` : ''}
+        <div class="tile-head" style="margin-top:18px"><h3>Recent flights</h3></div>
+        ${d.recent.length ? `<div class="sch-flights">${d.recent.map(f => `<div class="sch-fl"><div><b>${esc(fmtDate(f.date, { day: 'numeric', month: 'short' }))} · ${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><span class="chip role-${esc(f.role)}"><i></i>${esc(roleName(f.role))}</span><span class="r">${hm(f.minutes)}</span></div>${f.lesson ? `<small>${esc(f.lesson)}</small>` : ''}${f.notes ? `<p>${esc(f.notes.slice(0, 280))}${f.notes.length > 280 ? '…' : ''}</p>` : ''}</div>`).join('')}</div>` : '<p class="hint">No flights logged yet.</p>'}
+        <p class="form-error" role="alert"></p>
+      </div>
+      <footer class="sheet-foot">${admin ? '<button type="button" class="btn btn-line" data-remove>Remove from school</button>' : '<span></span>'}<div class="right" style="margin-left:auto"><button type="button" class="btn btn-blue" data-close>Done</button></div></footer>`;
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    const rm = sheet.querySelector('[data-remove]');
+    if (rm) rm.onclick = async () => {
+      if (!rm.classList.contains('armed')) { rm.classList.add('armed'); rm.textContent = `Remove ${st.name || 'student'}? Tap again`; return; }
+      rm.disabled = true; try { if (!preview) await api('school/remove', 'POST', { userId: id }); ui.roster = (ui.roster || []).filter(m => m.id !== id); state.school = { ...s, students: Math.max(0, s.students - 1) }; sheet.close(); toast('Removed. They keep their own records.'); schoolDash(); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; rm.disabled = false; }
+    };
+    sheet.showModal();
+  }
+  // example school for ?preview=1#school
+  function demoRoster() {
+    const ago = n => { const d = parseISO(todayISO()); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+    const ahead = n => { const d = parseISO(todayISO()); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+    const syl = keys => JSON.stringify({ 'easa-ppl-a': Object.fromEntries(keys.map(k => [k, 'd'])) });
+    const base = ['1', '1E', '2', '3', '4', '5', '6', '7', '8', '9', '10A', '10B', '11', '12', '13', '12E/13E', '14', '15', '16', '17', '18A', '18B', '18C', '19'];
+    const P = [['Alex Morgan', 2, 892, 70, 'Lesson 12 · Navigation', 4, 17], ['Priya Shah', 1, 1904, 420, 'Qualifying cross-country', 2, 22], ['Tom Okafor', 26, 610, 40, 'Circuits', 0, 12], ['Grace Lee', 5, 1260, 160, 'Forced landings', 6, 15], ['Ben Walsh', 41, 380, 0, 'Stalling', 0, 8], ['Hannah Novak', 9, 2310, 640, 'Skill test prep', 3, 23], ['Leo Martins', null, 0, 0, '', 0, 0]];
+    return [{ id: 'adm', role: 'admin', name: 'Sam Patel', email: 'sam@pophamflying.example', joinedAt: Date.now() - 90 * 864e5 }, { id: 'ins', role: 'instructor', name: 'Rosa Diaz', email: 'rosa@pophamflying.example', joinedAt: Date.now() - 80 * 864e5 },
+      ...P.map(([name, last, min, solo, next, inDays, n], i) => ({ id: 'st' + i, role: 'student', name, email: '', joinedAt: Date.now() - (i === 6 ? 12 : 70) * 864e5, licence: 'PPL(A)', authority: 'UK CAA', regime: 'uk', countryCode: 'GB', goalHours: 45, setup: i !== 6 || true, syllabus: syl(base.slice(0, n)), nextLesson: next, lessonDate: inDays ? ahead(inDays) : '', flights: Math.round(min / 60), minutes: min, soloMinutes: solo, landings: Math.round(min / 12), lastFlight: last == null ? '' : ago(last), recentMinutes: last != null && last < 30 ? Math.min(min, 240 - i * 20) : 0, lastMock: null }))];
+  }
+  function demoStudent(id) {
+    const m = demoRoster().find(r => r.id === id) || demoRoster()[2];
+    return { student: { id, name: m.name, licence: m.licence, authority: m.authority, regime: 'uk', countryCode: 'GB', airport: 'EGHP · Popham', aircraft: 'PA-28 Warrior', goalHours: 45, openingMinutes: 0 }, next: { lesson: m.nextLesson, date: m.lessonDate, questions: 'When would you divert if the reservoir turn is late?' }, syllabus: m.syllabus, exams: JSON.stringify([{ name: 'Navigation', date: m.lessonDate || todayISO() }]), study: { mocks: [{ d: todayISO(), s: 81 }] }, totals: { flights: m.flights, minutes: m.minutes, solo: m.soloMinutes, landings: m.landings }, recent: id === 'st0' ? state.flights.slice(0, 8).map(f => ({ ...f })) : [] };
+  }
+
+  async function finishSchoolCheckout() {
+    toast('Confirming your school plan…');
+    for (let i = 0; i < 8; i++) {
+      try { const r = await api('school/sync', 'POST', {}); state.school = r.school; if (r.school?.active) { state.billing = await api('billing'); addSchoolNav(); ui.roster = null; toast(r.school.status === 'trialing' ? 'Your school’s free trial has started. Share the student code to invite students.' : 'Your school is on Boplo. Share the student code to invite students.'); render(); return; } } catch { }
+      await new Promise(r => setTimeout(r, 1500 + i * 500));
+    }
+    toast('Payment is still being confirmed. Refresh in a minute.'); render();
+  }
   /* ---------------- router ---------------- */
   function render() {
-    if (!state.profile?.complete) { ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
+    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k !== 'study') quiz = null;
-    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -3371,12 +3604,17 @@
   /* ---------------- start ---------------- */
   if ('serviceWorker' in navigator && !preview && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
   async function start() {
-    if (preview) { demo(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
+    const jm = location.hash.match(/^#join=([A-Za-z0-9-]{4,20})$/); if (jm) { try { localStorage.setItem('boplo-join', jm[1]); } catch { } history.replaceState(null, '', location.pathname + location.search + '#school'); }
+    if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: true, trialDays: 7, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
     try {
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
-      state = ws; state.billing = ws.billing || null; saveSnapshot(ws); setTimeout(flushOutbox, 1500);
+      state = ws; state.billing = ws.billing || null; state.school = ws.school || null; addSchoolNav(); saveSnapshot(ws); setTimeout(flushOutbox, 1500);
       const q = new URLSearchParams(location.search);
+      try { if (localStorage.getItem('boplo-school-intent')) { localStorage.removeItem('boplo-school-intent'); if (!state.school) history.replaceState(null, '', location.pathname + '#school'); } } catch { }
+      if (q.get('school_checkout')) { history.replaceState(null, '', location.pathname + '#school'); render(); finishSchoolCheckout(); return; }
+      let pj = null; try { pj = localStorage.getItem('boplo-join'); if (pj) localStorage.removeItem('boplo-join'); } catch { }
+      if (pj && !(state.school && state.school.active)) { render(); setTimeout(() => joinSheet(pj), 300); return; }
       if (q.get('setup_intent') || q.get('payment_intent')) { history.replaceState(null, '', location.pathname + '#plan'); render(); finishCheckout(); return; }
       try { const intent = JSON.parse(localStorage.getItem('boplo-intent') || 'null'); if (intent?.plan && ws.profile?.complete) { localStorage.removeItem('boplo-intent'); ui.billInterval = intent.plan === 'monthly' ? 'monthly' : 'yearly'; if (B().plan !== 'advanced') location.hash = '#plan'; } } catch { }
       render();

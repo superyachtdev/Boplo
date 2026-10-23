@@ -268,3 +268,13 @@ Built from market research: students quit over cost overruns, lost momentum and 
 
   The page title changes too.
 - **Phones:** low-memory (≤3 GB) or ≤4-core phones get the still hero instead of WebGL. On any device, the hero lowers its render resolution in 0.25 steps (to 1×) after ~1.5 s of frames slower than 34 ms.
+
+## Flight schools (2026-10-24, Claude)
+
+- **Plans:** School $999/yr (25 students, 10 instructors), School Plus $1,999/yr (75 / 25), larger = contact form. Stripe prices created on first use by lookup key `boplo_flight_school_yearly` / `boplo_flight_school_plus_yearly` (product metadata `boplo=flight_school`). 14-day trial (`SCHOOL_TRIAL_DAYS`, 0 disables).
+- **Backend:** `functions/lib/schools.js`. Tables `flight_schools`, `flight_school_members` (one school per account; roles admin / instructor / student), `flight_school_leads` (migration 0011, also auto-created). The admin pays through **Stripe Checkout** (hosted; tax ID + billing address collected), success returns to `/flight-app.html?school_checkout=done#school` and the app polls `POST /flight/school/sync`. The webhook falls back to `syncSchool` when the customer isn't an individual.
+- **Entitlement:** a member of a school whose status is active/trialing/past_due gets Advanced (`row.school` in `planOf`); `publicBilling.school` = `{name, role}`. Workspace returns `school`.
+- **Routes:** `GET school`, `POST school/lookup|create|join|leave|sync|portal|rename|codes|remove`, `GET school/roster`, `GET school/students/:id` (staff only, same school), public `POST school/lead`, owner-only `GET school/leads`. Seat limits enforced on join. Admin with an active plan can't delete their account.
+- **App:** `#school` page (works before onboarding, standalone frame): join with code / set up school; student view with what's shared + leave; staff dashboard (stats, roster with "needs a nudge" flags at 21+ quiet days or not started, student detail sheet, invite codes and links, rename, billing portal). Join links `flight-app.html#join=CODE` survive sign-in via localStorage. Example: `/flight-app.html?preview=1#school`.
+- **Public page:** `dist/schools.html` (screenshot `assets/school-dashboard.webp` from the example dashboard). Linked from landing nav, footer and pricing; terms and privacy have School sections.
+- **Upgrades School → Plus** are manual for now (FAQ says email support).
