@@ -35,3 +35,26 @@ export async function osmRunways(env, code, lat, lng, fetcher = fetch) {
   await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(key, JSON.stringify({ t: Date.now(), runways })).run();
   return { runways };
 }
+
+// A signed-in browser that fetched OSM runways itself (Overpass often refuses Cloudflare) can share them, so the next
+// pilot at that airfield doesn't wait. Only runways that sit within 250 m of a published runway's ends are kept, and an
+// existing fresh entry is never overwritten, so a bad submission can't move a runway far or replace good data.
+const mDist = (a, b) => { const k = Math.PI / 180, x = (b[1] - a[1]) * k * Math.cos((a[0] + b[0]) / 2 * k), y = (b[0] - a[0]) * k; return Math.hypot(x, y) * 6371000; };
+export async function contributeOSM(env, input, loadRows) {
+  const code = String(input?.code || '').toUpperCase(), cc = String(input?.cc || '').toUpperCase();
+  if (!/^[A-Z0-9-]{3,8}$/.test(code) || !/^[A-Z]{2}$/.test(cc) || !Array.isArray(input?.runways)) throw Object.assign(new Error('Invalid runways.'), { status: 400 });
+  await ensure(env);
+  const key = 'osmrw:' + code, row = await env.DB.prepare('SELECT v FROM flight_kv WHERE k=?').bind(key).first();
+  if (row) { try { const c = JSON.parse(row.v); if (c.runways.length && Date.now() - c.t < 30 * DAY) return { ok: true, kept: c.runways.length }; } catch { } }
+  const rows = (await loadRows(cc))?.[code] || [];
+  if (!rows.length) return { ok: false };
+  const clean = input.runways.slice(0, 24).map(o => ({
+    ref: String(o?.ref || '').slice(0, 12), width: Number.isFinite(+o?.width) && o.width > 5 && o.width < 120 ? Math.round(o.width * 10) / 10 : null,
+    surface: String(o?.surface || '').slice(0, 20), area: !!o?.area,
+    pts: (Array.isArray(o?.pts) ? o.pts : []).slice(0, 400).map(p => [+(+p?.[0]).toFixed(7), +(+p?.[1]).toFixed(7)]).filter(p => Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180)
+  })).filter(o => o.pts.length >= 2 && !o.area);
+  const kept = clean.filter(o => { const a = o.pts[0], b = o.pts[o.pts.length - 1]; return rows.some(r => { const le = [r[2], r[3]], he = [r[4], r[5]]; return (mDist(a, le) < 250 && mDist(b, he) < 250) || (mDist(a, he) < 250 && mDist(b, le) < 250); }); });
+  if (!kept.length) return { ok: false };
+  await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(key, JSON.stringify({ t: Date.now(), runways: kept, from: 'client' })).run();
+  return { ok: true, kept: kept.length };
+}

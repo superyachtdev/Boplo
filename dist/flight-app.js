@@ -2285,7 +2285,7 @@
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=21', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=22', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2416,6 +2416,8 @@
       const fillRw = async () => {
         const c = upper(inp.value).split(/[\s·]/)[0]; ui.sim.prAp = c; const ap = afs.find(a => a.code === c) || (c ? await anyAirfield(c) : null);
         sel.innerHTML = '<option value="">Longest runway</option>'; if (!ap) return;
+        // start the exact-runway lookup now, while the student is still choosing, so the sim has it when it opens
+        loadSimLib().then(S => S.prefetch?.({ code: ap.code, lat: ap.lat, lng: ap.lng, cc: ap.cc || cc })).catch(() => { });
         const rows = ((await fetch(`/runways/${ap.cc || cc}.json`).then(r => r.ok ? r.json() : {}).catch(() => ({}))).rows || {})[ap.code] || [];
         const ends = rows.length ? rows.flatMap(r => [[r[0], r[6]], [r[1], r[6]]]) : (ap.runways || []).flatMap(r => String(r[0] || '').split('/').map(x => [x, r[1]]));
         sel.innerHTML += ends.filter(x => x[0]).map(([id, l]) => `<option value="${esc(id)}" ${ui.sim.prRw === id ? 'selected' : ''}>Runway ${esc(id)}${l ? ` · ${Math.round(l)} m` : ''}</option>`).join('');

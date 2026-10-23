@@ -124,6 +124,28 @@ window.BoploSim = (() => {
 
   /* ---------------- runways: real geometry from OurAirports, drawn by us ---------------- */
   const rwCache = {};
+  /* ---- OpenStreetMap runway geometry (see airportRunways) ---- */
+  const osmKey = code => 'boplo-osmrw:' + code, osmPending = {};
+  // cached runways (14 days), or a cached "OSM has none here" (2 days); null when we don't know yet
+  const osmCached = code => { try { const c = JSON.parse(localStorage.getItem(osmKey(code)) || 'null'); if (c && Array.isArray(c.r) && Date.now() - c.t < (c.r.length ? 14 : 2) * 864e5) return c.r; } catch { } return null; };
+  function fetchOSM(ap) {
+    if (!ap?.code || !Number.isFinite(ap.lat)) return Promise.resolve([]);
+    const hit = osmCached(ap.code); if (hit) return Promise.resolve(hit);
+    if (osmPending[ap.code]) return osmPending[ap.code];
+    const save = r => { try { localStorage.setItem(osmKey(ap.code), JSON.stringify({ t: Date.now(), r })); } catch { } return r; };
+    const q = `[out:json][timeout:25];way["aeroway"="runway"](around:4000,${ap.lat.toFixed(5)},${ap.lng.toFixed(5)});out geom tags;`;
+    const shape = j => (j.elements || []).filter(e => e.type === 'way' && e.geometry?.length >= 2).map(e => { const g = e.geometry.map(p => [p.lat, p.lon]), t = e.tags || {}; let w = parseFloat(t.width); if (/ft|'/.test(String(t.width))) w *= .3048; return { ref: t.ref || '', width: w > 5 && w < 120 ? w : null, surface: t.surface || '', area: (g.length > 3 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1]) || t.area === 'yes', pts: g }; });
+    // Overpass straight from the browser (it often refuses Cloudflare), trying the main server and a mirror; when it
+    // works, share it with Boplo's server so the next pilot at this airfield gets it instantly
+    const direct = url => fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q) }).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(shape)
+      .then(r => { if (r.length && ap.cc) fetch('/flight/runways/osm', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: ap.code, cc: ap.cc, runways: r }) }).catch(() => { }); return r; });
+    return osmPending[ap.code] = new Promise(res => {
+      let left = 3, emptyOK = false; const done = (r, ok) => { if (left < 0) return; if (r?.length) { left = -9; res(save(r)); return; } if (ok) emptyOK = true; if (--left === 0) { delete osmPending[ap.code]; res(emptyOK ? save([]) : []); } };
+      fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : {}).then(j => done(j.runways, !j.unavailable && Array.isArray(j.runways))).catch(() => done(null));
+      direct('https://overpass-api.de/api/interpreter').then(r => done(r, true)).catch(() => done(null));
+      direct('https://maps.mail.ru/osm/tools/overpass/api/interpreter').then(r => done(r, true)).catch(() => done(null));
+    });
+  }
   const loadRunways = cc => !cc || !/^[A-Z]{2}$/.test(cc) ? Promise.resolve({}) : (rwCache[cc] ||= fetch(`/runways/${cc}.json`).then(r => r.ok ? r.json() : { rows: {} }).then(d => d.rows || {}).catch(() => ({})));
   const PAVED = s => s === 'asphalt' || s === 'concrete' || s === 'other' || !s;
   // ICAO threshold stripe count by runway width
@@ -493,6 +515,7 @@ window.BoploSim = (() => {
   /* ================= open ================= */
   async function open(opts) {
     loadCSS();
+    const cesiumP = loadCesium(); cesiumP.catch(() => { }); // download the 3D engine while the runways are worked out
     const old = document.getElementById('sim');
     if (old) { if (old.open) old.close(); old.removeAttribute('id'); setTimeout(() => old.remove(), 0); }
     const dlg = document.createElement('dialog'); dlg.id = 'sim'; dlg.setAttribute('aria-label', 'Flight simulator'); document.body.append(dlg);
@@ -534,20 +557,8 @@ window.BoploSim = (() => {
     const PR = O.practice || null, PRF = PR && (PR.kind === 'long' || PR.kind === 'short');
     // runway positions from OpenStreetMap (traced from imagery), which line up with the scenery far better than
     // OurAirports' runway ends; cached on the server and in the browser, with a short timeout so loading never waits long
-    const osmFor = ap => {
-      const k = 'boplo-osmrw:' + ap.code;
-      try { const c = JSON.parse(localStorage.getItem(k) || 'null'); if (c && Date.now() - c.t < 7 * 864e5) return Promise.resolve(c.r); } catch { }
-      // straight from Overpass when the server can't reach it (same query, same shape)
-      const direct = () => fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(`[out:json][timeout:10];way["aeroway"="runway"](around:4000,${ap.lat.toFixed(5)},${ap.lng.toFixed(5)});out geom tags;`) })
-        .then(r => r.ok ? r.json() : { elements: [] }).then(j => (j.elements || []).filter(e => e.type === 'way' && e.geometry?.length >= 2).map(e => { const g = e.geometry.map(p => [p.lat, p.lon]), t = e.tags || {}; let w = parseFloat(t.width); if (/ft|'/.test(String(t.width))) w *= .3048; return { ref: t.ref || '', width: w > 5 && w < 120 ? w : null, surface: t.surface || '', area: (g.length > 3 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1]) || t.area === 'yes', pts: g }; }));
-      const save = r => { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), r })); } catch { } return r; };
-      return new Promise(res => {
-        let left = 2; const done = r => { if (r?.length) { res(save(r)); left = -9; } else if (--left === 0) res([]); };
-        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : {}).then(j => done(j.runways)).catch(() => done(null));
-        direct().then(done).catch(() => done(null));
-        setTimeout(() => res([]), 8000);
-      });
-    };
+    // a lookup the simulator page started early is reused; otherwise wait up to 12 s on a first visit
+    const osmFor = ap => { const c = osmCached(ap.code); if (c) return Promise.resolve(c); return Promise.race([fetchOSM(ap), new Promise(res => setTimeout(() => res([]), 12000))]); };
     const normId = id => String(id || '').toUpperCase().trim().replace(/^0+(?=\d)/, '');
     // the centreline of an OSM runway: a line way end to end, or the long axis of a runway drawn as an area
     const osmAxis = o => {
@@ -653,7 +664,7 @@ window.BoploSim = (() => {
 
     /* ---- 3D scenery (CesiumJS) ---- */
     let C;
-    try { C = await loadCesium(); } catch (e) { fail(e.message); wireX(); return { close: destroy }; }
+    try { C = await cesiumP; } catch (e) { fail(e.message); wireX(); return { close: destroy }; }
     if (!alive) return { close: destroy };
     const startLL = F.ll(P[0][0], P[0][1]);
     try {
@@ -1570,5 +1581,5 @@ window.BoploSim = (() => {
     return { close: destroy };
   }
 
-  return { open };
+  return { open, prefetch: fetchOSM };
 })();

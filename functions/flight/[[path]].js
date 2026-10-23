@@ -1,4 +1,4 @@
-import { osmRunways } from '../lib/osmrunways.js';
+import { osmRunways, contributeOSM } from '../lib/osmrunways.js';
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
@@ -54,6 +54,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null)),plan=effectivePlan(env,brow);
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Start a free trial from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
+ if(path==='runways/osm'&&request.method==='POST')return json(await contributeOSM(env,await body(),async cc=>{try{const r=await (env.ASSETS?env.ASSETS.fetch(new Request(url.origin+'/runways/'+cc+'.json')):fetch(url.origin+'/runways/'+cc+'.json'));return r.ok?(await r.json()).rows:{};}catch{return {};}}));
  if(path==='workspace'&&request.method==='GET'){
  const profile=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();
  const records=await env.DB.prepare('SELECT id,data FROM flight_records WHERE user_id=? ORDER BY created_at DESC').bind(user.id).all();
