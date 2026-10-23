@@ -197,3 +197,13 @@ Built from market research: students quit over cost overruns, lost momentum and 
 - Active **monthly** subscribers get a "Switch to yearly and save $43.89" tile on Plan & billing. It confirms in a sheet, then calls `POST /flight/billing/switch` (`switchInterval` in functions/lib/billing.js):
   - During a trial it swaps the price with no charge, and the trial carries on.
   - Otherwise Stripe charges the year now, minus a credit for the unused part of the month (`proration_behavior: always_invoice`). If the card is declined, the switch is refused and nothing changes (`payment_behavior: error_if_incomplete`).
+
+## FAA question bank
+- `flight-questions.js` exports `forRegime(r)`. FAA students (`regimeOf(profile) === 'faa'`) get 11 FAA-style subjects in place of the 9 EASA ones:
+  - Regulations; Airspace and VFR minimums; Airport operations; Flight operations; Right of way and signals; Weather and weather services; Radio communications; Aerodynamics; Performance and W&B; Systems and instruments; Navigation; Aeromedical and ADM.
+- The FAA bank is the shared questions plus 61 FAA-only ones (`FAA_Q`, ids `f-…`), 201 in total. The FAA-only questions cite 14 CFR 61 and 91, 49 CFR 830 and the AIM.
+- `NOT_FAA` hides 7 ICAO/UK-only questions: CAVOK, hPa-only answers, QNH wording, "affirm", the metric chart scale, and transmitting blind.
+- Shared questions are shown to FAA students with US spelling and terms (airplane, airport, carburetor, takeoff…).
+- In flight-app.js, `QB` is now a regime-aware view (`qbNow()`). Saved study progress is keyed by question id, so switching regime keeps it.
+- The landing hero says "For student pilots training under the FAA, UK CAA or EASA."
+- The questions are still early-access and unreviewed. Get a US CFI to review the FAA set before marketing hard in the US.

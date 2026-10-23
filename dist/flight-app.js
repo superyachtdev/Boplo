@@ -1483,7 +1483,10 @@
   }
 
   /* ================= study ================= */
-  const QB = window.BOPLO_QUESTIONS;
+  // the question bank follows the student's licensing system: FAA students get FAA subjects and questions
+  const QB0 = window.BOPLO_QUESTIONS, qbCache = {};
+  const qbNow = () => { const r = regimeOf(state.profile) === 'faa' ? 'faa' : 'icao'; return qbCache[r] || (qbCache[r] = QB0.forRegime ? QB0.forRegime(r) : QB0); };
+  const QB = QB0 && { get status() { return QB0.status; }, get reviewed() { return QB0.reviewed; }, passMark: r => QB0.passMark(r), get subjects() { return qbNow().subjects; }, get questions() { return qbNow().questions; } };
   const studyOf = p => readJSON(p.study, {});
   let quiz = null;
   // spaced repetition (Leitner boxes): each question keeps [right, seen, box, dueDay]. Right moves it up a box, wrong sends it back to box 1.
