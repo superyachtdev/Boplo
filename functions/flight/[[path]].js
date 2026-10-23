@@ -1,3 +1,4 @@
+import { osmRunways } from '../lib/osmrunways.js';
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
@@ -43,6 +44,7 @@ export async function onRequest({request,env,waitUntil}) {
  if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(path==='cal/feed.ics'&&request.method==='GET')return await calFeed(url,env);
+ if(path==='runways/osm'&&request.method==='GET'){const r=await osmRunways(env,url.searchParams.get('code'),url.searchParams.get('lat'),url.searchParams.get('lng'));return new Response(JSON.stringify(r),{headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=86400'}});}
  if(path==='simkey'&&request.method==='GET')return json({key:env.GOOGLE_MAPS_BROWSER_KEY||''});
  const token=(request.headers.get('Cookie')||'').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1];
  if(!token)fail(401,'Sign in to open your flight desk.');

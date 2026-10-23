@@ -532,10 +532,58 @@ window.BoploSim = (() => {
     const windFrom = O.wind && O.wind.spd >= 5 ? O.wind.dir * D2R : null;
     // practice mode at any airport: { kind: 'takeoff' | 'circuit' | 'long' | 'short', end: runway end ident }
     const PR = O.practice || null, PRF = PR && (PR.kind === 'long' || PR.kind === 'short');
+    // runway positions from OpenStreetMap (traced from imagery), which line up with the scenery far better than
+    // OurAirports' runway ends; cached on the server and in the browser, with a short timeout so loading never waits long
+    const osmFor = ap => {
+      const k = 'boplo-osmrw:' + ap.code;
+      try { const c = JSON.parse(localStorage.getItem(k) || 'null'); if (c && Date.now() - c.t < 7 * 864e5) return Promise.resolve(c.r); } catch { }
+      return Promise.race([
+        fetch(`/flight/runways/osm?code=${encodeURIComponent(ap.code)}&lat=${ap.lat.toFixed(5)}&lng=${ap.lng.toFixed(5)}`).then(r => r.ok ? r.json() : { runways: [] })
+          .then(j => { const r = j.runways || []; if (!j.unavailable) try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), r })); } catch { } return r; }).catch(() => []),
+        new Promise(res => setTimeout(() => res([]), 6000))]);
+    };
+    const normId = id => String(id || '').toUpperCase().trim().replace(/^0+(?=\d)/, '');
+    // the centreline of an OSM runway: a line way end to end, or the long axis of a runway drawn as an area
+    const osmAxis = o => {
+      const q = o.pts.map(([la, ln]) => F.to(la, ln));
+      if (!o.area) return { A: q[0], B: q[q.length - 1], wid: o.width };
+      const v = q.slice(0, -1), n = v.length, cx = v.reduce((a, p) => a + p[0], 0) / n, cz = v.reduce((a, p) => a + p[1], 0) / n;
+      let sxx = 0, szz = 0, sxz = 0; for (const [x, z] of v) { sxx += (x - cx) ** 2; szz += (z - cz) ** 2; sxz += (x - cx) * (z - cz); }
+      const th = .5 * Math.atan2(2 * sxz, sxx - szz), d = [Math.cos(th), Math.sin(th)], pr = v.map(([x, z]) => (x - cx) * d[0] + (z - cz) * d[1]), wd = v.map(([x, z]) => -(x - cx) * d[1] + (z - cz) * d[0]);
+      const lo = Math.min(...pr), hi = Math.max(...pr);
+      return { A: [cx + d[0] * lo, cz + d[1] * lo], B: [cx + d[0] * hi, cz + d[1] * hi], wid: o.width || (Math.max(...wd) - Math.min(...wd)) };
+    };
+    function alignToOSM(list, osm, ap) {
+      const ax = osm.map(o => ({ o, ...osmAxis(o), ids: String(o.ref || '').toUpperCase().split(/[\/\-]/).map(normId).filter(Boolean), raw: String(o.ref || '').toUpperCase().split(/[\/\-]/).map(x => x.trim()).filter(Boolean) })).filter(a => dist2(a.A, a.B) > 120);
+      const used = new Set();
+      for (const rw of list) {
+        const dir = unit(rw.A, rw.B), mid = add(rw.A, dir, rw.len / 2);
+        let best = null, bs = Infinity;
+        for (const a of ax) {
+          if (used.has(a)) continue;
+          const ad = unit(a.A, a.B), ang = Math.acos(clamp(Math.abs(ad[0] * dir[0] + ad[1] * dir[1]), 0, 1)) * R2D, am = add(a.A, ad, dist2(a.A, a.B) / 2), md = dist2(am, mid);
+          const refOK = a.ids.includes(normId(rw.le)) && a.ids.includes(normId(rw.he));
+          if (ang > (refOK ? 20 : 10) || md > (refOK ? 1200 : 600)) continue;
+          const sc = md + ang * 40 - (refOK ? 800 : 0); if (sc < bs) { bs = sc; best = a; }
+        }
+        if (!best) continue;
+        used.add(best);
+        const [A, B] = dist2(best.A, rw.A) <= dist2(best.B, rw.A) ? [best.A, best.B] : [best.B, best.A];
+        rw.A = A; rw.B = B; rw.len = dist2(A, B); if (best.wid > 5) rw.wid = clamp(best.wid, 10, 75); rw.osm = true; rw.approx = 0;
+      }
+      // a runway OSM knows about that the runway list doesn't (common at small strips): add it from its ref
+      if (!list.length) for (const a of ax) {
+        if (used.has(a) || a.ids.length < 2) continue;
+        const hdgAB = norm360(Math.atan2(a.B[0] - a.A[0], a.B[1] - a.A[1]) * R2D), n1 = parseInt(a.ids[0], 10) * 10;
+        const [A, B] = Number.isFinite(n1) && Math.abs(wrap180(hdgAB - n1)) > 90 ? [a.B, a.A] : [a.A, a.B], len = dist2(A, B), surf = /grass|turf|ground|dirt|earth/.test(a.o.surface) ? 'grass' : a.o.surface ? 'asphalt' : 'grass';
+        list.push({ A, B, len, wid: clamp(a.wid || (PAVED(surf) ? 23 : 18), 10, 75), le: a.raw[0], he: a.raw[1], surf, lit: 0, leD: 0, heD: 0, approx: 0, osm: true, code: ap.code });
+      }
+    }
     async function airportRunways(ap) {
       if (!ap || !Number.isFinite(ap.lat)) return null;
-      const C0 = F.to(ap.lat, ap.lng), rows = (await loadRunways(ap.cc))[ap.code] || [];
+      const C0 = F.to(ap.lat, ap.lng), [all, osm] = await Promise.all([loadRunways(ap.cc), osmFor(ap)]), rows = all[ap.code] || [];
       const list = rows.map(r => { const A = F.to(r[2], r[3]), B = F.to(r[4], r[5]), len = dist2(A, B); return len < 120 ? null : { A, B, len, wid: clamp(r[7] || (PAVED(r[8]) ? (len > 1800 ? 45 : len > 1100 ? 30 : 23) : 18), 10, 75), le: r[0], he: r[1], surf: r[8], lit: r[9], leD: r[10] || 0, heD: r[11] || 0, approx: r[12], code: ap.code }; }).filter(Boolean);
+      try { if (osm?.length) alignToOSM(list, osm, ap); } catch (e) { console.warn('osm runways', e); }
       return { ap, C0, list };
     }
     const [depR, arrR0] = await Promise.all([airportRunways(O.depAirport), O.arrAirport && O.depAirport && O.arrAirport.code === O.depAirport.code ? null : airportRunways(O.arrAirport)]);
@@ -658,6 +706,10 @@ window.BoploSim = (() => {
     const WX = O.weather || {};
     const visM = clamp(WX.visM || 30000, 800, 60000);
     scene.fog.density = clamp(2.4 / visM, 5e-5, 2.2e-3); scene.fog.minimumBrightness = TOD === 'night' ? .05 : .3;
+    // objects the ground sampler must ignore. Points, lines and labels are picked as their own items, not as their
+    // collection, so each one is tagged with UI and the tag is excluded too.
+    const UI = 'boplo-sim-ui', exclude = [UI];
+    const tagged = col => { const a = col.add.bind(col); col.add = (o = {}) => a({ id: UI, ...o }); return col; };
     const cloudLayers = (WX.clouds || []).filter(c => /FEW|SCT|BKN|OVC|VV/.test(c.cover) && Number.isFinite(+c.base)).slice(0, 3);
     let cloudCol = null; const cloudCells = [];
     try {
@@ -697,11 +749,11 @@ window.BoploSim = (() => {
       if (TOD !== 'day') { model.color = new C.Color(LIGHT[0] * 1.3, LIGHT[1] * 1.3, LIGHT[2] * 1.3, 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; }
       model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
-    const lights = scene.primitives.add(new C.PointPrimitiveCollection());
+    const lights = tagged(scene.primitives.add(new C.PointPrimitiveCollection()));
     const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
     const beacon = lights.add({ color: C.Color.fromCssColorString('#ff2a1f'), pixelSize: 7, show: false }), landL = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false }), landR = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false });
     let landingLights = O.mode === 'replay';
-    const lines = scene.primitives.add(new C.PolylineCollection());
+    const lines = tagged(scene.primitives.add(new C.PolylineCollection()));
     const flownLine = lines.add({ positions: [], width: 2.5, material: C.Material.fromType('Color', { color: new C.Color(1, .82, .29, .65) }) });
     const gatePool = Array.from({ length: 20 }, () => lines.add({ positions: [], width: 3, show: false, material: C.Material.fromType('Color', { color: new C.Color(1, 1, 1, .5) }) }));
     // dashed route line draped on the ground or the 3D city
@@ -709,8 +761,8 @@ window.BoploSim = (() => {
     try {
       routeGround = scene.groundPrimitives.add(new C.GroundPolylinePrimitive({ geometryInstances: new C.GeometryInstance({ geometry: new C.GroundPolylineGeometry({ positions: P.map(p => LLH(p[0], p[1], 0)), width: 3.5 }) }), appearance: new C.PolylineMaterialAppearance({ material: C.Material.fromType('PolylineDash', { color: new C.Color(1, 1, 1, .7), gapColor: C.Color.TRANSPARENT, dashLength: 22 }) }), asynchronous: true }));
     } catch { }
-    const labels = scene.primitives.add(new C.LabelCollection());
-    const exclude = [model, lights, lines, labels, routeGround].filter(Boolean);
+    const labels = tagged(scene.primitives.add(new C.LabelCollection()));
+    exclude.push(...[model, lights, lines, labels, routeGround].filter(Boolean));
 
     // ground height under a point: rendered 3D tiles, or the terrain globe
     const gcache = new Map();
@@ -778,6 +830,7 @@ window.BoploSim = (() => {
      for (const r of rwSt) {
       try {
         if (r.prim) { scene.primitives.remove(r.prim); const i = exclude.indexOf(r.prim); if (i >= 0) exclude.splice(i, 1); r.prim = null; }
+        if (tileset && r.rw.osm) continue;
         const n = r.n, pos = new Float64Array(n * 6), nor = new Float32Array(n * 6), sts = new Float32Array(n * 4), idx = new Uint16Array((n - 1) * 6);
         for (let i = 0; i < n; i++) {
           const c = add(r.rw.A, r.f, r.rw.len * i / (n - 1));
@@ -791,7 +844,7 @@ window.BoploSim = (() => {
      }
     }
     // airport lighting: edge, threshold and end lights on every runway; approach lights and a PAPI on the arrival runway
-    const rwLights = scene.primitives.add(new C.PointPrimitiveCollection()); exclude.push(rwLights);
+    const rwLights = tagged(scene.primitives.add(new C.PointPrimitiveCollection())); exclude.push(rwLights);
     const LS = { near: new C.NearFarScalar(150, 1.5, 9000, .45), fade: new C.NearFarScalar(4000, 1, 16000, 0) };
     const W_ = C.Color.fromCssColorString('#FFF4D6'), GRN = C.Color.fromCssColorString('#46FF8A'), RED = C.Color.fromCssColorString('#FF3B30'), PW = C.Color.fromCssColorString('#FFFFFF');
     let papi = [], rabbit = []; const lightScale = TOD === 'night' ? 1.6 : TOD === 'golden' ? 1.25 : 1; if (TOD === 'night') LS.fade = new C.NearFarScalar(8000, 1, 30000, 0);
@@ -823,6 +876,10 @@ window.BoploSim = (() => {
     drawRunways(); buildRunwayLights();
     const shiftRunways = d => { if (!rwSt.length || !d) return; rwSt.forEach(r => { r.h = r.h.map(v => v + d); }); drawRunways(); buildRunwayLights(); };
     if (rwSt.length) { const a = rwHeight(P[0][0], P[0][1]); if (a != null && depE) g0 = a; const b = rwHeight(landPt[0], landPt[1]); if (b != null && arrE) g1 = b; }
+    // Google tiles are heights above the ellipsoid: the gap to the published field elevation is the local geoid, which
+    // the altimeter has to take off. Measure it on a runway (not under the aircraft, which may be miles out on final).
+    const geoFrom = (E, ft) => { if (!tileset || !E || ft == null) return null; const r = rwSt.find(q => q.rw === E.rw); if (!r || r.pending) return null; const h = rwHeight(...add(E.T, E.dir, Math.min(150, E.rw.len / 4))); if (h == null) return null; const n = h - .35 - ft * FT; return Math.abs(n) < 110 ? n : null; };
+    { const n = geoFrom(depE, O.fromElevFt) ?? geoFrom(arrE, O.toElevFt); if (n != null) { geoN = n; datumFixed = true; } }
     // labels: route waypoints and nearby airfields
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
@@ -994,6 +1051,7 @@ window.BoploSim = (() => {
       sync(); path.reset(); path.seed(s);
     }
     const replay = O.mode === 'replay';
+    const INHG = /^(US|CA)$/.test(O.country || '');
     place(0, !groundStart);
 
     /* ---- input ---- */
@@ -1156,7 +1214,8 @@ window.BoploSim = (() => {
       if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + 120); }
       if (!replay && AP.alt != null) ta = AP.alt * FT + geoN;
       t.alt = ta;
-      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1); if (st.agl < 5) t.phase = 'flare'; }
+      // on the approach the autopilot adds flap as it gets closer, but never takes away flap you already have
+      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < 5) t.phase = 'flare'; }
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
       flareNow = t.phase === 'flare';
@@ -1228,7 +1287,7 @@ window.BoploSim = (() => {
         const [cx2, cz2] = path.at(pr.s + 400), crs = norm360(Math.atan2(cx2 - st.x, cz2 - st.z) * R2D);
         drawSixPack(H.six, { ias: st.v / KT, pitch: st.pitch, bank: st.bank, altFt: (st.alt - geoN) / FT, vsFpm: st.vs / FT * 60, hdg: st.hdg, turn: fs.turn || 0, slip: fs.slip || 0,
           bug: AP.hdg != null && apOn ? AP.hdg : null, crs: replay || AP.nav ? crs : null, dev: (pr.side > 0 ? 1 : -1) * pr.d / NM / (circuit ? .5 : 2),
-          vs: FM.p.vs, vso: FM.p.vso || FM.p.vs, vfe: FM.p.vfe, vno: FM.p.vno, vne: FM.p.vne, qnh: '1013', rpm: fs.rpm, thr: fs.power, flaps: FM.notches > 1 ? FM.flapLabel() : '—', trim: fc.trim,
+          vs: FM.p.vs, vso: FM.p.vso || FM.p.vs, vfe: FM.p.vfe, vno: FM.p.vno, vne: FM.p.vne, qnh: INHG ? '29.92' : '1013', rpm: fs.rpm, thr: fs.power, flaps: FM.notches > 1 ? FM.flapLabel() : '—', trim: fc.trim,
           park: fc.parking, brake: fc.brake > .05, carb: fc.carbHeat, autoRud: fc.autoRudder, stall: st.stall, ap: apOn });
       }
       if (apOn && !replay) { apT = (apT || 0) + 1; if (apT % 10 === 0) apUI(); }
@@ -1238,7 +1297,7 @@ window.BoploSim = (() => {
         if (st.ground && fc.parking && thrTarget > .2) tip = coarse ? 'The parking brake is on: tap Park to release it' : 'The parking brake is on: press Shift+B to release it';
         else if (st.ground && !st.landedOnce && st.thr < .5) tip = coarse ? 'Push the power slider up to start your take-off roll' : 'Add power: hold R, or press 0 for full power';
         else if (st.ground && !st.landedOnce && vk > PF.vr - 12) tip = coarse ? 'Gently pull the stick back to lift off' : `Gently hold ↓ (or S) to lift off at about ${PF.vr} kt`;
-        else if (!st.ground && st.t < 60 && st.agl < 200) tip = 'Climb towards the first gate';
+        else if (!st.ground && !PRF && depE && st.t < 60 && st.agl < 200) tip = 'Climb towards the first gate';
         else if (!st.ground && landEnd && L - pr.s < 2500 && L - pr.s > 300) tip = 'Line up with the route, reduce power and descend gently to land';
       }
       if (tip !== tipText) { tipText = tip; tipEl.textContent = tip; tipEl.classList.toggle('on', !!tip); }

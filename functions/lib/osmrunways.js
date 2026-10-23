@@ -1,0 +1,37 @@
+// Runway geometry from OpenStreetMap (ODbL), for the simulator. OurAirports runway ends are often tens of metres out,
+// which puts the drawn runway beside the real one in the photo scenery; OSM runway ways are traced from imagery.
+// Results are cached in D1 (flight_kv) so each airfield costs Overpass one query a month.
+const MIRRORS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+const DAY = 864e5;
+let ready = null;
+const ensure = env => ready || (ready = env.DB.prepare('CREATE TABLE IF NOT EXISTS flight_kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)').run().catch(e => { ready = null; throw e; }));
+const num = v => { const n = parseFloat(String(v || '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+export function shapeOSM(elements) {
+  return (elements || []).filter(e => e.type === 'way' && Array.isArray(e.geometry) && e.geometry.length >= 2).map(e => {
+    const g = e.geometry.map(p => [+p.lat.toFixed(7), +p.lon.toFixed(7)]), t = e.tags || {};
+    const closed = g.length > 3 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1];
+    let w = num(t.width); if (w != null && /ft|'/.test(String(t.width))) w *= .3048;
+    return { ref: String(t.ref || '').slice(0, 12), width: w != null && w > 5 && w < 120 ? Math.round(w * 10) / 10 : null, surface: String(t.surface || '').slice(0, 20), area: closed || t.area === 'yes', pts: g };
+  }).slice(0, 24);
+}
+export async function osmRunways(env, code, lat, lng, fetcher = fetch) {
+  code = String(code || '').toUpperCase(); lat = +lat; lng = +lng;
+  if (!/^[A-Z0-9-]{3,8}$/.test(code) || !(Math.abs(lat) <= 90) || !(Math.abs(lng) <= 180)) throw Object.assign(new Error('Unknown airfield.'), { status: 400 });
+  await ensure(env);
+  const key = 'osmrw:' + code, row = await env.DB.prepare('SELECT v FROM flight_kv WHERE k=?').bind(key).first();
+  if (row) { try { const c = JSON.parse(row.v); if (Date.now() - c.t < (c.runways.length ? 30 : 2) * DAY) return { runways: c.runways, cached: true }; } catch { } }
+  const q = `[out:json][timeout:12];way["aeroway"="runway"](around:4000,${lat.toFixed(5)},${lng.toFixed(5)});out geom tags;`;
+  let runways = null;
+  for (const url of MIRRORS) {
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 9000);
+      const r = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'BoploFlight/1.0 (boplo.app)' }, body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      runways = shapeOSM((await r.json()).elements); break;
+    } catch { }
+  }
+  if (!runways) { if (row) { try { return { runways: JSON.parse(row.v).runways, cached: true, stale: true }; } catch { } } return { runways: [], unavailable: true }; }
+  await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(key, JSON.stringify({ t: Date.now(), runways })).run();
+  return { runways };
+}
