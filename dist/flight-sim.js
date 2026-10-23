@@ -1091,7 +1091,8 @@ window.BoploSim = (() => {
 
     /* ---- input ---- */
     const keys = new Set(), ctl = { roll: 0, pitch: 0, yaw: 0 };
-    let showGates = !replay && store.get('gates', true);
+    const gateKey = PRF ? 'gatesFinal' : 'gates';
+    let showGates = !replay && store.get(gateKey, !PRF);
     const CS = Object.assign({ expo: .35, keyRate: 1, centre: true, mouse: false, axes: { roll: 0, pitch: 1, yaw: 2, thr: -1 }, axInv: { roll: false, pitch: false, yaw: false, thr: true } }, store.get('ctl', {}));
     const saveCS = () => store.set('ctl', CS);
     let mouseV = null;
@@ -1126,7 +1127,7 @@ window.BoploSim = (() => {
       if (k === 'k') { openSet(); return; }
       if (k === 'y' && !replay) { CS.mouse = !CS.mouse; saveCS(); syncSet(); tipNow = CS.mouse ? 'Mouse yoke on: move the mouse to fly' : 'Mouse yoke off'; tipUntil = performance.now() + 1800; return; }
       if (k === 'escape' && !$('[data-set]').hidden) { $('[data-set]').hidden = true; e.stopImmediatePropagation(); return; }
-      if (k === 'j') { showGates = !showGates; store.set('gates', showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
+      if (k === 'j') { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
       if (/^[0-9]$/.test(k) && !replay) { thrTarget = k === '0' ? 1 : +k / 10; return; }
       keys.add(k);
     });
@@ -1254,6 +1255,7 @@ window.BoploSim = (() => {
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
       flareNow = t.phase === 'flare';
+      if (!replay && approach && !st.ground && st.agl < 200 * FT && remain < 2500) { setAP(false); tipNow = 'Autopilot disconnected at 200 ft. You have control: land the aircraft'; tipUntil = performance.now() + 4000; return; }
       BoploPhysics.pilot(FM, t, dt);
       thrTarget = fc.throttle;
     }
@@ -1407,7 +1409,7 @@ window.BoploSim = (() => {
     applyView();
     $('[data-ap]').onclick = () => setAP(!apOn); $('[data-cam]').onclick = cycleCam; $('[data-mute]').onclick = toggleMute; $('[data-pause]').onclick = () => togglePause(); $('[data-play]').onclick = () => togglePause();
     $('[data-mute]').classList.toggle('off', store.get('mute', false));
-    $('[data-gates]').setAttribute('aria-pressed', String(showGates)); $('[data-gates]').onclick = () => { showGates = !showGates; store.set('gates', showGates); $('[data-gates]').setAttribute('aria-pressed', String(showGates)); };
+    $('[data-gates]').setAttribute('aria-pressed', String(showGates)); $('[data-gates]').onclick = () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]').setAttribute('aria-pressed', String(showGates)); };
     if (replay) { $('[data-ap]').hidden = true; $('[data-replaybar]').hidden = false; }
     const rateBtns = () => $$('[data-rate]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rate === rate)));
     $$('[data-rate]').forEach(b => b.onclick = () => { rate = +b.dataset.rate; store.set('rate', rate); rateBtns(); }); rateBtns();
@@ -1588,7 +1590,7 @@ window.BoploSim = (() => {
           if (!landEnd && pr.s > L - 40) { finish('done'); break; }
           if (!st.ground && pr.s >= L - 5 && pr.d > 500) { finish('done'); break; }
         }
-        if (now - lastFlown > 700) { lastFlown = now; flownPts.push(LLH(st.x, st.z, st.alt + 1.5)); if (flownPts.length > 3000) flownPts.shift(); if (flownPts.length > 1) flownLine.positions = flownPts; }
+        if (replay && now - lastFlown > 700) { lastFlown = now; flownPts.push(LLH(st.x, st.z, st.alt + 1.5)); if (flownPts.length > 3000) flownPts.shift(); if (flownPts.length > 1) flownLine.positions = flownPts; }
         audio.update(st.thr, st.v / KT, st.stall && !st.ground, true);
       }
       frameDraw(real);
