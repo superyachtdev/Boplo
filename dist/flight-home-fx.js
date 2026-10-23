@@ -13,6 +13,19 @@
     io.observe(el);
   };
   const glide = (y) => { if (window.__lenis) window.__lenis.scrollTo(y, { duration: 1.6 }); else scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' }); };
+  /* ---- US visitors: FAA wording (certificate, Private Pilot, FAA, K-airports, 40 h minimum) ---- */
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })();
+  const US = /[?&]region=us\b/.test(location.search) || (!/[?&]region=/.test(location.search) && /^(America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Juneau|Sitka|Yakutat|Nome|Adak|Metlakatla|Menominee|Indiana\/.+|Kentucky\/.+|North_Dakota\/.+)|Pacific\/Honolulu)$/.test(tz));
+  if (US) {
+    document.documentElement.dataset.region = 'us';
+    const swaps = [[/PPL\(A\) or LAPL/g, 'a Private or Sport Pilot certificate'], [/a goal of PPL\(A\), LAPL or a next rating/g, 'a goal of Private Pilot, Sport Pilot or a next rating'], [/PPL\(A\)/g, 'Private Pilot'],
+      [/UK CAA/g, 'FAA'], [/45 h goal/g, '40 h goal'], [/EGHP → EGHP/g, 'KPAO → KPAO'], [/EGHP · Popham/g, 'KPAO · Palo Alto'], [/G-BOPL/g, 'N123AB'],
+      [/licences/g, 'certificates'], [/Licences/g, 'Certificates'], [/licence/g, 'certificate'], [/Licence/g, 'Certificate'], [/summarise/g, 'summarize'], [/organised/g, 'organized']];
+    const walk = n => { if (n.nodeType === 3) { let t = n.textContent, o = t; for (const [re, to] of swaps) t = t.replace(re, to); if (t !== o) n.textContent = t; } else if (n.nodeType === 1 && !/^(SCRIPT|STYLE|SVG)$/i.test(n.tagName)) n.childNodes.forEach(walk); };
+    walk(document.body);
+    document.title = document.title.replace(/licence/g, 'certificate');
+    const ring = $('.ring'); if (ring) { ring.style.setProperty('--p', (23.4 / 40).toFixed(3)); ring.setAttribute('aria-label', '23.4 of a 40 hour goal recorded'); }
+  }
   const scrollTasks = [];
   let ticking = false;
   const onScroll = () => { if (ticking) return; ticking = true; requestAnimationFrame(() => { ticking = false; scrollTasks.forEach(f => f()); }); };

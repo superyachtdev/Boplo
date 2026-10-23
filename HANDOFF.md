@@ -254,3 +254,17 @@ Built from market research: students quit over cost overruns, lost momentum and 
   - Spinner, fixed tricycle gear with wheel fairings. The model sits 0.41·scale above the track so the wheels are on the runway.
   - Shading: sun, sky hemisphere, gloss specular and fresnel rim.
   - Extras: an additive spinning propeller disc, a soft ground shadow (cast away from the sun, fading with height), and a red fin-top beacon alongside the nav lights and strobe.
+
+## Company-site polish
+- **Link previews:** `dist/assets/og.png` (1200×630). It's rendered from the real hero scene (aircraft over the chart contours), with the wordmark, "Your training, one lesson at a time." and boplo.app. index.html now has og:image, og:url, og:type, og:site_name and Twitter `summary_large_image` tags. The og/twitter title and description are neutral (no licence/certificate).
+- **Icons:** the electric-blue glossy "b" with its sparkle on navy, replacing the old purple square. Files: `icons/favicon-32.png`, `favicon-64.png` (linked on every page), `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png` (rounded), `icon-maskable-512.png` (full-bleed, 80% safe zone). Generated from `assets/boplo-wordmark-blue-transparent.png`.
+- **US wording:** flight-home-fx.js detects US time zones (or `?region=us`; `?region=gb` forces UK) and swaps:
+  - licence → certificate
+  - PPL(A)/LAPL → Private or Sport Pilot
+  - UK CAA → FAA
+  - the 45 h goal → 40 h, with the ring re-proportioned
+  - EGHP/Popham → KPAO/Palo Alto, G-BOPL → N123AB
+  - summarise/organised → American spellings
+
+  The page title changes too.
+- **Phones:** low-memory (≤3 GB) or ≤4-core phones get the still hero instead of WebGL. On any device, the hero lowers its render resolution in 0.25 steps (to 1×) after ~1.5 s of frames slower than 34 ms.

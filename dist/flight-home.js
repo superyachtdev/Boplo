@@ -157,7 +157,9 @@
   const section = $('[data-flight]');
   const frame = $('.frame', section);
   const canvas = $('[data-canvas]');
-  const gl = !reduce && canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
+  // low-memory or few-core phones get the still version of the hero instead of the 3D flight
+  const lowEnd = matchMedia('(max-width: 820px)').matches && ((navigator.deviceMemory || 8) <= 3 || (navigator.hardwareConcurrency || 8) <= 4);
+  const gl = !reduce && !lowEnd && canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
 
   if (!gl) {
     doc.classList.add('static');
@@ -475,11 +477,11 @@
   });
 
   /* ---------------- sizing ---------------- */
-  let W = 1, H = 1, DPR = 1;
+  let W = 1, H = 1, DPR = 1, dprCap = mobile ? 1.5 : 1.75;
   function resize() {
     const r = frame.getBoundingClientRect();
     W = Math.max(1, r.width); H = Math.max(1, r.height);
-    DPR = Math.min(devicePixelRatio || 1, mobile ? 1.5 : 1.75);
+    DPR = Math.min(devicePixelRatio || 1, dprCap);
     canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
@@ -527,11 +529,14 @@
   let lastStage = -1, lastStop = -1, logged = false, settle = false;
   window.__boploSettle = () => { settle = true; reveal = 1; };
 
+  let slowT = 0;
   function frameLoop(now) {
     requestAnimationFrame(frameLoop);
     lenis && lenis.raf(now);
-    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now;
     if (!visible && started) return;
+    // struggling device: drop the render resolution step by step (keeps the motion smooth)
+    if (started && raw < .5) { slowT = raw > .034 ? slowT + raw : Math.max(0, slowT - raw * .5); if (slowT > 1.5 && dprCap > 1) { dprCap = Math.max(1, dprCap - .25); slowT = 0; resize(); } }
     started = true;
     const time = (now - t0) / 1000;
     reveal = Math.min(1, reveal + dt / 2.6);
