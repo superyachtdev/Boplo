@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=10'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=11'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -399,33 +399,71 @@ window.BoploSim = (() => {
   }
 
   /* ---------------- audio ---------------- */
-  function engineAudio() {
-    let ac, out, eng, eng2, lp, wind, wg, horn, hg, on = false;
+  function engineAudio(jet = false) {
+    let ac, out, eng, eng2, lp, wind, wg, horn, hg, rumble, rg, on = false;
     return {
       start() {
         try {
           ac = new (window.AudioContext || window.webkitAudioContext)(); out = ac.createGain(); out.gain.value = store.get('mute', false) ? 0 : .16; out.connect(ac.destination);
           lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = .7;
           const eg = ac.createGain(); eg.gain.value = .55; lp.connect(eg); eg.connect(out);
-          eng = ac.createOscillator(); eng.type = 'sawtooth'; eng.frequency.value = 40; eng.connect(lp); eng.start();
-          eng2 = ac.createOscillator(); eng2.type = 'square'; eng2.frequency.value = 81; const g2 = ac.createGain(); g2.gain.value = .25; eng2.connect(g2); g2.connect(lp); eng2.start();
+          eng = ac.createOscillator(); eng.type = jet ? 'sine' : 'sawtooth'; eng.frequency.value = 40; eng.connect(lp); eng.start();
+          eng2 = ac.createOscillator(); eng2.type = jet ? 'sine' : 'square'; eng2.frequency.value = 81; const g2 = ac.createGain(); g2.gain.value = .25; eng2.connect(g2); g2.connect(lp); eng2.start();
           const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
           wind = ac.createBufferSource(); wind.buffer = buf; wind.loop = true; const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = .5; wg = ac.createGain(); wg.gain.value = 0; wind.connect(bp); bp.connect(wg); wg.connect(out); wind.start();
+          if (jet) { lp.type = 'bandpass'; lp.Q.value = 1.2; rumble = ac.createBufferSource(); rumble.buffer = buf; rumble.loop = true; rumble.playbackRate.value = .6; const rl = ac.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 380; rg = ac.createGain(); rg.gain.value = 0; rumble.connect(rl); rl.connect(rg); rg.connect(out); rumble.start(); }
           horn = ac.createOscillator(); horn.type = 'triangle'; horn.frequency.value = 1550; hg = ac.createGain(); hg.gain.value = 0; horn.connect(hg); hg.connect(out); horn.start();
           on = true;
         } catch { on = false; }
       },
       update(thr, kt, stall, running) {
         if (!on) return; const t = ac.currentTime, rpm = running ? .35 + thr * .65 : 0;
+        if (jet) { // turbine whine that rises with N1, and a roar that swells with thrust
+          eng.frequency.setTargetAtTime(500 + rpm * 2400, t, .6); eng2.frequency.setTargetAtTime(340 + rpm * 1500, t, .6); lp.frequency.setTargetAtTime(700 + rpm * 2600, t, .6);
+          rg.gain.setTargetAtTime(running ? .25 + thr * 1.1 : 0, t, .5); wg.gain.setTargetAtTime(clamp(kt / 260, 0, 1) * .5, t, .3);
+        } else {
         eng.frequency.setTargetAtTime(28 + rpm * 62, t, .15); eng2.frequency.setTargetAtTime((28 + rpm * 62) * 2.02, t, .15);
         lp.frequency.setTargetAtTime(300 + rpm * 700, t, .2);
         wg.gain.setTargetAtTime(clamp(kt / 130, 0, 1) * .5, t, .3);
+        }
         hg.gain.setTargetAtTime(stall ? .18 : 0, t, .03);
       },
       mute(m) { if (on) out.gain.setTargetAtTime(m ? 0 : .16, ac.currentTime, .05); },
       pause(p) { if (on) (p ? ac.suspend() : ac.resume()).catch(() => { }); },
       stop() { if (on) { try { ac.close(); } catch { } } on = false; }
     };
+  }
+
+  /* ---------------- glass flight display: tapes, compass, side controls and info bar (in the style of mobile flight sims) ---------------- */
+  function pfdHTML(jet) {
+    const sp = [], al = [], rose = [];
+    for (let v = 0; v <= 450; v += 5) { const y = -v * 4; sp.push(`<line x1="${v % 10 ? 50 : 44}" x2="58" y1="${y}" y2="${y}"/>${v % 20 === 0 ? `<text x="38" y="${y + 4}">${v}</text>` : ''}`); }
+    for (let a = -1000; a <= 45000; a += 100) { const y = -a * .4; al.push(`<line x1="0" x2="${a % 500 ? 7 : 14}" y1="${y}" y2="${y}"/>${a % 500 === 0 ? `<text x="20" y="${y + 4}">${a.toLocaleString('en-GB')}</text>` : ''}`); }
+    for (let d = 0; d < 360; d += 5) { const big = d % 10 === 0, lab = d % 30 === 0 ? ({ 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[d] || String(d / 10)) : ''; rose.push(`<g transform="rotate(${d})"><line x1="0" x2="0" y1="-78" y2="${big ? -69 : -73}"/>${lab ? `<text x="0" y="-56">${lab}</text>` : ''}</g>`); }
+    return `<div class="pfd" data-pfd aria-hidden="true">
+      <div class="pfd-tape pfd-spd"><svg viewBox="0 -180 64 360"><defs><clipPath id="pfdcs"><rect x="0" y="-180" width="64" height="360"/></clipPath></defs><g clip-path="url(#pfdcs)"><g data-spdt>${sp.join('')}</g></g></svg><div class="pfd-box"><b data-pspd>0</b></div><small class="pfd-cap">KT IAS</small><small class="pfd-sub" data-pgs>GS 0</small></div>
+      <div class="pfd-tape pfd-alt"><svg viewBox="0 -180 72 360"><defs><clipPath id="pfdca"><rect x="0" y="-180" width="72" height="360"/></clipPath></defs><g clip-path="url(#pfdca)"><g data-altt>${al.join('')}</g><rect data-gndb x="0" y="200" width="72" height="400" class="pfd-gnd"/></g></svg><div class="pfd-box"><b data-palt>0</b></div><small class="pfd-cap">FT MSL</small><small class="pfd-sub" data-pagl>AGL 0</small><div class="pfd-vsi"><i data-pvsi></i><small data-pvs>0</small></div></div>
+      <div class="pfd-rose"><svg viewBox="-82 -82 164 164"><circle r="80" class="pfd-rose-bg"/><g data-rose>${rose.join('')}<path data-rbug d="M0 -80l-5 -0l0 -7h10l0 7z" class="pfd-bug"/><path data-rcrs d="M0 -50L-4 -42H4Z M0 50L-3 44H3Z" class="pfd-crs"/></g><path d="M0 -84l-6 -9h12z" class="pfd-lubber"/><path d="M0 -22L-8 10L0 5L8 10Z" class="pfd-plane"/></svg><b data-phdg>000°</b></div>
+      <div class="pfd-side pfd-left">
+        ${jet ? '<button type="button" class="pfd-btn" data-pf="gear"><span>Gear</span><b data-pfgear>Down</b></button><button type="button" class="pfd-btn" data-pf="spoiler"><span>Spoilers</span><b data-pfsp>Off</b></button>' : ''}
+        <div class="pfd-btn pfd-pair"><span>Trim</span><b data-pftrim>0%</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button></div>
+        <div class="pfd-btn pfd-pair"><span>Flaps</span><b data-pfflaps>UP</b><button type="button" data-pf="flapup" aria-label="Flaps up">−</button><button type="button" data-pf="flapdn" aria-label="Flaps down">+</button></div>
+        <button type="button" class="pfd-btn" data-pf="park"><span>Park brake</span><b data-pfpark>Off</b></button>
+        <button type="button" class="pfd-btn" data-pf="brake"><span>Brakes</span><b>Hold</b></button>
+      </div>
+      <div class="pfd-side pfd-right">
+        <button type="button" class="pfd-btn" data-pf="ap"><span>Autopilot</span><b data-pfap>Off</b></button>
+        <button type="button" class="pfd-btn" data-pf="lights"><span>Lights</span><b data-pflt>Off</b></button>
+        <button type="button" class="pfd-btn" data-pf="gates"><span>Route gates</span><b data-pfgt>Off</b></button>
+        <button type="button" class="pfd-btn" data-pf="cam"><span>Camera</span><b data-pfcam>Chase</b></button>
+        ${jet ? '' : '<button type="button" class="pfd-btn" data-pf="panel"><span>Instruments</span><b>Gauges</b></button>'}
+      </div>
+      <div class="pfd-thr" data-pfthr><span data-pfthrl>${jet ? 'N1' : 'PWR'}</span><div class="pfd-thr-track"><i data-pfthrf></i><b data-pfthrk></b></div><small data-pfthrv>0%</small></div>
+      <div class="pfd-bar">
+        <div><span>Airspeed</span><b data-pb="ias">0 kt</b></div><div><span>Ground speed</span><b data-pb="gs">0 kt</b></div><div><span>Altitude MSL</span><b data-pb="alt">0 ft</b></div><div><span>Altitude AGL</span><b data-pb="agl">0 ft</b></div>
+        <div><span>Heading</span><b data-pb="hdg">000°</b></div><div><span>Vertical speed</span><b data-pb="vs">0 fpm</b></div><div><span>${jet ? 'N1' : 'Engine'}</span><b data-pb="eng">0</b></div><div><span>Next</span><b data-pb="next">—</b></div><div><span>Time to next</span><b data-pb="ete">—</b></div>
+      </div>
+    </div>`;
   }
 
   /* ---------------- HUD markup ---------------- */
@@ -487,6 +525,7 @@ window.BoploSim = (() => {
           <span class="sim-rpm"><b data-rpm>0</b> rpm</span>
         </div>
       </div>
+      ${pfdHTML(!!o.jet)}
       <canvas class="sim-six" data-six aria-hidden="true"></canvas>
       <div class="sim-apbar" data-apbar hidden>
         <button type="button" data-apm="nav" aria-pressed="true">NAV</button>
@@ -520,12 +559,14 @@ window.BoploSim = (() => {
     if (old) { if (old.open) old.close(); old.removeAttribute('id'); setTimeout(() => old.remove(), 0); }
     const dlg = document.createElement('dialog'); dlg.id = 'sim'; dlg.setAttribute('aria-label', 'Flight simulator'); document.body.append(dlg);
     const O = Object.assign({ mode: 'replay', start: 'ground', title: 'Route', subtitle: '', points: [], wind: null, cruiseFt: 0, kind: 'track' }, opts);
+    try { window.BoploJets?.install(); } catch { }
+    O.jet = !!window.BoploAircraft?.isJet?.(O.aircraftId);
     dlg.innerHTML = `<div class="sim">${hudHTML(O)}</div>`;
     dlg.showModal();
     const root = dlg.querySelector('.sim'), $ = s => root.querySelector(s), $$ = s => [...root.querySelectorAll(s)];
     let alive = true, raf = 0, viewer = null;
     const coarse = matchMedia('(pointer: coarse)').matches;
-    const audio = engineAudio();
+    const audio = engineAudio(O.jet);
     const cleanups = [];
     const on = (t, ev, fn, o) => { t.addEventListener(ev, fn, o); cleanups.push(() => t.removeEventListener(ev, fn, o)); };
     function destroy() {
@@ -755,16 +796,16 @@ window.BoploSim = (() => {
     };
 
     // aircraft
-    const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId) : aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
+    const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId, O.livery) : aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
     cleanups.push(() => URL.revokeObjectURL(glbUrl));
     const PF = window.BoploAircraft ? BoploAircraft.model(O.aircraftId) : { vs: 47, vr: 55, appr: 62, cruise: 98, vmax: 115, thrust: 2.645, drag: .0002 };
     AC.groundAtt = AC.groundAtt || 0;
-    let model = null, bladeNode = null, discNode = null; const surfNodes = {}, surfAng = {};
+    let model = null, bladeNode = null, discNode = null, gearNode = null, gearShown = 1; const surfNodes = {}, surfAng = {};
     try {
       model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
       scene.primitives.add(model);
       if (TOD !== 'day') { model.color = new C.Color(LIGHT[0] * 1.3, LIGHT[1] * 1.3, LIGHT[2] * 1.3, 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; }
-      model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
+      model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); gearNode = model.getNode('gear'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
     const lights = tagged(scene.primitives.add(new C.PointPrimitiveCollection()));
     const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
@@ -944,6 +985,8 @@ window.BoploSim = (() => {
         const p = new C.Cartesian3(...sf.pivot), q = C.Quaternion.fromAxisAngle(new C.Cartesian3(...sf.axis), v * D2R);
         node.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(p), C.Matrix4.multiply(C.Matrix4.fromRotationTranslation(C.Matrix3.fromQuaternion(q)), C.Matrix4.fromTranslation(C.Cartesian3.negate(p, new C.Cartesian3())), new C.Matrix4()), new C.Matrix4());
       }
+      // retractable gear: slides up into the body as it retracts and disappears once stowed
+      if (gearNode) { const g = fs.gearPos ?? 1; if (Math.abs(g - gearShown) > .002 || g === 0 || g === 1) { gearShown = g; gearNode.show = g > .04; gearNode.matrix = C.Matrix4.fromTranslation(new C.Cartesian3(0, (1 - g) * AC.wheelDrop * .55, -(1 - g) * 1.2)); } }
       // propeller: spin the blades, fade in the disc at high rpm
       const rpm = fs.rpm || 0;
       propA = (propA + rpm / 60 * 2 * Math.PI * realDt * (rpm > 1200 ? .07 : 1)) % (Math.PI * 2);
@@ -971,7 +1014,7 @@ window.BoploSim = (() => {
       const w = root.clientWidth, h = root.clientHeight, as = w / Math.max(h, 1), fov = camera.frustum.fov;
       const hfov = as >= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) * as);
       const [, kB, kH, depBase] = CAMS[camI];
-      const B0 = clamp(5.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 70), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
+      const B0 = clamp(5.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 170), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
       camH += wrap180(st.hdg - camH) * Math.min(1, dt * (CAMS[camI][0] === 'High' ? 1.2 : 2.6));
       camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
       camD += (depBase - camD) * Math.min(1, dt * 3);
@@ -993,6 +1036,14 @@ window.BoploSim = (() => {
         const upv = [dir[1] * rgt[2] - dir[2] * rgt[1], dir[2] * rgt[0] - dir[0] * rgt[2], dir[0] * rgt[1] - dir[1] * rgt[0]]; // basis is east, up, north (left-handed), as in the flight model
         const dest = LLH(px, pz, py), enu = C.Transforms.eastNorthUpToFixedFrame(dest), toW = v => C.Cartesian3.normalize(C.Matrix4.multiplyByPointAsVector(enu, new C.Cartesian3(v[0], v[2], v[1]), new C.Cartesian3()), new C.Cartesian3());
         camera.setView({ destination: dest, orientation: { direction: toW(dir), up: toW(upv) } });
+      } else if (camName === 'Flyby') {
+        // a camera parked ahead on the flight path, just off to one side: the aircraft flies past it, then it jumps ahead again
+        const ahead = clamp(st.gs * 9, 250, 1600), passed = flyAt && ((st.x - flyAt[0]) * Math.sin(st.trk * D2R) + (st.z - flyAt[1]) * Math.cos(st.trk * D2R)) > ahead * .45;
+        if (!flyAt || passed || Math.hypot(st.x - flyAt[0], st.z - flyAt[1]) > ahead * 2.5) { const tk = st.trk * D2R, off = AC.type.span * 1.6 + 12, c0 = [st.x + Math.sin(tk) * ahead + Math.cos(tk) * off, st.z + Math.cos(tk) * ahead - Math.sin(tk) * off]; flyAt = [c0[0], c0[1], Math.max((elevAt(c0[0], c0[1]) ?? st.gnd) + 2, st.alt - (st.agl > 30 ? 6 : 0) + AC.wheelDrop * .5)]; }
+        const dx = st.x - flyAt[0], dz = st.z - flyAt[1], dy = st.alt + AC.wheelDrop - flyAt[2], dh = Math.max(1, Math.hypot(dx, dz));
+        const fov = clamp(2 * Math.atan(AC.type.span * 1.5 / Math.hypot(dh, dy) / orb.zoom), .12, 1.05);
+        if (Math.abs(camera.frustum.fov - fov) > 1e-4) { camera.frustum.fov = fov; camera.frustum.near = 1; }
+        camera.setView({ destination: LLH(flyAt[0], flyAt[1], flyAt[2]), orientation: { heading: Math.atan2(dx, dz), pitch: Math.atan2(dy, dh), roll: 0 } });
       } else if (camName === 'Tower') {
         // a fixed camera beside the nearest airport (or a fly-by point ahead on the route) that tracks and zooms onto the aircraft
         if (!towerAt || Math.hypot(st.x - towerAt[0], st.z - towerAt[1]) > 7000) {
@@ -1005,6 +1056,7 @@ window.BoploSim = (() => {
         if (Math.abs(camera.frustum.fov - fov) > 1e-4) { camera.frustum.fov = fov; camera.frustum.near = 1; }
         camera.setView({ destination: LLH(towerAt[0], towerAt[1], towerAt[2]), orientation: { heading: Math.atan2(dx, dz), pitch: Math.atan2(dy, dh), roll: 0 } });
       } else {
+        if (camName === 'Orbit' && !paused) orb.yaw = (orb.yaw + dt * 9) % 360;
         if (camera.frustum.fov !== C.Math.toRadians(66)) { camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5; }
         camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
       }
@@ -1098,13 +1150,16 @@ window.BoploSim = (() => {
     let mouseV = null;
     let invert = store.get('invert', false), apOn = replay, paused = true, rate = replay ? store.get('rate', 4) : 1, camI = 0, tilt = null, stickV = null, thrTarget = fc.throttle, rudV = null;
     fc.autoRudder = store.get('autorudder', true);
-    let showSix = store.get('six', !coarse);
+    let showSix = store.get('six2', false); // the glass display is the default; the round gauges are one tap away
     // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
     const AP = { nav: true, hdg: null, alt: null, spd: null };
-    const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Tower', 0, 0, 0], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Flyby', 0, 0, 0], ['Tower', 0, 0, 0], ['Orbit', 1.25, 1.3, 9], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+    let flyAt = null;
     const orb = { yaw: 0, pitch: 0, zoom: 1 }; let towerAt = null;
     const flapStep = d => { if (replay) return; fc.flaps = clamp(fc.flaps + d, 0, FM.notches - 1); tipNow = `Flaps ${FM.flapLabel()}`; tipUntil = performance.now() + 1400; };
     const trimStep = d => { if (replay) return; fc.trim = clamp(fc.trim + d, -1, 1); };
+    const gearToggle = () => { if (replay) return; if (fs.ground && fc.gear) { tipNow = 'The gear stays down on the ground'; tipUntil = performance.now() + 1600; return; } fc.gear = fc.gear ? 0 : 1; tipNow = fc.gear ? 'Gear down' : 'Gear up'; tipUntil = performance.now() + 1400; };
+    const spoilerToggle = () => { if (replay) return; fc.spoiler = fc.spoiler ? 0 : 1; tipNow = fc.spoiler ? 'Spoilers out' : 'Spoilers in'; tipUntil = performance.now() + 1400; };
     on(window, 'keydown', e => {
       if (!alive) return; const k = e.key.toLowerCase();
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -1119,8 +1174,10 @@ window.BoploSim = (() => {
       if ((k === 'v' && !e.shiftKey) || k === ']' || k === 'f7') { flapStep(1); return; }
       if ((k === 'v' && e.shiftKey) || k === '[' || k === 'f6') { flapStep(-1); return; }
       if (k === 'home' || k === 't') { trimStep(.04); return; }
-      if (k === 'end' || k === 'g') { trimStep(-.04); return; }
+      if (k === 'end' || (k === 'g' && !e.shiftKey)) { trimStep(-.04); return; }
       if (k === 'b' && e.shiftKey || (k === '.' && (e.ctrlKey || e.metaKey))) { if (!replay) { fc.parking = !fc.parking; tipNow = fc.parking ? 'Parking brake set' : 'Parking brake released'; tipUntil = performance.now() + 1500; } return; }
+      if (k === 'g' && e.shiftKey && AC.jet && !replay) { gearToggle(); return; }
+      if (k === '/' && AC.jet && !replay) { spoilerToggle(); return; }
       if (k === 'l') { landingLights = !landingLights; tipNow = landingLights ? 'Landing lights on' : 'Landing lights off'; tipUntil = performance.now() + 1200; return; }
       if (k === 'h' && !replay) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
       if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
@@ -1147,6 +1204,16 @@ window.BoploSim = (() => {
     const rudEnd = () => { rudV = null; rudK.style.left = '50%'; };
     on(rud, 'pointerup', rudEnd); on(rud, 'pointercancel', rudEnd);
     const thrRange = $('[data-thrrange]'); thrRange.oninput = () => { thrTarget = thrRange.value / 100; };
+    // glass display: side buttons and the throttle lever
+    $$('[data-pf]').forEach(b => {
+      const a = b.dataset.pf;
+      if (a === 'brake') { on(b, 'pointerdown', () => { touchBrake = true; }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) on(b, ev, () => { touchBrake = false; }); return; }
+      b.onclick = () => ({ gear: gearToggle, spoiler: spoilerToggle, trimup: () => trimStep(.04), trimdn: () => trimStep(-.04), flapup: () => flapStep(-1), flapdn: () => flapStep(1),
+        park: () => { if (!replay) fc.parking = !fc.parking; }, ap: () => { if (!replay) setAP(!apOn); }, lights: () => { landingLights = !landingLights; },
+        gates: () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); }, cam: cycleCam, panel: () => setSix(true) })[a]?.();
+    });
+    { const tr = $('[data-pfthr] .pfd-thr-track'); if (tr) { let drag = false; const set = e => { const r = tr.getBoundingClientRect(); thrTarget = clamp(1 - (e.clientY - r.top) / r.height, 0, 1); };
+      on(tr, 'pointerdown', e => { if (replay) return; drag = true; tr.setPointerCapture(e.pointerId); set(e); }); on(tr, 'pointermove', e => { if (drag) set(e); }); on(tr, 'pointerup', () => { drag = false; }); on(tr, 'pointercancel', () => { drag = false; }); } }
     $('[data-tilt]').onclick = async () => {
       if (tilt) { tilt = null; $('[data-tilt]').classList.remove('on'); $('[data-tilt]').textContent = 'Tilt to steer'; return; }
       try { if (window.DeviceOrientationEvent?.requestPermission) { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') return; } } catch { return; }
@@ -1332,6 +1399,34 @@ window.BoploSim = (() => {
     const wpts = (O.waypoints || []).map(w => ({ ...w, s: path.project(...F.to(w.lat, w.lng), true).s })); path.seed(0);
     let warnText = '', tipText = '', tipNow = '', tipUntil = 0;
     const tipEl = document.createElement('div'); tipEl.className = 'sim-tip'; tipEl.setAttribute('role', 'status'); $('[data-warn]').after(tipEl);
+    const PE = { spdt: $('[data-spdt]'), altt: $('[data-altt]'), gnd: $('[data-gndb]'), spd: $('[data-pspd]'), alt: $('[data-palt]'), gs: $('[data-pgs]'), agl: $('[data-pagl]'), vsi: $('[data-pvsi]'), vs: $('[data-pvs]'), rose: $('[data-rose]'), rbug: $('[data-rbug]'), rcrs: $('[data-rcrs]'), hdg: $('[data-phdg]'),
+      gear: $('[data-pfgear]'), sp: $('[data-pfsp]'), trim: $('[data-pftrim]'), flaps: $('[data-pfflaps]'), park: $('[data-pfpark]'), ap: $('[data-pfap]'), lt: $('[data-pflt]'), gt: $('[data-pfgt]'), thf: $('[data-pfthrf]'), thk: $('[data-pfthrk]'), thv: $('[data-pfthrv]'), bar: Object.fromEntries($$('[data-pb]').map(e => [e.dataset.pb, e])) };
+    let pfdN = 0;
+    function pfd(vk, pr) {
+      const ias = st.ground && vk < 5 ? 0 : vk, altFt = (st.alt - geoN) / FT, aglFt = Math.max(0, st.agl / FT), fpm = st.vs / FT * 60;
+      PE.spdt.setAttribute('transform', `translate(0 ${ias * 4})`); PE.spd.textContent = Math.round(ias);
+      PE.altt.setAttribute('transform', `translate(0 ${altFt * .4})`); PE.alt.textContent = Math.round(altFt / 10) * 10;
+      PE.gnd.setAttribute('y', (altFt - (st.alt - st.agl - geoN) / FT) * .4 + 0);
+      PE.vsi.style.height = `${Math.min(50, Math.abs(fpm) / 40)}%`; PE.vsi.classList.toggle('dn', fpm < 0); PE.vs.textContent = `${fpm >= 0 ? '+' : '−'}${Math.abs(Math.round(fpm / 50) * 50)}`;
+      PE.rose.setAttribute('transform', `rotate(${-st.hdg})`); PE.hdg.textContent = pad3(st.hdg) + '°';
+      const bug = apOn && AP.hdg != null ? AP.hdg : null; PE.rbug.style.display = bug == null ? 'none' : ''; if (bug != null) PE.rbug.setAttribute('transform', `rotate(${bug})`);
+      const [cx2, cz2] = path.at(pr.s + 400), crs = norm360(Math.atan2(cx2 - st.x, cz2 - st.z) * R2D); PE.rcrs.setAttribute('transform', `rotate(${crs})`);
+      const eng = AC.jet ? (fs.n1 || 0) : fs.rpm, thr = st.thr;
+      PE.thf.style.height = `${Math.round(thrTarget * 100)}%`; PE.thk.style.bottom = `${Math.round(thrTarget * 100)}%`; PE.thv.textContent = AC.jet ? `${Math.round(fs.n1 || 0)}%` : `${Math.round(thr * 100)}%`;
+      if (++pfdN % 6) return; // the rest changes slowly: refresh a few times a second
+      PE.gs.textContent = `GS ${Math.round(st.gs / KT)}`; PE.agl.textContent = `AGL ${Math.round(aglFt / 10) * 10}`;
+      if (PE.gear) { const g = fs.gearPos ?? 1; PE.gear.textContent = g >= .99 ? 'Down' : g <= .01 ? 'Up' : 'Moving'; PE.gear.parentElement.classList.toggle('on', g >= .99); PE.gear.parentElement.classList.toggle('warn', g > .01 && g < .99); }
+      if (PE.sp) { PE.sp.textContent = (fs.spoilerPos || 0) > .5 ? 'Out' : 'In'; PE.sp.parentElement.classList.toggle('on', (fs.spoilerPos || 0) > .5); }
+      PE.trim.textContent = Math.abs(fc.trim) < .04 ? '0' : `${fc.trim > 0 ? '▲' : '▼'} ${Math.round(Math.abs(fc.trim) * 100)}%`;
+      PE.flaps.textContent = FM.notches > 1 ? FM.flapLabel() : '—';
+      PE.park.textContent = fc.parking ? 'Set' : 'Off'; PE.park.parentElement.classList.toggle('on', fc.parking);
+      PE.ap.textContent = apOn ? 'On' : 'Off'; PE.ap.parentElement.classList.toggle('on', apOn);
+      PE.lt.textContent = landingLights ? 'On' : 'Off'; PE.lt.parentElement.classList.toggle('on', landingLights);
+      PE.gt.textContent = showGates ? 'On' : 'Off'; PE.gt.parentElement.classList.toggle('on', showGates);
+      const B = PE.bar; B.ias.textContent = `${Math.round(ias)} kt`; B.gs.textContent = `${Math.round(st.gs / KT)} kt`; B.alt.textContent = `${Math.round(altFt / 10) * 10} ft`; B.agl.textContent = `${Math.round(aglFt / 10) * 10} ft`;
+      B.hdg.textContent = pad3(st.hdg) + '°'; B.vs.textContent = `${Math.round(fpm / 50) * 50} fpm`; B.eng.textContent = AC.jet ? `${Math.round(eng)}%` : `${eng} rpm`;
+      B.next.textContent = `${H.wp.textContent} ${(H.wpd.textContent.split('·')[1] || '').trim()}`; B.ete.textContent = (H.wpd.textContent.split('·')[2] || '—').trim();
+    }
     function hud() {
       const vk = st.v / KT, pr = path.project(st.x, st.z);
       H.ias.textContent = Math.round(st.ground && vk < 5 ? 0 : vk);
@@ -1344,6 +1439,7 @@ window.BoploSim = (() => {
       H.trim.style.bottom = `${50 + fc.trim * 46}%`; H.rpm.textContent = fs.rpm;
       const lamp = (k, v) => H.ind[k]?.classList.toggle('on', !!v); lamp('park', fc.parking); lamp('brake', fc.brake > .05); lamp('carb', fc.carbHeat); lamp('rud', fc.autoRudder);
       H.flaps.textContent = FM.notches > 1 ? `Flaps ${FM.flapLabel()}` : 'No flaps'; H.flaps.classList.toggle('on', fc.flaps > 0);
+      if (root.classList.contains('hud-on')) pfd(vk, pr);
       // next waypoint
       let next = wpts.find(w => w.s > pr.s + 80);
       const endS = L, [nx, nz] = next ? F.to(next.lat, next.lng) : path.at(endS);
@@ -1400,10 +1496,10 @@ window.BoploSim = (() => {
       if (!apOn) setAP(true); FM.ap = null; apUI();
     });
     $$('[data-apd]').forEach(b => b.onclick = () => { const m = b.dataset.apd, dlt = +b.dataset.d; if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT); AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : Math.max(0, AP[m] + dlt); if (!apOn) setAP(true); apUI(); });
-    function setSix(v) { showSix = v; store.set('six', v); applyView(); }
+    function setSix(v) { showSix = v; store.set('six2', v); applyView(); }
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
-    function applyView() { const six = showSix || cockpit(); root.classList.toggle('six-on', six); root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); }
-    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; towerAt = null; applyView(); }
+    function applyView() { const six = (showSix || cockpit()) && !AC.jet; root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
+    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; towerAt = null; flyAt = null; applyView(); }
     // drag the view to orbit (chase cameras) or look around (cockpit and wing); wheel or pinch to zoom; double-click to reset
     { const mapEl = $('[data-map]'); let drag = null; const pts = new Map();
       on(mapEl, 'contextmenu', e => e.preventDefault());

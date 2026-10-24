@@ -2282,10 +2282,10 @@
   }
 
   /* ================= simulator ================= */
-  ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })() };
+  ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })(), livery: (() => { try { return localStorage.getItem('boplo-sim-liv') || null; } catch { return null; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
-  const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=4', () => !!window.BoploPhysics)]).then(() => loadScript('/flight-sim.js?v=26', () => !!window.BoploSim)).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=1', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=5', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=27', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2328,7 +2328,7 @@
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
-        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
+        runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), livery: ui.sim.livery || null, radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
         onResult: PRc && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
         onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
         depAirport: dep && !PRfin ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
@@ -2402,9 +2402,13 @@
       const A = window.BoploAircraft, grid = $('[data-acgrid]'); if (!A || !grid) return;
       const auto = A.match(state.profile.aircraft), cur = ui.sim.ac || 'auto', shown = cur === 'auto' ? auto : cur;
       const tog = $('[data-acauto]'); if (tog) { tog.setAttribute('aria-pressed', String(cur === 'auto')); tog.onclick = () => { ui.sim.ac = 'auto'; try { localStorage.setItem('boplo-sim-ac', 'auto'); } catch { } paintAc(); }; }
-      grid.innerHTML = A.TYPES.map(t => `<button type="button" class="ac-card ${shown === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${shown === t.id}">
-          <span class="ac-img"><img src="/aircraft/${t.id}.webp" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : ''}</span>
-          <span class="ac-txt"><b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf"><span>${t.perf.cruise} kt</span><span>${t.perf.climb} fpm</span><span>Vs ${t.perf.vs} kt</span></span></span></button>`).join('');
+      const card = t => `<button type="button" class="ac-card ${shown === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${shown === t.id}">
+          <span class="ac-img"><img src="/aircraft/${t.id}.webp" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : t.kind === 'jet' ? `<span class="ac-badge jet">${esc(t.cat)}</span>` : ''}</span>
+          <span class="ac-txt"><b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf">${t.kind === 'jet' ? `<span>Approach ${t.perf.appr} kt</span><span>${t.perf.climb} fpm</span><span>Rotate ${t.perf.vr} kt</span>` : `<span>${t.perf.cruise} kt</span><span>${t.perf.climb} fpm</span><span>Vs ${t.perf.vs} kt</span>`}</span></span></button>`;
+      const trainers = A.TYPES.filter(t => t.kind !== 'jet'), jets = A.TYPES.filter(t => t.kind === 'jet'), LV = A.LIVERIES || {};
+      const shownJet = jets.find(t => t.id === shown), livNow = ui.sim.livery && LV[ui.sim.livery] ? ui.sim.livery : shownJet?.livery;
+      grid.innerHTML = `<h3 class="ac-group">Trainers</h3>${trainers.map(card).join('')}${jets.length ? `<h3 class="ac-group">Jets <small>Just for fun: bigger aircraft with jet engines, retractable gear and spoilers.</small></h3>${jets.map(card).join('')}${shownJet ? `<div class="ac-liv" role="group" aria-label="Livery"><span>Livery</span>${Object.entries(LV).map(([k, l]) => `<button type="button" data-liv="${k}" aria-pressed="${k === livNow}"><i style="background:${l.tail}"></i>${esc(l.name)}</button>`).join('')}</div>` : ''}` : ''}`;
+      $$('[data-liv]').forEach(b => b.onclick = () => { ui.sim.livery = b.dataset.liv; try { localStorage.setItem('boplo-sim-liv', ui.sim.livery); } catch { } paintAc(); });
       $$('[data-ac]').forEach(b => b.onclick = () => { ui.sim.ac = b.dataset.ac; try { localStorage.setItem('boplo-sim-ac', ui.sim.ac); } catch { } paintAc(); });
       const note = $('[data-acnote]'); if (note) note.textContent = cur === 'auto' ? 'Each flight flies in the aircraft you logged for it.' + (auto ? '' : ' Unknown types use the Cessna 172.') : `Every flight flies in the ${A.byId(cur).name}.`;
     };

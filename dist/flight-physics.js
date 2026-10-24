@@ -33,7 +33,7 @@
 
   function params(id, perf, tail) {
     const d = DATA[id] || DATA.c172, P = perf, W = d.m * G;
-    const span = { c152: 10.1, c172: 11, pa28: 10.7, da40: 11.9, da20: 10.9, p2008: 9, dr400: 8.72, sr20: 11.7, cub: 10.7 }[id] || 11;
+    const span = d.span || { c152: 10.1, c172: 11, pa28: 10.7, da40: 11.9, da20: 10.9, p2008: 9, dr400: 8.72, sr20: 11.7, cub: 10.7 }[id] || 11;
     const AR = span * span / d.S, k = 1 / (Math.PI * .76 * AR), CLa = 2 * Math.PI * AR / (AR + 2.2) * .95;
     const qs = v => .5 * 1.225 * (v * KT) ** 2 * d.S;
     const CLmax = W / qs(P.vs), CLmaxF = W / qs(d.vso || P.vs);
@@ -42,24 +42,25 @@
     const a0 = -2.2 * D2R, aStall = a0 + CLmax / CLa;
     // propeller: thrust = η·P / sqrt(V² + V0²), static thrust about 14 N per hp
     const eta = .8, V0 = eta * HP / 19;
-    const thrustAt = (V, pwr) => eta * pwr / Math.sqrt(V * V + V0 * V0);
+    // jets: thrust (not power) that falls off a little with speed; `pwr` arrives as throttle × HP so the same code path works
+    const thrustAt = d.jet ? (V, pwr) => pwr / HP * d.T0 * (1 - .42 * clamp(V / 150, 0, 1)) : (V, pwr) => eta * pwr / Math.sqrt(V * V + V0 * V0);
     // parasite drag from the top speed at full power
-    const vmax = P.vmax * KT, CLv = W / qs(P.vmax), CD0 = Math.max(.018, thrustAt(vmax, d.hp * HP) / qs(P.vmax) - k * CLv * CLv);
-    return { ...d, ...P, id, W, span, AR, k, CLa, CLmax, a0, aStall, notch, eta, V0, CD0, thrustAt, Vref: P.cruise * KT, tail: !!tail };
+    const vmax = P.vmax * KT, CLv = W / qs(P.vmax), CD0 = d.CD0 || Math.max(.018, thrustAt(vmax, d.hp * HP) / qs(P.vmax) - k * CLv * CLv);
+    return { ...d, ...P, id, W, span, AR, k, CLa, CLmax, a0, aStall, notch, eta, V0, CD0, thrustAt, hp: d.jet ? 1 : d.hp, agility: d.agility || 1, spool: d.spool || .7, Vref: P.cruise * KT, tail: !!tail };
   }
 
   function create(id, perf, opts = {}) {
     const p = params(id, perf, opts.tail);
     const ground = opts.groundAt || (() => 0), surface = opts.surfaceAt || (() => 'paved');
-    const c = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, trim: 0, brake: 0, parking: false, carbHeat: false, autoRudder: true };
+    const c = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, trim: 0, brake: 0, parking: false, carbHeat: false, autoRudder: true, gear: 1, spoiler: 0 };
     const s = {};
     function reset({ x = 0, z = 0, alt = 0, hdg = 0, airborne = false, speed = 0, pitch = 0 } = {}) {
       const h = hdg * D2R, th = pitch * D2R;
       s.F = norm([Math.sin(h) * Math.cos(th), Math.sin(th), Math.cos(h) * Math.cos(th)]); s.R = [Math.cos(h), 0, -Math.sin(h)]; s.U = norm(cross(s.F, s.R));
       s.x = x; s.z = z; s.alt = alt; s.v = scale(s.F, airborne ? speed : 0); s.w = [0, 0, 0]; s.ground = !airborne; s.power = airborne ? .65 : 0; s.rpm = airborne ? 2300 : 0;
-      s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
+      s.gearPos = 1; s.n1 = airborne ? 70 : 0; s.spoilerPos = 0; s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
       if (p.tail && !airborne) tilt(opts.groundAtt || 11);
-      Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, parking: !airborne && !!opts.parkingAtStart });
+      Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, gear: 1, spoiler: 0, parking: !airborne && !!opts.parkingAtStart });
       c.throttle = airborne ? .65 : 0; c.flaps = 0; c.trim = airborne ? trimFor(speed) : .15;
       derive();
     }
@@ -85,30 +86,36 @@
       const alpha = Math.atan2(-wu, Math.max(.5, u)), beta = Math.asin(clamp(vr / V, -1, 1));
       const n = p.notch[c.flaps] || p.notch[0], qbar = .5 * rho(s.alt) * V * V;
       const { CL, stalled, aS } = CLof(alpha, n);
-      const CD = p.CD0 + n.dCD + p.k * CL * CL + (stalled ? .12 : 0) + Math.abs(beta) * .25;
+      // jets: retractable gear (drag while down or moving) and spoilers (drag up, lift down); ground spoilers deploy at idle after touchdown
+      if (p.retract) s.gearPos = clamp(s.gearPos + Math.sign((c.gear ? 1 : 0) - s.gearPos) * dt / 7, 0, 1); else s.gearPos = 1;
+      const spCmd = p.jet ? Math.max(c.spoiler, s.ground && c.throttle < .08 && V > 25 ? 1 : 0) : 0;
+      s.spoilerPos += (spCmd - s.spoilerPos) * Math.min(1, dt * 3);
+      const CLs = CL * (1 - .45 * s.spoilerPos);
+      const CD = p.CD0 + n.dCD + p.k * CL * CL + (stalled ? .12 : 0) + Math.abs(beta) * .25 + (p.retract ? .016 * s.gearPos : 0) + .05 * s.spoilerPos;
       // engine: power lags the throttle; carb heat costs a little power
       const pwrCmd = clamp(c.throttle, 0, 1) * (c.carbHeat ? .92 : 1);
-      s.power += (pwrCmd - s.power) * Math.min(1, dt / .7);
+      s.power += (pwrCmd - s.power) * Math.min(1, dt / p.spool);
       const pwr = s.power * p.hp * HP * Math.pow(sig, 1.1);
-      const T = p.thrustAt(V, pwr) + (s.power < .05 ? -p.W * .006 * clamp(V / p.Vref, 0, 1.5) : 0);
-      s.rpm = s.crashed ? 0 : Math.round(clamp(650 + 1650 * Math.sqrt(s.power) + V * 6 * (1 - s.power * .6), 0, 2750));
+      const T = p.thrustAt(V, pwr) + (s.power < .05 && !p.jet ? -p.W * .006 * clamp(V / p.Vref, 0, 1.5) : 0);
+      if (p.jet) { s.n1 = s.crashed ? 0 : 21 + 79 * Math.sqrt(s.power); s.rpm = Math.round(s.n1 * 30); }
+      else s.rpm = s.crashed ? 0 : Math.round(clamp(650 + 1650 * Math.sqrt(s.power) + V * 6 * (1 - s.power * .6), 0, 2750));
       // forces
-      const Ldir = norm(cross(vh, s.R)), L = qbar * p.S * CL, D = qbar * p.S * CD, Y = -qbar * p.S * 1.1 * beta;
+      const Ldir = norm(cross(vh, s.R)), L = qbar * p.S * CLs, D = qbar * p.S * CD, Y = -qbar * p.S * 1.1 * beta;
       let Fw = add(add(add(scale(Ldir, L), vh, -D), s.R, Y), s.F, T); Fw = add(Fw, [0, -p.W, 0]);
       // control power scales with dynamic pressure (propwash helps the tail at low speed)
-      const qn = clamp(qbar / (.5 * 1.225 * p.Vref * p.Vref), 0, 3), qprop = qn + s.power * .35 * clamp(1 - V / p.Vref, 0, 1), vn = Math.sqrt(qn);
+      const qn = clamp(qbar / (.5 * 1.225 * p.Vref * p.Vref), 0, 3), qprop = qn + (p.jet ? 0 : s.power * .35 * clamp(1 - V / p.Vref, 0, 1)), vn = Math.sqrt(qn), ag = p.agility;
       // pitch: the elevator commands an angle of attack about the trimmed one; short-period dynamics with damping
       const aCmd = clamp(trimAlpha() + c.elevator * (c.elevator > 0 ? 23 : 12) * D2R - n.deg * .03 * D2R, -12 * D2R, 24 * D2R);
-      const wsp = 3.6 * Math.max(.15, vn + s.power * .15 * clamp(1 - V / p.Vref, 0, 1));
+      const wsp = 3.6 * (.55 + .45 * ag) * Math.max(.15, vn + (p.jet ? 0 : s.power * .15 * clamp(1 - V / p.Vref, 0, 1)));
       let qd = wsp * wsp * (aCmd - alpha) - 2 * .7 * wsp * s.w[1];
       // roll: aileron rate with damping, dihedral effect, stall wing drop
       let rudder = c.rudder;
       if (c.autoRudder && !s.ground) rudder = clamp(rudder + beta * 5 + c.aileron * .25 * clamp(CL, 0, 1.6) / 1.6, -1, 1);
       s.rud = rudder;
       if (stalled && !s.ground) { s.stallT += dt; if (!s.wingDrop) s.wingDrop = (Math.random() < .5 ? -1 : 1); } else { s.stallT = 0; s.wingDrop = 0; }
-      let pd = 4.6 * c.aileron * qprop - 4.2 * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0);
+      let pd = 4.6 * ag * c.aileron * qprop - 4.2 * ag * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0);
       // yaw: rudder, weathervane stability, adverse yaw, prop effects (left-turning at high power and low speed)
-      let rd = (1.5 * rudder) * qprop + 6.5 * beta * qn - .5 * c.aileron * clamp(CL, 0, 1.6) * qn - 3.2 * s.w[2] * Math.max(.25, vn) - .35 * s.power * clamp(1 - V / p.Vref, 0, 1);
+      let rd = (1.5 * ag * rudder) * qprop + 6.5 * beta * qn - .5 * c.aileron * clamp(CL, 0, 1.6) * qn - 3.2 * s.w[2] * Math.max(.25, vn) - (p.jet ? 0 : .35 * s.power * clamp(1 - V / p.Vref, 0, 1));
       // ---- ground ----
       const agl = s.alt - gh, onGround = agl <= .02 && s.v[1] <= .5;
       if (onGround) {
@@ -150,7 +157,8 @@
         const sink = -s.v[1], bank = Math.abs(Math.atan2(-s.R[1], s.U[1]) * R2D), th = pitchDeg();
         if (!s.ground) {
           const fpm = -sink / .3048 * 60;
-          if (sink > 3.6) crash('You hit the ground descending too fast.');
+          if (p.retract && s.gearPos < .95) crash('You landed with the gear up. Lower the gear before you land.');
+          else if (sink > 3.6) crash('You hit the ground descending too fast.');
           else if (bank > 11) crash('A wing touched the ground. Level the wings before landing.');
           else if (!p.tail && th < -2.5 && sink > .8) crash('The nosewheel hit first and collapsed. Hold the nose up in the flare.');
           else if (len(va) > p.vne * KT * .75) crash('Touched down far too fast.');
