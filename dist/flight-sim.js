@@ -521,7 +521,7 @@ window.BoploSim = (() => {
         <div class="sim-sys" aria-label="Aircraft systems">
           <div class="sim-trim" title="Elevator trim (T / G)"><span>Trim</span><div><i data-trimi></i></div></div>
           <span class="sim-ind" data-ind="park" title="Parking brake (Shift+B)">PARK</span><span class="sim-ind" data-ind="brake" title="Brakes (B)">BRK</span>
-          <span class="sim-ind" data-ind="carb" title="Carb heat (H)">CARB</span><span class="sim-ind" data-ind="rud" title="Auto-rudder (U)">AUTO RUD</span>
+          ${o.jet ? '' : '<span class="sim-ind" data-ind="carb" title="Carb heat (H)">CARB</span>'}<span class="sim-ind" data-ind="rud" title="Auto-rudder (U)">AUTO RUD</span>
           <span class="sim-rpm"><b data-rpm>0</b> rpm</span>
         </div>
       </div>
@@ -796,8 +796,11 @@ window.BoploSim = (() => {
     };
 
     // aircraft
-    const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId, O.livery) : aircraftGLB(), glbUrl = URL.createObjectURL(new Blob([AC.glb], { type: 'model/gltf-binary' }));
+    const AC = window.BoploAircraft ? BoploAircraft.build(O.aircraftId, O.livery) : aircraftGLB();
+    if (AC.load) { try { await AC.load(); } catch (e) { console.warn('aircraft model', e); } }
+    const glbUrl = URL.createObjectURL(new Blob([AC.glb || new Uint8Array(0)], { type: 'model/gltf-binary' }));
     cleanups.push(() => URL.revokeObjectURL(glbUrl));
+    if (AC.credit) try { viewer.creditDisplay.addStaticCredit(new C.Credit('<a href="https://github.com/amvlab/aircraft-models" target="_blank" rel="noopener">' + AC.credit + '</a>', true)); } catch { }
     const PF = window.BoploAircraft ? BoploAircraft.model(O.aircraftId) : { vs: 47, vr: 55, appr: 62, cruise: 98, vmax: 115, thrust: 2.645, drag: .0002 };
     AC.groundAtt = AC.groundAtt || 0;
     let model = null, bladeNode = null, discNode = null, gearNode = null, gearShown = 1; const surfNodes = {}, surfAng = {};
@@ -974,7 +977,7 @@ window.BoploSim = (() => {
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
       navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
       // beacon on the fin, landing lights in the wing leading edge
-      if (AC.surfaces?.rud) { const r = AC.surfaces.rud; beacon.position = at([0, r.pivot[1] + (r.axis[1] * 1.3), r.pivot[2] + .2]); beacon.show = (st.t % 1.1) < .14 && fs.rpm > 0; }
+      if (AC.beacon || AC.surfaces?.rud) { const r = AC.surfaces?.rud; beacon.position = at(AC.beacon || [0, r.pivot[1] + (r.axis[1] * 1.3), r.pivot[2] + .2]); beacon.show = (st.t % 1.1) < .14 && fs.rpm > 0; }
       landL.show = landR.show = landingLights; if (landingLights) { landL.position = at([AC.tips.left[0] * .42, AC.tips.left[1] - .05, AC.tips.left[2] + .6]); landR.position = at([AC.tips.right[0] * .42, AC.tips.right[1] - .05, AC.tips.right[2] + .6]); }
       // control surfaces follow the controls (TE-down is a negative rotation about each hinge axis)
       const n = FM.p.notch[fc.flaps] || FM.p.notch[0], rud = fs.rud ?? fc.rudder;
@@ -1179,7 +1182,7 @@ window.BoploSim = (() => {
       if (k === 'g' && e.shiftKey && AC.jet && !replay) { gearToggle(); return; }
       if (k === '/' && AC.jet && !replay) { spoilerToggle(); return; }
       if (k === 'l') { landingLights = !landingLights; tipNow = landingLights ? 'Landing lights on' : 'Landing lights off'; tipUntil = performance.now() + 1200; return; }
-      if (k === 'h' && !replay) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
+      if (k === 'h' && !replay && !O.jet) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
       if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
       if (k === 'k') { openSet(); return; }
       if (k === 'y' && !replay) { CS.mouse = !CS.mouse; saveCS(); syncSet(); tipNow = CS.mouse ? 'Mouse yoke on: move the mouse to fly' : 'Mouse yoke off'; tipUntil = performance.now() + 1800; return; }
@@ -1529,7 +1532,7 @@ window.BoploSim = (() => {
     /* ---- ready card ---- */
     const ctrlHelp = coarse
       ? `<li><b>Stick</b> bottom left: pull back to raise the nose, push to lower it, sideways to bank. <b>Rudder</b> slider underneath.</li><li><b>Power</b> slider on the right; <b>Flaps</b>, <b>Trim</b>, <b>Brake</b> and <b>Park</b> buttons beside it. Or turn on <b>Tilt to steer</b>.</li>`
-      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · <b>H</b> carb heat · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · <b>I</b> instrument panel · <b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings · <b>N</b> hold to talk on the radio</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
+      : `<li><b>↑ ↓</b> / <b>W S</b> elevator (pull back to raise the nose) · <b>← →</b> / <b>A D</b> ailerons · <b>Q E</b> rudder</li><li><b>R F</b> or <b>+ −</b> throttle · <b>1–0</b> set power</li><li><b>V</b> / <b>Shift+V</b> flaps down / up (or <b>]</b> <b>[</b>) · <b>T G</b> trim nose up / down</li><li><b>B</b> brakes (hold) · <b>Shift+B</b> parking brake · ${O.jet ? '<b>Shift+G</b> landing gear · <b>/</b> spoilers' : '<b>H</b> carb heat'} · <b>U</b> auto-rudder on/off</li><li><b>P</b> autopilot · ${O.jet ? '' : '<b>I</b> instrument panel · '}<b>C</b> camera, including the cockpit · <b>J</b> route gates · <b>L</b> landing lights · <b>Space</b> pause · <b>M</b> sound</li><li><b>Drag</b> the view to look around, <b>scroll</b> to zoom, double-click to reset · <b>Y</b> mouse yoke · <b>K</b> control settings · <b>N</b> hold to talk on the radio</li><li>Joysticks, yokes and gamepads work too: map the axes (including a throttle lever) in <b>Controls</b>.</li>`;
     card(`<span class="sim-kicker">${replay ? 'Replay' : 'Fly it'} · ${esc(AC.type?.name || O.aircraft || 'Trainer')}</span><h2>${esc(O.title)}</h2>
       <p>${PR ? PRT : replay ? 'Sit back while the autopilot flies your logged route over real terrain. Change the speed, scrub along the route, or switch camera.' : `Fly the route yourself. Follow the gates and the dashed line, ${groundStart ? 'take off from the runway' : 'starting in the air'}${landEnd ? ', and land at the end' : ''}.`}</p>
       <div class="sim-facts"><div><span>Distance</span><b>${(L / NM).toFixed(1)} NM</b></div><div><span>${PRF ? 'Glidepath' : PR?.kind === 'takeoff' ? 'Climb to' : 'Planned height'}</span><b>${PRF ? '3°' : PR?.kind === 'takeoff' ? '1,000 ft AAL' : Math.round((cruise - geoN) / FT / 100) * 100 + ' ft'}</b></div><div><span>Wind</span><b>${wind.spd ? `${pad3(wind.dir)}° / ${wind.spd} kt` : 'Calm'}</b></div></div>
