@@ -1110,7 +1110,20 @@ window.BoploSim = (() => {
     const windV = [wind.x, 0, wind.z];
     let lastG = g0, rwLazyT = 0;
     // scenery not loaded under the aircraft yet: keep the last known ground while rolling, assume none in the air
-    const groundAt = (x, z) => { const r = rwAt(x, z); if (r) return lastG = r.h; const e = elevAt(x, z); if (e != null) return lastG = e; return fs?.ground ? lastG : lastG - 3000; };
+    // On the approach, real terrain stays below the obstacle-clearance surface (a 2% slope rising from the threshold), so a bad
+    // height sample (a coarse scenery tile, a spike in the elevation model) can never put the "ground" under the aircraft in mid-air.
+    const approachCap = (x, z) => {
+      if (!arrE) return Infinity;
+      const f = arrE.dir, dx = x - landPt[0], dz = z - landPt[1], u = -(dx * f[0] + dz * f[1]), w = Math.abs(dx * f[1] - dz * f[0]);
+      if (u < -40 || u > 16000 || w > 200 + u * .15) return Infinity;
+      return (rwHeight(landPt[0], landPt[1]) ?? g1) + Math.max(0, u) * .02;
+    };
+    const groundAt = (x, z) => {
+      const air = !fs?.ground, r = rwAt(x, z), e = elevAt(x, z);
+      if (r) return lastG = air && e != null && r.h > e + 15 ? e : r.h; // a runway height far above the terrain around it is a bad sample
+      if (e != null) return lastG = air ? Math.min(e, approachCap(x, z)) : e;
+      return fs?.ground ? lastG : lastG - 3000;
+    };
     const FM = BoploPhysics.create(O.aircraftId || 'c172', PF, { tail: AC.type?.gear?.type === 'tail', groundAtt: AC.groundAtt, parkingAtStart: O.mode !== 'replay', groundAt, surfaceAt: (x, z) => rwAt(x, z)?.surf || 'grass' });
     const fs = FM.s, fc = FM.c;
     const sync = () => {
@@ -1376,7 +1389,7 @@ window.BoploSim = (() => {
     function step(dt) {
       st.t += dt;
       FM.step(dt, windAt(dt));
-      if (!datumFixed) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
+      if (!datumFixed && groundStart) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
       st.gk = elevAt(st.x, st.z) != null || !!rwAt(st.x, st.z);
       rwLazyT += dt; refineRunways(dt);
       if (rwLazyT > 2 && rwSt.some(r => r.pending)) { rwLazyT = 0;
