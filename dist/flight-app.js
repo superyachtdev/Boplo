@@ -2403,7 +2403,7 @@
       const auto = A.match(state.profile.aircraft), cur = ui.sim.ac || 'auto', shown = cur === 'auto' ? auto : cur;
       const tog = $('[data-acauto]'); if (tog) { tog.setAttribute('aria-pressed', String(cur === 'auto')); tog.onclick = () => { ui.sim.ac = 'auto'; try { localStorage.setItem('boplo-sim-ac', 'auto'); } catch { } paintAc(); }; }
       const card = t => `<button type="button" class="ac-card ${shown === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${shown === t.id}">
-          <span class="ac-img"><img src="/aircraft/${t.id}.webp" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : t.kind === 'jet' ? `<span class="ac-badge jet">${esc(t.cat)}</span>` : ''}</span>
+          <span class="ac-img"><img src="/aircraft/${t.id}.webp?v=2" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : t.kind === 'jet' ? `<span class="ac-badge jet">${esc(t.cat)}</span>` : ''}</span>
           <span class="ac-txt"><b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf">${t.kind === 'jet' ? `<span>Approach ${t.perf.appr} kt</span><span>${t.perf.climb} fpm</span><span>Rotate ${t.perf.vr} kt</span>` : `<span>${t.perf.cruise} kt</span><span>${t.perf.climb} fpm</span><span>Vs ${t.perf.vs} kt</span>`}</span></span></button>`;
       const trainers = A.TYPES.filter(t => t.kind !== 'jet'), jets = A.TYPES.filter(t => t.kind === 'jet'), LV = A.LIVERIES || {};
       const shownJet = jets.find(t => t.id === shown), livNow = ui.sim.livery && LV[ui.sim.livery] ? ui.sim.livery : shownJet?.livery;
