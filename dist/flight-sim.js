@@ -800,7 +800,7 @@ window.BoploSim = (() => {
     if (AC.load) { try { await AC.load(); } catch (e) { console.warn('aircraft model', e); } }
     const glbUrl = URL.createObjectURL(new Blob([AC.glb || new Uint8Array(0)], { type: 'model/gltf-binary' }));
     cleanups.push(() => URL.revokeObjectURL(glbUrl));
-    if (AC.credit) try { viewer.creditDisplay.addStaticCredit(new C.Credit('<a href="https://github.com/amvlab/aircraft-models" target="_blank" rel="noopener">' + AC.credit + '</a>', true)); } catch { }
+    if (AC.credit) try { viewer.creditDisplay.addStaticCredit(new C.Credit('<a href="https://github.com/FGMEMBERS" target="_blank" rel="noopener">' + AC.credit + '</a>', true)); } catch { }
     const PF = window.BoploAircraft ? BoploAircraft.model(O.aircraftId) : { vs: 47, vr: 55, appr: 62, cruise: 98, vmax: 115, thrust: 2.645, drag: .0002 };
     AC.groundAtt = AC.groundAtt || 0;
     let model = null, bladeNode = null, discNode = null, gearNode = null, gearShown = 1; const surfNodes = {}, surfAng = {};

@@ -1,8 +1,7 @@
 /* Boplo Flight — jets for the simulator: a business jet and a regional jet built in code, and five airliners.
-   The small jets are built as a glTF binary from a short spec (real dimensions in metres). The airliners use 3D models by amvlab
-   (CC BY 4.0, https://github.com/amvlab/aircraft-models), re-oriented, rescaled and repainted, with landing gear added by Boplo.
-   Liveries are Boplo's own or invented airlines, with no manufacturer marks.
-   Performance figures are typical, rounded and used only to make each type feel right in a game-like flight model.
+   The small jets are built as a glTF binary from a short spec (real dimensions in metres). The airliners are FlightGear models
+   (GPL v2, github.com/FGMEMBERS) converted to glTF by tools/aircraft, with Boplo's liveries painted on; the chosen livery's
+   textures are dropped into the model when it loads. Liveries are Boplo's own or invented airlines, with no manufacturer marks.
    glTF axes: +Y up, +Z forward, +X to the left wing. Registers itself with BoploAircraft and BoploPhysics. */
 (() => {
   'use strict';
@@ -35,33 +34,33 @@
       tail: { type: 'conv', finH: 5.0, finRoot: 4.3, finTip: 1.8, finSweep: 40, stabSpan: 5.1, stabRoot: 2.6, stabTip: 1.1, stabSweep: 32 },
       gear: { track: 5.0, nose: .1, r: .5, leg: 1.0, mainWheels: 2, noseWheels: 2 }, livery: 'northwind',
       perf: { vs: 125, vr: 130, appr: 128, cruise: 250, vmax: 320, climb: 2800 } },
-    // airliners use 3D models by amvlab (CC BY 4.0, github.com/amvlab/aircraft-models), re-oriented and rescaled offline; Boplo adds gear and liveries
-    { id: 'narrow', kind: 'jet', cat: 'Airliner', name: 'Narrowbody airliner', blurb: 'The 180-seat workhorse of short-haul flying, modelled on the A320 family. Sharklets and all.',
-      model: 'a320', span: 35.8, len: 38, geo: { dia: 4.35, chord: 7.79, mainZ: -4.67, noseZ: 7.42, bellyMain: -2.19, bellyNose: -1.9, noseTip: 11.6, tip: [17.9, 2.95, -11.65], fin: [0, 8.04, -23.93], yMin: -3.39 },
-      gear: { track: 7.6, r: .58, leg: .9, mainWheels: 2, noseWheels: 2 }, livery: 'boplo', perf: { vs: 140, vr: 145, appr: 137, cruise: 250, vmax: 340, climb: 2500 } },
-    { id: 'narrow2', kind: 'jet', cat: 'Airliner', name: 'Classic narrowbody', blurb: 'The best-selling jetliner shape, modelled on the 737: low to the ground with split winglets.',
-      model: 'b737', span: 35.8, len: 38, geo: { dia: 4.09, chord: 7.39, mainZ: -4.44, noseZ: 9.06, bellyMain: -2.05, bellyNose: -1.95, noseTip: 13.24, tip: [17.9, 2.6, -12.43], fin: [0, 9.17, -23.66], yMin: -2.73 },
-      gear: { track: 5.7, r: .56, leg: .55, mainWheels: 2, noseWheels: 2 }, livery: 'northwind', perf: { vs: 142, vr: 145, appr: 140, cruise: 250, vmax: 340, climb: 2500 } },
+    // airliners use 3D models from FlightGear (GPL v2, github.com/FGMEMBERS), converted to glTF and repainted by Boplo (tools/aircraft)
+    { id: 'narrow', kind: 'jet', cat: 'Airliner', name: 'Narrowbody airliner', blurb: 'The 180-seat workhorse of short-haul flying, modelled on the A320.',
+      model: 'a320', tex: ["A320-NWA.png",  "NWA.png"], span: 34.04, len: 37.57, geo: { dia: 3.95, hgt: 4.14, yMin: -4.42, mainZ: -1.01, noseZ: 11.62, noseTip: 16.52, tailZ: -21.05, tip: [17.02, 0.79, -5.81], fin: [-0.0, 7.94, -18.8], eye: [0.5, 0.95, 13.92] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'boplo', perf: { vs: 140, vr: 145, appr: 137, cruise: 250, vmax: 340, climb: 2500 } },
+    { id: 'narrow2', kind: 'jet', cat: 'Airliner', name: 'Classic narrowbody', blurb: 'The best-selling jetliner shape, modelled on the 737-800: low to the ground with blended winglets.',
+      model: 'b737', tex: ["737-800.png"], span: 35.69, len: 39.42, geo: { dia: 3.72, hgt: 3.96, yMin: -3.59, mainZ: -1.26, noseZ: 14.54, noseTip: 18.84, tailZ: -20.58, tip: [17.85, 2.46, -6.28], fin: [0.0, 9.34, -18.63], eye: [0.5, 0.9, 16.24] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'northwind', perf: { vs: 142, vr: 145, appr: 140, cruise: 250, vmax: 340, climb: 2500 } },
     { id: 'wide', kind: 'jet', cat: 'Airliner', name: 'Widebody airliner', blurb: 'A long-haul twin with a flexible composite wing, modelled on the 787. Big, smooth and stable.',
-      model: 'b787', darkTail: true, span: 60.1, len: 58.6, geo: { dia: 6.44, chord: 11.7, mainZ: -7.02, noseZ: 14.25, bellyMain: -3.3, bellyNose: -2.91, noseTip: 20.7, tip: [30.05, 3.27, -19.76], fin: [0, 12.13, -36.55], yMin: -4.78 },
-      gear: { track: 9.8, r: .68, leg: 1.3, mainWheels: 4, noseWheels: 2 }, livery: 'solair', perf: { vs: 145, vr: 155, appr: 145, cruise: 260, vmax: 340, climb: 2200 } },
+      model: 'b787', tex: ["BOE.png"], span: 59.54, len: 56.68, geo: { dia: 5.76, hgt: 5.92, yMin: -5.54, mainZ: -1.83, noseZ: 21.03, noseTip: 26.12, tailZ: -30.57, tip: [29.77, 2.53, -13.2], fin: [-0.0, 10.8, -29.32], eye: [0.6, 1.3, 22.72] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'solair', perf: { vs: 145, vr: 155, appr: 145, cruise: 260, vmax: 340, climb: 2200 } },
     { id: 'wide2', kind: 'jet', cat: 'Airliner', name: 'Long-haul widebody', blurb: 'Curved wingtips and a long, slender fuselage, modelled on the A350. Built for 15-hour flights.',
-      model: 'a350', span: 64.75, len: 64.7, geo: { dia: 6.25, chord: 11.43, mainZ: -6.86, noseZ: 16.95, bellyMain: -3.13, bellyNose: -2.87, noseTip: 24.06, tip: [32.38, 3.51, -21.77], fin: [0, 11.38, -39.13], yMin: -5.12 },
-      gear: { track: 10.6, r: .7, leg: 1.4, mainWheels: 4, noseWheels: 2 }, livery: 'verde', perf: { vs: 145, vr: 155, appr: 142, cruise: 260, vmax: 340, climb: 2300 } },
-    { id: 'jumbo', kind: 'jet', cat: 'Airliner', name: 'Double-deck superjumbo', blurb: 'The biggest passenger jet of all, modelled on the A380: two full decks, four engines and an 80-metre wing.',
-      model: 'a380', span: 79.75, len: 73.3, geo: { dia: 8.01, chord: 15.79, mainZ: -9.48, noseZ: 16.99, bellyMain: -4.01, bellyNose: -3.66, noseTip: 25.05, tip: [39.88, 2.27, -28.71], fin: [0, 16.75, -45.57], yMin: -5.34 },
-      gear: { track: 12.5, r: .7, leg: 1.2, mainWheels: 4, noseWheels: 2, bodyGear: true }, livery: 'fjord', perf: { vs: 145, vr: 150, appr: 140, cruise: 260, vmax: 340, climb: 1800 } }
+      model: 'a350', tex: ["a350xwb.png"], span: 64.75, len: 67.02, geo: { dia: 6.09, hgt: 6.5, yMin: -6.64, mainZ: -2.31, noseZ: 26.54, noseTip: 31.06, tailZ: -35.96, tip: [32.37, 3.5, -15.19], fin: [-0.0, 11.47, -35.41], eye: [0.6, 1.3, 27.46] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'verde', perf: { vs: 145, vr: 155, appr: 142, cruise: 260, vmax: 340, climb: 2300 } },
+    { id: 'jumbo', kind: 'jet', cat: 'Airliner', name: 'Jumbo jet', blurb: 'The queen of the skies, modelled on the 747-8: the hump, four engines and a 68-metre wing.',
+      model: 'b748', tex: ["GREEN_fuselage.png",  "VRG_turbofan_white.png"], span: 68.4, len: 76.55, geo: { dia: 6.48, hgt: 8.06, yMin: -6.78, mainZ: -2.58, noseZ: 29.65, noseTip: 37.2, tailZ: -39.35, tip: [34.2, 1.14, -17.36], fin: [-0.01, 13.24, -39.35], eye: [0.6, 3.0, 31.2] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'fjord', perf: { vs: 150, vr: 160, appr: 150, cruise: 260, vmax: 340, climb: 1800 } }
   ];
 
   // flight-model data (BoploPhysics): mass (kg), wing area (m²), total thrust (N), flap notches, speeds (kt), wheelbase (m)
   const PHYS = {
     bizjet: { m: 7600, S: 30.0, span: 15.9, jet: true, T0: 2 * 17800, CD0: .024, spool: 2, agility: .9, flaps: [[0, 'UP'], [15, 'T/O'], [35, 'LDG']], vso: 88, vfe: 200, vno: 300, vne: 340, wb: 6.2, retract: true },
     rj: { m: 33000, S: 72.7, span: 28.7, jet: true, T0: 2 * 63000, CD0: .022, spool: 3, agility: .65, flaps: [[0, 'UP'], [7, '1'], [10, '2'], [20, '4'], [37, 'FULL']], vso: 105, vfe: 230, vno: 320, vne: 340, wb: 14.6, retract: true },
-    narrow: { m: 64000, S: 122.6, span: 35.8, jet: true, T0: 2 * 120000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [35, 'FULL']], vso: 110, vfe: 230, vno: 340, vne: 350, wb: 12.6, retract: true },
-    narrow2: { m: 62000, S: 124.6, span: 35.8, jet: true, T0: 2 * 121000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [25, '25'], [30, '30']], vso: 112, vfe: 230, vno: 340, vne: 350, wb: 15.6, retract: true },
-    wide: { m: 200000, S: 360, span: 60.1, jet: true, T0: 2 * 320000, CD0: .02, spool: 5, agility: .45, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [20, '20'], [30, '30']], vso: 118, vfe: 250, vno: 340, vne: 350, wb: 25.6, retract: true },
-    wide2: { m: 210000, S: 443, span: 64.75, jet: true, T0: 2 * 374000, CD0: .02, spool: 5, agility: .45, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [32, 'FULL']], vso: 116, vfe: 250, vno: 340, vne: 350, wb: 28.6, retract: true },
-    jumbo: { m: 390000, S: 845, span: 79.75, jet: true, T0: 4 * 311000, CD0: .021, spool: 6, agility: .38, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [33, 'FULL']], vso: 115, vfe: 220, vno: 340, vne: 350, wb: 33.6, retract: true }
+    narrow: { m: 64000, S: 122.6, span: 34.1, jet: true, T0: 2 * 120000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [35, 'FULL']], vso: 110, vfe: 230, vno: 340, vne: 350, wb: 12.6, retract: true },
+    narrow2: { m: 62000, S: 124.6, span: 35.8, jet: true, T0: 2 * 121000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [25, '25'], [30, '30']], vso: 112, vfe: 230, vno: 340, vne: 350, wb: 15.8, retract: true },
+    wide: { m: 200000, S: 360, span: 60.1, jet: true, T0: 2 * 320000, CD0: .02, spool: 5, agility: .45, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [20, '20'], [30, '30']], vso: 118, vfe: 250, vno: 340, vne: 350, wb: 22.9, retract: true },
+    wide2: { m: 210000, S: 443, span: 64.75, jet: true, T0: 2 * 374000, CD0: .02, spool: 5, agility: .45, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [32, 'FULL']], vso: 116, vfe: 250, vno: 340, vne: 350, wb: 28.9, retract: true },
+    jumbo: { m: 300000, S: 554, span: 68.4, jet: true, T0: 4 * 296000, CD0: .021, spool: 6, agility: .4, flaps: [[0, 'UP'], [1, '1'], [5, '5'], [10, '10'], [20, '20'], [25, '25'], [30, '30']], vso: 122, vfe: 230, vno: 340, vne: 365, wb: 32.2, retract: true }
   };
 
   function fuselage(J) {
@@ -103,59 +102,39 @@
     return out;
   }
 
-  // ---- 3D models: fetch once, repaint the texture in the livery's colours, and merge in the procedural gear ----
-  const modelCache = new Map();
+  // ---- airliners from 3D models: the model is fetched once, and the chosen livery's textures are dropped into it ----
+  const modelCache = new Map(), MODEL_V = 2;
   const parseGLB = buf => { const dv = new DataView(buf), jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl, bl = dv.getUint32(bo, true); return { json, bin: new Uint8Array(buf, bo + 8, bl) }; };
   const pad4 = n => (n + 3) & ~3;
-  const rgb = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
-  // the source paint is replaced by hue class: dark saturated paint (tails, cheatlines) takes the livery's tail colour, light saturated paint its accent
-  async function repaint(bytes, mime, LV, darkTail) {
-    const bmp = await createImageBitmap(new Blob([bytes], { type: mime })), cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
-    const cx = cv.getContext('2d'); cx.drawImage(bmp, 0, 0); const im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data;
-    const T = rgb(LV.tail), A = rgb(LV.accent), W = cv.width, H = cv.height, src = d.slice();
-    // near-white paint: small dark marks with white on both sides are windows and outlines, which stay dark
-    const white = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const j = (y * W + x) * 4, mx = Math.max(src[j], src[j + 1], src[j + 2]), mn = Math.min(src[j], src[j + 1], src[j + 2]); return mx > 190; };
-    const R = Math.max(3, Math.round(W / 256));
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), v = mx / 255, sat = mx ? (mx - mn) / mx : 0;
-      if (darkTail && mn >= 8 && mx <= 30) { d[i] = T[0] * .9; d[i + 1] = T[1] * .9; d[i + 2] = T[2] * .9; continue; }
-      if (sat < .3 || v < .12) continue;
-      if (v < .62) { const x = (i >> 2) % W, y = (i >> 2) / W | 0; if ((white(x - R, y) && white(x + R, y)) || (white(x, y - R) && white(x, y + R))) { d[i] = 28; d[i + 1] = 34; d[i + 2] = 44; continue; } }
-      const dark = v < .62, tgt = dark ? T : A, k = .82 + .18 * Math.min(1.2, v / (dark ? .45 : .9));
-      d[i] = Math.min(255, tgt[0] * k); d[i + 1] = Math.min(255, tgt[1] * k); d[i + 2] = Math.min(255, tgt[2] * k);
-    }
-    cx.putImageData(im, 0, 0);
-    const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', .9));
-    return new Uint8Array(await blob.arrayBuffer());
-  }
-  async function assemble(model, LV, gearGLB, darkTail) {
-    if (!modelCache.has(model)) modelCache.set(model, fetch(`/aircraft-models/${model}.glb?v=1`).then(r => { if (!r.ok) throw new Error('model ' + r.status); return r.arrayBuffer(); }));
-    const M = parseGLB(await modelCache.get(model)), Gr = parseGLB(gearGLB.buffer.slice(gearGLB.byteOffset, gearGLB.byteOffset + gearGLB.byteLength));
-    const j = JSON.parse(JSON.stringify(M.json)), gj = Gr.json, img = j.images[0], iv = j.bufferViews[img.bufferView];
-    let tex = M.bin.subarray(iv.byteOffset || 0, (iv.byteOffset || 0) + iv.byteLength), mime = img.mimeType;
-    try { tex = await repaint(tex, mime, LV, darkTail); mime = 'image/jpeg'; } catch (e) { /* keep the original paint */ }
-    const texOff = pad4(M.bin.length), gearOff = pad4(texOff + tex.length), total = gearOff + Gr.bin.length, bin = new Uint8Array(pad4(total));
-    bin.set(M.bin, 0); bin.set(tex, texOff); bin.set(Gr.bin, gearOff);
-    j.bufferViews.push({ buffer: 0, byteOffset: texOff, byteLength: tex.length }); img.bufferView = j.bufferViews.length - 1; img.mimeType = mime;
-    const vBase = j.bufferViews.length, aBase = j.accessors.length, mBase = (j.materials || []).length, meBase = j.meshes.length, nBase = j.nodes.length;
-    for (const v of gj.bufferViews) j.bufferViews.push({ ...v, byteOffset: (v.byteOffset || 0) + gearOff });
-    for (const a of gj.accessors) j.accessors.push({ ...a, bufferView: a.bufferView + vBase });
-    j.materials = [...(j.materials || []), ...gj.materials];
-    for (const m of gj.meshes) j.meshes.push({ ...m, primitives: m.primitives.map(p => ({ ...p, indices: p.indices + aBase, material: p.material + mBase, attributes: Object.fromEntries(Object.entries(p.attributes).map(([k, v]) => [k, v + aBase])) })) });
-    for (const n of gj.nodes) j.nodes.push({ ...n, mesh: n.mesh + meBase });
-    j.scenes[j.scene || 0].nodes.push(...gj.nodes.map((_, i) => nBase + i));
-    j.buffers = [{ byteLength: bin.length }];
+  const getBuf = url => { if (!modelCache.has(url)) modelCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).catch(e => { modelCache.delete(url); throw e; })); return modelCache.get(url); };
+  async function assemble(J, liveryId) {
+    const [mb, ...tex] = await Promise.all([getBuf(`/aircraft-models/${J.model}.glb?v=${MODEL_V}`), ...J.tex.map((_, i) => getBuf(`/aircraft-models/${J.model}/${liveryId}-${i}.jpg?v=${MODEL_V}`))]);
+    const M = parseGLB(mb), j = JSON.parse(JSON.stringify(M.json));
+    const data = j.bufferViews.map(v => M.bin.subarray(v.byteOffset || 0, (v.byteOffset || 0) + v.byteLength));
+    for (const im of j.images || []) { const k = J.tex.indexOf(im.name); if (k >= 0) { data[im.bufferView] = new Uint8Array(tex[k]); im.mimeType = 'image/jpeg'; } }
+    let off = 0; j.bufferViews.forEach((v, i) => { v.byteOffset = off; v.byteLength = data[i].length; off = pad4(off + data[i].length); });
+    const bin = new Uint8Array(off); j.bufferViews.forEach((v, i) => bin.set(data[i], v.byteOffset));
+    j.buffers = [{ byteLength: off }];
     let jb = new TextEncoder().encode(JSON.stringify(j)); const jp = pad4(jb.length);
     if (jp !== jb.length) { const t = new Uint8Array(jp).fill(32); t.set(jb); jb = t; }
-    const out = new Uint8Array(12 + 8 + jb.length + 8 + bin.length), dv = new DataView(out.buffer);
+    const out = new Uint8Array(28 + jb.length + off), dv = new DataView(out.buffer);
     dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, out.length, true);
     dv.setUint32(12, jb.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jb, 20);
-    const p = 20 + jb.length; dv.setUint32(p, bin.length, true); dv.setUint32(p + 4, 0x004E4942, true); out.set(bin, p + 8);
+    dv.setUint32(20 + jb.length, off, true); dv.setUint32(24 + jb.length, 0x004E4942, true); out.set(bin, 28 + jb.length);
     return out;
+  }
+  function buildModel(J, LV, liveryId) {
+    const g = J.geo, lid = LIVERIES[liveryId] ? liveryId : J.livery;
+    const AC = { glb: null, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -g.yMin, groundAtt: 0, jet: true, surfaces: {}, eye: g.eye,
+      beacon: [0, g.hgt / 2 + .1, g.mainZ + 1.5], tips: { left: g.tip, right: [-g.tip[0], g.tip[1], g.tip[2]], tail: [0, g.hgt * .1, g.tailZ + .4] },
+      perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len, credit: 'Airliner models from FlightGear (GPL v2), converted and repainted by Boplo' };
+    AC.load = async () => { if (!AC.glb) AC.glb = await assemble(J, lid); return AC; };
+    return AC;
   }
 
   function build(id, liveryId) {
     const J = JETS.find(j => j.id === id), LV = LIVERIES[liveryId] || LIVERIES[J.livery] || LIVERIES.boplo;
+    if (J.model) return buildModel(J, LV, liveryId);
     const parts = { paint: [], metal: [], matte: [], glass: [], gear: [], ailL: [], ailR: [], flapL: [], flapR: [], elev: [], rud: [] };
     const C = { base: hex(LV.base), tail: hex(LV.tail), acc: hex(LV.accent), belly: hex(LV.belly), eng: hex(LV.engine), metal: [.78, .8, .83, 1], dark: [.06, .065, .075, 1], grey: [.5, .53, .58, 1], rubber: [.03, .03, .035, 1], glass: [.09, .12, .17, 1], door: [.6, .63, .68, 1] };
     const mesh = b => { const m = { pos: [], col: [], idx: [] }; parts[b].push(m); return m; };
@@ -178,29 +157,6 @@
     const foil = (t, m, n = 14, cut = null) => { const up = [], lo = []; for (let i = 0; i <= n; i++) { let s = (1 - Math.cos(i / n * Math.PI)) / 2; if (cut != null) s = Math.min(s, cut); up.push([s, camb(m, s) + thick(t, s)]); lo.push([s, camb(m, s) - thick(t, s)]); } return [...up.reverse(), ...lo.slice(1, -1)]; };
     // a control surface: the aerofoil aft of the hinge line, with enough points to shade smoothly like the rest of the wing
     const wedge = (t, m, cut, n = 7) => { const up = [], lo = []; for (let i = 0; i <= n; i++) { const s = cut + (1 - cut) * (1 - Math.cos(i / n * Math.PI / 2)); const th = Math.max(thick(t, s), .0012); up.push([s, camb(m, s) + th]); lo.push([s, camb(m, s) - th]); } return [...up, ...lo.reverse()]; };
-
-    // ---- airliners from a 3D model: Boplo builds the landing gear here and load() adds the model with the livery painted on ----
-    if (J.model) {
-      const g = J.geo, G = J.gear, belly = g.bellyMain, wheelY = Math.min(belly - G.leg - G.r * 2, g.yMin - .45);
-      const wheel = (x, z, r, wd) => { const tyre = []; for (let i = 0; i <= 16; i++) { const a = i / 16 * Math.PI * 2; tyre.push([x + wd / 2, wheelY + r + Math.sin(a) * r, z + Math.cos(a) * r]); } loft('gear', [tyre, tyre.map(p => [p[0] - wd, p[1], p[2]])], C.rubber, { closed: false });
-        for (const sx of [1, -1]) { const hub = []; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; hub.push([x + sx * wd / 2 * 1.01, wheelY + r + Math.sin(a) * r * .62, z + Math.cos(a) * r * .62]); } loft('gear', [hub, hub.map(p => [x + sx * wd * .2, p[1], p[2]])], C.grey, { closed: true }); } };
-      const bogie = (x, z, n, nose, top) => {
-        const r = nose ? G.r * .7 : G.r, wd = r * .7;
-        tube([x, top, z], [x, wheelY + r, z], nose ? .1 : .16, 10, C.metal);
-        if (n === 2) { wheel(x + r * .55, z, r, wd); wheel(x - r * .55, z, r, wd); tube([x + r * .6, wheelY + r, z], [x - r * .6, wheelY + r, z], .07, 8, C.grey); }
-        else { const dz = r * 1.15, k = n / 2; for (let i = 0; i < k; i++) { const zz = z + dz * (i - (k - 1) / 2) * 2; wheel(x + r * .6, zz, r, wd); wheel(x - r * .6, zz, r, wd); } tube([x, wheelY + r, z + dz * (k - 1)], [x, wheelY + r, z - dz * (k - 1)], .11, 8, C.grey); }
-      };
-      for (const sx of [1, -1]) bogie(sx * G.track / 2, g.mainZ, G.mainWheels, false, belly + .4);
-      if (G.bodyGear) for (const sx of [1, -1]) bogie(sx * g.dia * .22, g.mainZ - 2.8, 4, false, belly + .2);
-      bogie(0, g.noseZ, G.noseWheels, true, g.bellyNose + .3);
-      const gearGLB = writeGLB(parts);
-      const AC = { glb: null, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -wheelY, groundAtt: 0, jet: true, surfaces: {},
-        eye: [g.dia * .12, g.dia * .13, g.noseTip - g.dia * .62], beacon: [0, g.dia / 2 + .12, g.mainZ + 1],
-        tips: { left: g.tip, right: [-g.tip[0], g.tip[1], g.tip[2]], tail: g.fin }, perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len,
-        credit: 'Aircraft model by amvlab (CC BY 4.0), modified by Boplo' };
-      AC.load = async () => { if (!AC.glb) AC.glb = await assemble(J.model, LV, gearGLB, J.darkTail); return AC; };
-      return AC;
-    }
 
     // ---- fuselage, with belly colour, a cheatline, windows, doors and the flight deck glass ----
     const FU = fuselage(J), at = FU.at, ts = []; for (let t = 0; t <= 1.00001; t += .0125) ts.push(Math.min(1, t));

@@ -1,0 +1,5 @@
+{"id":"b787","npz":"fg/787_uv.npz","meta":"fg/787.json","size":2048,
+ "base":[{"xcf":"fg/787-8/PaintKit/paintkit.xcf","layers":["Background"]}],
+ "details":[{"xcf":"fg/787-8/PaintKit/paintkit.xcf","layers":["Doors","Extras-must be included in final"]}],
+ "paint":"(?i)fuselage|bodyfairing|no[12]eng|reverser|rudder|^fin|cargo_door|nosedoor|gearibdoor|APU","nopaint":"(?i)fan","engine":"(?i)no[12]eng|reverser","fin":"(?i)^fin|rudder",
+ "out":"liv"}
