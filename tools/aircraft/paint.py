@@ -145,7 +145,7 @@ def main(cfg):
         if cfg.get('windows') or cfg.get('carry_dark'):
             C = np.where(WIN[..., None], rgb('#27303B'), C)
         # titles on both sides of the fuselage, read nose-first on each side
-        if LV['title']:
+        if LV['title'] and not cfg.get('no_title'):
             ppm = 40; zmin, zmax = tz, meta['noseTip']; W = int((zmax - zmin) * ppm); H = int(meta['hgt'] * 3 * ppm)
             can = Image.new('L', (W, H), 0); dr = ImageDraw.Draw(can)
             th = cfg.get('title_h', 1.0) * meta['hgt'] / 5.9 * 1.0

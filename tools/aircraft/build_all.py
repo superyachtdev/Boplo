@@ -11,6 +11,8 @@ PLANES = [
   ('b787', FG + '/787-8/Models', ['787-8.ac'], 'BOE', [('BOE.png', 'cfg787.json')]),
   ('a350', FG + '/A350XWB/Models', ['A350XWB-900.ac', '--maxtex', '1024'], 'a350xwb', [('a350xwb.png', 'cfg350.json')]),
   ('b748', FG + '/747-8i', ['Models/747-8i.ac', 'Models/747-8i_gear.ac', '--tex', f'fuselage.png={L8}/GREEN_fuselage.png', '--tex', f'turbofan.png={L8}/VRG_turbofan_white.png', '--tex', f'wings.png={L8}/wings.png', '--texdirs', 'Models'], 'fuselage|turbofan', [('GREEN_fuselage.png', 'cfg748.json'), ('VRG_turbofan_white.png', 'cfg748e.json')]),
+  ('e175', FG + '/E-jet-family/Models', ['erj175.ac'], 'blank175|blank', [('blank175.png', 'cfg175.json'), ('blank.png', 'cfg175e.json')]),
+  ('c750', FG + '/CitationX/Models', ['CitationX.ac', '--tex', 'livery1.png=Liveries/Blank.png', '--gear', r'(?i)wheel|shock|strut|tarm|geardoor|gear|well', '--drop', r'^(Cabin\.lwrdoor|step|LHspeedbrake|RHspeedbrake|Land1|Land2|Taxi|Bcn1|Bcn2|Strb1|Strb2|redlamp\..*)$'], 'Blank', [('Blank.png', 'cfgc750.json')]),
 ]
 only = sys.argv[1:]
 os.makedirs(OUT, exist_ok=True)

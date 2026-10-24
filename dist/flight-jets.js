@@ -1,5 +1,5 @@
-/* Boplo Flight — jets for the simulator: a business jet and a regional jet built in code, and five airliners.
-   The small jets are built as a glTF binary from a short spec (real dimensions in metres). The airliners are FlightGear models
+/* Boplo Flight — jets for the simulator: a business jet, a regional jet and five airliners.
+   All are FlightGear models
    (GPL v2, github.com/FGMEMBERS) converted to glTF by tools/aircraft, with Boplo's liveries painted on; the chosen livery's
    textures are dropped into the model when it loads. Liveries are Boplo's own or invented airlines, with no manufacturer marks.
    glTF axes: +Y up, +Z forward, +X to the left wing. Registers itself with BoploAircraft and BoploPhysics. */
@@ -20,20 +20,12 @@
 
   // perf in knots and feet per minute: vs (clean stall), vr, appr (final approach), cruise (indicated, low level), vmax, climb.
   const JETS = [
-    { id: 'bizjet', kind: 'jet', cat: 'Business jet', name: 'Light business jet', blurb: 'Six seats, T-tail and engines on the tail. Quick, nimble and climbs like a rocket.',
-      span: 15.9, len: 15.6, dia: 1.7, hgt: 1.8, nose: .17, tailc: .3, upsweep: .35, windows: { from: .2, to: .5, pitch: .78, w: .34, h: .4, round: true },
-      wing: { at: .5, root: 2.9, kink: 0, tip: 1.05, sweep: 14, dih: 3, t: [.13, .1], winglet: 'blended', wl: .9 },
-      eng: { mount: 'rear', n: 2, dia: .78, len: 2.5, t: .76 },
-      tail: { type: 'T', finH: 2.5, finRoot: 2.6, finTip: 1.3, finSweep: 38, stabSpan: 3.1, stabRoot: 1.35, stabTip: .7, stabSweep: 28 },
-      gear: { track: 2.6, nose: .12, r: .3, leg: .55, mainWheels: 1, noseWheels: 1 }, livery: 'boplo',
-      perf: { vs: 95, vr: 100, appr: 112, cruise: 250, vmax: 320, climb: 3500 } },
-    { id: 'rj', kind: 'jet', cat: 'Regional jet', name: 'Regional jet', blurb: 'An 80-seat twinjet for short hops, sized like an E175. Light on the controls for an airliner.',
-      span: 28.7, len: 31.7, dia: 3.0, hgt: 3.35, nose: .1, tailc: .22, upsweep: .4, windows: { from: .16, to: .72, pitch: .78, w: .3, h: .42 },
-      wing: { at: .45, root: 5.2, kink: .36, kinkChord: 3.1, tip: 1.3, sweep: 25, dih: 5, t: [.13, .1], winglet: 'blended', wl: 1.6 },
-      eng: { mount: 'wing', n: 2, dia: 1.45, len: 3.2, x: [.34] },
-      tail: { type: 'conv', finH: 5.0, finRoot: 4.3, finTip: 1.8, finSweep: 40, stabSpan: 5.1, stabRoot: 2.6, stabTip: 1.1, stabSweep: 32 },
-      gear: { track: 5.0, nose: .1, r: .5, leg: 1.0, mainWheels: 2, noseWheels: 2 }, livery: 'northwind',
-      perf: { vs: 125, vr: 130, appr: 128, cruise: 250, vmax: 320, climb: 2800 } },
+    { id: 'bizjet', kind: 'jet', cat: 'Business jet', name: 'Business jet', blurb: 'A fast, long-range business jet with a T-tail and engines on the tail, modelled on the Citation X. Climbs like a rocket.',
+      model: 'c750', tex: ["Blank.png"], span: 19.64, len: 21.94, geo: { dia: 1.84, hgt: 2.58, yMin: -2.17, mainZ: -0.66, noseZ: 7.58, noseTip: 9.59, tailZ: -12.35, tip: [9.82, -0.3, -5.35], fin: [-0.0, 4.14, -9.26], eye: [0.45, 0.55, 7.39] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'boplo', perf: { vs: 105, vr: 115, appr: 125, cruise: 270, vmax: 350, climb: 3700 } },
+    { id: 'rj', kind: 'jet', cat: 'Regional jet', name: 'Regional jet', blurb: 'An 80-seat twinjet for short hops, modelled on the E175. Light on the controls for an airliner.',
+      model: 'e175', tex: ["blank175.png",  "blank.png"], span: 25.56, len: 30.82, geo: { dia: 3.13, hgt: 4.02, yMin: -2.94, mainZ: -0.78, noseZ: 9.02, noseTip: 13.05, tailZ: -17.77, tip: [12.78, 1.8, -5.78], fin: [-0.01, 7.01, -16.77], eye: [0.5, 0.9, 10.65] },
+      gear: { track: 0, r: .6, leg: 1 }, livery: 'northwind', perf: { vs: 125, vr: 130, appr: 128, cruise: 250, vmax: 320, climb: 2800 } },
     // airliners use 3D models from FlightGear (GPL v2, github.com/FGMEMBERS), converted to glTF and repainted by Boplo (tools/aircraft)
     { id: 'narrow', kind: 'jet', cat: 'Airliner', name: 'Narrowbody airliner', blurb: 'The 180-seat workhorse of short-haul flying, modelled on the A320.',
       model: 'a320', tex: ["A320-NWA.png",  "NWA.png"], span: 34.04, len: 37.57, geo: { dia: 3.95, hgt: 4.14, yMin: -4.42, mainZ: -1.01, noseZ: 11.62, noseTip: 16.52, tailZ: -21.05, tip: [17.02, 0.79, -5.81], fin: [-0.0, 7.94, -18.8], eye: [0.5, 0.95, 13.92] },
@@ -54,8 +46,8 @@
 
   // flight-model data (BoploPhysics): mass (kg), wing area (m²), total thrust (N), flap notches, speeds (kt), wheelbase (m)
   const PHYS = {
-    bizjet: { m: 7600, S: 30.0, span: 15.9, jet: true, T0: 2 * 17800, CD0: .024, spool: 2, agility: .9, flaps: [[0, 'UP'], [15, 'T/O'], [35, 'LDG']], vso: 88, vfe: 200, vno: 300, vne: 340, wb: 6.2, retract: true },
-    rj: { m: 33000, S: 72.7, span: 28.7, jet: true, T0: 2 * 63000, CD0: .022, spool: 3, agility: .65, flaps: [[0, 'UP'], [7, '1'], [10, '2'], [20, '4'], [37, 'FULL']], vso: 105, vfe: 230, vno: 320, vne: 340, wb: 14.6, retract: true },
+    bizjet: { m: 15000, S: 49.0, span: 19.4, jet: true, T0: 2 * 28700, CD0: .024, spool: 2, agility: .9, flaps: [[0, 'UP'], [15, 'T/O'], [35, 'LDG']], vso: 88, vfe: 200, vno: 300, vne: 340, wb: 8.2, retract: true },
+    rj: { m: 33000, S: 72.7, span: 26, jet: true, T0: 2 * 63000, CD0: .022, spool: 3, agility: .65, flaps: [[0, 'UP'], [7, '1'], [10, '2'], [20, '4'], [37, 'FULL']], vso: 105, vfe: 230, vno: 320, vne: 340, wb: 9.8, retract: true },
     narrow: { m: 64000, S: 122.6, span: 34.1, jet: true, T0: 2 * 120000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [10, '1'], [15, '2'], [20, '3'], [35, 'FULL']], vso: 110, vfe: 230, vno: 340, vne: 350, wb: 12.6, retract: true },
     narrow2: { m: 62000, S: 124.6, span: 35.8, jet: true, T0: 2 * 121000, CD0: .021, spool: 4, agility: .55, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [25, '25'], [30, '30']], vso: 112, vfe: 230, vno: 340, vne: 350, wb: 15.8, retract: true },
     wide: { m: 200000, S: 360, span: 60.1, jet: true, T0: 2 * 320000, CD0: .02, spool: 5, agility: .45, flaps: [[0, 'UP'], [5, '5'], [15, '15'], [20, '20'], [30, '30']], vso: 118, vfe: 250, vno: 340, vne: 350, wb: 22.9, retract: true },
@@ -127,7 +119,7 @@
     const g = J.geo, lid = LIVERIES[liveryId] ? liveryId : J.livery;
     const AC = { glb: null, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -g.yMin, groundAtt: 0, jet: true, surfaces: {}, eye: g.eye,
       beacon: [0, g.hgt / 2 + .1, g.mainZ + 1.5], tips: { left: g.tip, right: [-g.tip[0], g.tip[1], g.tip[2]], tail: [0, g.hgt * .1, g.tailZ + .4] },
-      perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len, credit: 'Airliner models from FlightGear (GPL v2), converted and repainted by Boplo' };
+      perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len, credit: 'Jet models from FlightGear (GPL v2), converted and repainted by Boplo' };
     AC.load = async () => { if (!AC.glb) AC.glb = await assemble(J, lid); return AC; };
     return AC;
   }

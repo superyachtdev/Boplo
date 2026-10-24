@@ -11,6 +11,7 @@ ap.add_argument('out'); ap.add_argument('parts', nargs='+', help='file.ac[@x,y,z
 ap.add_argument('--texdirs', default='')
 ap.add_argument('--dump', default='')
 ap.add_argument('--obj', default='')
+ap.add_argument('--drop', default='')
 ap.add_argument('--mirror', action='store_true')
 ap.add_argument('--fus', default=r'(?i)^fuselage')
 ap.add_argument('--exclude', default=r'(?i)fog|shadow|interior|inside|cockpit|flightdeck|light(s)?\b|lenz|lens|glow|halo|beam|_light|landlt|turnoff|logolt|winglts|strobe|beacon(lenz)?$|pilot|seat|yoke|panel|instrument|wiper|cargo_inside|windows-light')
@@ -80,7 +81,7 @@ def parse_obj(M, L, path, skip):
     WM = M @ rot.T if False else M @ rot   # AC3D rot is row-major 3x3 applied as v*rot? use M@rot and verify visually
     WL = L + M @ loc
     full = path + '/' + name
-    sk = skip or (re.search(a.exclude, name) and not (a.keep and re.search(a.keep, name))) or hdr[1] == 'light'
+    sk = skip or bool(a.drop and re.search(a.drop, name)) or (re.search(a.exclude, name) and not (a.keep and re.search(a.keep, name))) or hdr[1] == 'light'
     if tex and re.search(a.droptex, tex): sk = True
     if sk and name: stats['skipped'].append(name)
     if verts is not None and surfs and not sk:
@@ -92,6 +93,7 @@ def parse_obj(M, L, path, skip):
     for _ in range(nk): parse_obj(WM, WL, full, False)
 
 def add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, oname=''):
+    if os.environ.get('OBJBOX'): print('OBJ', oname, os.path.basename(tex or '-'), V.min(0).round(2).tolist(), V.max(0).round(2).tolist())
     # triangulate (fan), only polygons (flags type 0)
     tri = []  # (vi, u, v, mat)
     two = []

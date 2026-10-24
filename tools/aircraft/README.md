@@ -9,6 +9,8 @@ The airliners in the simulator (`dist/aircraft-models/`) are built from FlightGe
 | b787 | 787-8 | https://github.com/FGMEMBERS/787-8 |
 | a350 | A350 XWB | https://github.com/FGMEMBERS/A350XWB |
 | b748 | 747-8i | https://github.com/FGMEMBERS/747-8i |
+| e175 | E175 | https://github.com/FGMEMBERS/E-jet-family |
+| c750 | Citation X | https://github.com/FGMEMBERS/CitationX |
 
 The converted models and liveries are released under the same licence (GPL v2).
 

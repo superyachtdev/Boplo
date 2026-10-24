@@ -1,0 +1,1 @@
+{"base": [{"png": "fg/E-jet-family/Models/blank175.png"}], "size": 2048, "paint": "(?i)fuselage|vstab|rudder|door|box", "nopaint": "(?i)^$", "engine": "(?i)nacelle|reverser", "fin": "(?i)vstab|rudder", "title_y": 0.6, "title_h": 0.75, "windows": {"y": 0.75, "pitch": 0.55, "w": 0.22, "h": 0.32, "z0": 6.55, "z1": -8.3, "doors": "(?i)^door\\.[lr][12]$"}}
