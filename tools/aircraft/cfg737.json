@@ -1,4 +1,1 @@
-{"id":"b737","npz":"fg/737_uv.npz","meta":"fg/737.json","size":2048,
- "base":[{"png":"fg/737-800/Models/737-800.png"}],
- "paint":"(?i)fuselage|door|eng|fairing|reverser|vstab|rudder|Eexit","nopaint":"(?i)^fan","engine":"(?i)eng|reverser","fin":"(?i)vstab|rudder",
- "out":"liv"}
+{"id": "b737", "npz": "fg/737_uv.npz", "meta": "fg/737.json", "size": 2048, "base": [{"png": "fg/737-800/Models/737-800.png"}], "paint": "(?i)fuselage|door|eng|fairing|reverser|vstab|rudder|Eexit", "nopaint": "(?i)^fan", "engine": "(?i)eng|reverser", "fin": "(?i)vstab|rudder", "out": "liv", "title_y": 0.8, "title_h": 0.85}
