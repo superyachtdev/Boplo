@@ -1723,7 +1723,7 @@ window.BoploSim = (() => {
       hudT += real; if (hudT > .05) { hudT = 0; hud(); }
     }
     raf = requestAnimationFrame(loop);
-    if (store.get("debug", false)) window.__boploSim = { viewer, st, C, tileset, model, path, FM, rwAt, elevAt, AP, dbg: () => ({ g0, g1, L, TDZ, DG, cruise, geoN, prof0: prof(0), arrE: arrE && arrE.id, depE: depE && depE.id, landPt, sThr, circuit }), key: k => { keys.add(k); }, unkey: k => keys.delete(k) };
+    if (store.get("debug", false)) window.__boploSim = { viewer, st, C, tileset, model, path, FM, rwAt, elevAt, groundAt, approachCap, AP, dbg: () => ({ g0, g1, L, TDZ, DG, cruise, geoN, prof0: prof(0), arrE: arrE && arrE.id, depE: depE && depE.id, landPt, sThr, circuit }), key: k => { keys.add(k); }, unkey: k => keys.delete(k) };
     return { close: destroy };
   }
 
