@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=11'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=12'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -444,19 +444,20 @@ window.BoploSim = (() => {
       <div class="pfd-tape pfd-spd"><svg viewBox="0 -180 64 360"><defs><clipPath id="pfdcs"><rect x="0" y="-180" width="64" height="360"/></clipPath></defs><g clip-path="url(#pfdcs)"><g data-spdt>${sp.join('')}</g></g></svg><div class="pfd-box"><b data-pspd>0</b></div><small class="pfd-cap">KT IAS</small><small class="pfd-sub" data-pgs>GS 0</small></div>
       <div class="pfd-tape pfd-alt"><svg viewBox="0 -180 72 360"><defs><clipPath id="pfdca"><rect x="0" y="-180" width="72" height="360"/></clipPath></defs><g clip-path="url(#pfdca)"><g data-altt>${al.join('')}</g><rect data-gndb x="0" y="200" width="72" height="400" class="pfd-gnd"/></g></svg><div class="pfd-box"><b data-palt>0</b></div><small class="pfd-cap">FT MSL</small><small class="pfd-sub" data-pagl>AGL 0</small><div class="pfd-vsi"><i data-pvsi></i><small data-pvs>0</small></div></div>
       <div class="pfd-rose"><svg viewBox="-82 -82 164 164"><circle r="80" class="pfd-rose-bg"/><g data-rose>${rose.join('')}<path data-rbug d="M0 -80l-5 -0l0 -7h10l0 7z" class="pfd-bug"/><path data-rcrs d="M0 -50L-4 -42H4Z M0 50L-3 44H3Z" class="pfd-crs"/></g><path d="M0 -84l-6 -9h12z" class="pfd-lubber"/><path d="M0 -22L-8 10L0 5L8 10Z" class="pfd-plane"/></svg><b data-phdg>000°</b></div>
-      <div class="pfd-side pfd-left">
-        ${jet ? '<button type="button" class="pfd-btn" data-pf="gear"><span>Gear</span><b data-pfgear>Down</b></button><button type="button" class="pfd-btn" data-pf="spoiler"><span>Spoilers</span><b data-pfsp>Off</b></button>' : ''}
-        <div class="pfd-btn pfd-pair"><span>Trim</span><b data-pftrim>0%</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button></div>
-        <div class="pfd-btn pfd-pair"><span>Flaps</span><b data-pfflaps>UP</b><button type="button" data-pf="flapup" aria-label="Flaps up">−</button><button type="button" data-pf="flapdn" aria-label="Flaps down">+</button></div>
-        <button type="button" class="pfd-btn" data-pf="park"><span>Park brake</span><b data-pfpark>Off</b></button>
-        <button type="button" class="pfd-btn" data-pf="brake"><span>Brakes</span><b>Hold</b></button>
+      <div class="pfd-flaps">
+        <div class="pfd-fl"><span>Flaps</span><button type="button" data-pf="flapup" aria-label="Flaps up">▲</button><b data-pfflaps>UP</b><button type="button" data-pf="flapdn" aria-label="Flaps down">▼</button></div>
+        <div class="pfd-fl"><span>Trim</span><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button><b data-pftrim>0%</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button></div>
       </div>
-      <div class="pfd-side pfd-right">
-        <button type="button" class="pfd-btn" data-pf="ap"><span>Autopilot</span><b data-pfap>Off</b></button>
-        <button type="button" class="pfd-btn" data-pf="lights"><span>Lights</span><b data-pflt>Off</b></button>
-        <button type="button" class="pfd-btn" data-pf="gates"><span>Route gates</span><b data-pfgt>Off</b></button>
-        <button type="button" class="pfd-btn" data-pf="cam"><span>Camera</span><b data-pfcam>Chase</b></button>
-        ${jet ? '' : '<button type="button" class="pfd-btn" data-pf="panel"><span>Instruments</span><b>Gauges</b></button>'}
+      <div class="pfd-dock">
+        ${jet ? '<button type="button" class="pfd-dk" data-pf="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v7M8 10h8M7 14a3 3 0 1 0 0 .01M17 14a3 3 0 1 0 0 .01M12 10v3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b data-pfgear>Down</b><span>Gear</span></button><button type="button" class="pfd-dk" data-pf="spoiler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15l9-3 9 3M6 13.5l2.5-5M15.5 8.5l2.5 5"/></svg><b data-pfsp>In</b><span>Spoilers</span></button>' : ''}
+        <button type="button" class="pfd-dk" data-pf="brake"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M4 8a9 9 0 0 1 3-3.5M20 8a9 9 0 0 0-3-3.5"/></svg><b>Hold</b><span>Brakes</span></button>
+        <button type="button" class="pfd-dk" data-pf="park"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/></svg><b data-pfpark>Off</b><span>Park</span></button>
+        <i class="pfd-dk-sep"></i>
+        <button type="button" class="pfd-dk" data-pf="lights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg><b data-pflt>Off</b><span>Lights</span></button>
+        <button type="button" class="pfd-dk" data-pf="ap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 6.8H21l-5.4 4 2 6.7L12 16.6 6.4 20.5l2-6.7L3 9.8h6.6z"/></svg><b data-pfap>Off</b><span>Autopilot</span></button>
+        <button type="button" class="pfd-dk" data-pf="gates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="6" height="12" rx="1"/><rect x="14" y="6" width="6" height="12" rx="1"/></svg><b data-pfgt>Off</b><span>Gates</span></button>
+        <button type="button" class="pfd-dk" data-pf="cam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b data-pfcam>Chase</b><span>Camera</span></button>
+        ${jet ? '' : '<button type="button" class="pfd-dk" data-pf="panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b>Gauges</b><span>Panel</span></button>'}
       </div>
       <div class="pfd-thr" data-pfthr><span data-pfthrl>${jet ? 'N1' : 'PWR'}</span><div class="pfd-thr-track"><i data-pfthrf></i><b data-pfthrk></b></div><small data-pfthrv>0%</small></div>
       <div class="pfd-bar">
@@ -711,12 +712,14 @@ window.BoploSim = (() => {
     try {
       viewer = new C.CesiumWidget($('[data-map]'), {
         baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !coarse, terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
-        useBrowserRecommendedResolution: true, msaaSamples: coarse ? 1 : 2, creditContainer: $('[data-credits]'), requestRenderMode: false
+        useBrowserRecommendedResolution: !!coarse, msaaSamples: coarse ? 1 : 4, creditContainer: $('[data-credits]'), requestRenderMode: false
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
     scene.screenSpaceCameraController.enableInputs = false;
     scene.postProcessStages.fxaa.enabled = true;
+    // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
+    if (!coarse) { try { viewer.resolutionScale = Math.min(1, 1.6 / (window.devicePixelRatio || 1)); scene.highDynamicRange = true; } catch { } }
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
     // a fixed mid-morning sun at the departure airfield, for good shadows and colour
@@ -731,6 +734,8 @@ window.BoploSim = (() => {
       else if (sa && TOD === 'golden') { sa.brightnessShift = -.18; sa.saturationShift = .18; sa.hueShift = -.035; } } catch (e) { console.warn('sky', e); }
     dlg.dataset.tod = TOD;
     const LIGHT = TOD === 'night' ? [.13, .15, .24] : TOD === 'golden' ? [1, .8, .62] : [1, 1, 1];
+    // a soft sun glare, as a camera sees it
+    if (!coarse && TOD !== 'night') { try { const lf = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(lf.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(lf); } catch (e) { console.warn('flare', e); } }
     if (scene.shadowMap) { scene.shadowMap.size = 2048; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = true; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
@@ -775,10 +780,14 @@ window.BoploSim = (() => {
         cloudCol = scene.primitives.add(new C.CloudCollection({ noiseDetail: 16, noiseOffset: new C.Cartesian3(Math.random() * 100, 0, 0) }));
         const R = 9000, per = { FEW: 10, SCT: 28, BKN: 60, OVC: 110, VV: 110 };
         for (const L of cloudLayers) {
-          const n = Math.min(140, per[L.cover] || 20), base = (+L.base) * FT;
+          const n = Math.min(110, per[L.cover] || 20), base = (+L.base) * FT;
           for (let i = 0; i < n; i++) {
-            const a = Math.random() * 2 * Math.PI, rr = Math.sqrt(Math.random()) * R, w = (L.cover === 'OVC' ? 1500 : 650) + Math.random() * 900, h = w * (.45 + Math.random() * .35);
-            cloudCells.push({ dx: Math.cos(a) * rr, dz: Math.sin(a) * rr, base, w, h, c: cloudCol.add({ position: C.Cartesian3.ZERO, scale: new C.Cartesian2(w, h), maximumSize: new C.Cartesian3(50, 14 + Math.random() * 10, 24), slice: .3 + Math.random() * .25, brightness: TOD === 'night' ? .12 : TOD === 'golden' ? .85 : 1, color: TOD === 'golden' ? C.Color.fromCssColorString('#ffd9b8') : C.Color.WHITE }) });
+            // each cloud is a cluster of smaller puffs: the procedural clouds stay crisp at this size
+            const a = Math.random() * 2 * Math.PI, rr = Math.sqrt(Math.random()) * R, cw = (L.cover === 'OVC' ? 1400 : 600) + Math.random() * 700, np = L.cover === 'OVC' ? 4 : 3;
+            for (let j = 0; j < np; j++) {
+              const w = cw * (.38 + Math.random() * .22), h = w * (.5 + Math.random() * .3), ox = (Math.random() - .5) * cw * .75, oz = (Math.random() - .5) * cw * .45, oy = (Math.random() - .3) * h * .35;
+              cloudCells.push({ dx: Math.cos(a) * rr + ox, dz: Math.sin(a) * rr + oz, base: base + oy, w, h, c: cloudCol.add({ position: C.Cartesian3.ZERO, scale: new C.Cartesian2(w, h), maximumSize: new C.Cartesian3(26 + Math.random() * 10, 12 + Math.random() * 8, 18), slice: .32 + Math.random() * .22, brightness: TOD === 'night' ? .12 : TOD === 'golden' ? .9 : 1.05, color: TOD === 'golden' ? C.Color.fromCssColorString('#ffd9b8') : C.Color.WHITE }) });
+            }
           }
         }
         exclude.push(cloudCol);
@@ -981,10 +990,17 @@ window.BoploSim = (() => {
       landL.show = landR.show = landingLights; if (landingLights) { landL.position = at([AC.tips.left[0] * .42, AC.tips.left[1] - .05, AC.tips.left[2] + .6]); landR.position = at([AC.tips.right[0] * .42, AC.tips.right[1] - .05, AC.tips.right[2] + .6]); }
       // control surfaces follow the controls (TE-down is a negative rotation about each hinge axis)
       const n = FM.p.notch[fc.flaps] || FM.p.notch[0], rud = fs.rud ?? fc.rudder;
-      const want = { flapL: -n.deg, flapR: -n.deg, ailL: -fc.aileron * 18, ailR: fc.aileron * 18, elev: fc.elevator * (AC.surfaces?.elev?.max || 22), rud: rud * 25 };
+      const want = { flap: -n.deg, ailL: -fc.aileron * 18, ailR: fc.aileron * 18, elev: fc.elevator * (AC.surfaces?.elev?.max || 22), rud: rud * 25, spoil: (fs.spoilerPos || 0) * 42 };
+      const fanStep = ((fs.n1 || 0) / 100) * 2 * Math.PI * realDt * 2.2; fanA = (fanA + fanStep) % (Math.PI * 2);
       for (const [k, node] of Object.entries(surfNodes)) {
-        const sf = AC.surfaces[k], tgt = want[k] || 0, cur = surfAng[k] ?? 0, rate = k.startsWith('flap') ? 12 : 120;
-        const v = cur + clamp(tgt - cur, -rate * realDt, rate * realDt); if (Math.abs(v - cur) < 1e-4 && surfAng[k] != null) continue; surfAng[k] = v;
+        const sf = AC.surfaces[k], kind = (sf.kind === 'stabilator' ? 'elev' : sf.kind) || k.replace(/\d+$/, '').replace(/[LR]$/, ''), side = sf.side ?? (/R\d*$/.test(k) ? -1 : 1);
+        let v;
+        if (kind === 'fan') v = fanA * R2D;
+        else {
+          const tgt = kind === 'ail' ? want[side > 0 ? 'ailL' : 'ailR'] : kind === 'elev' ? fc.elevator * (sf.max || 22) : (want[kind] ?? 0), cur = surfAng[k] ?? 0, rate = kind === 'flap' ? 12 : kind === 'spoil' ? 60 : 120;
+          v = cur + clamp(tgt - cur, -rate * realDt, rate * realDt); if (Math.abs(v - cur) < 1e-4 && surfAng[k] != null) continue;
+        }
+        surfAng[k] = v;
         const p = new C.Cartesian3(...sf.pivot), q = C.Quaternion.fromAxisAngle(new C.Cartesian3(...sf.axis), v * D2R);
         node.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(p), C.Matrix4.multiply(C.Matrix4.fromRotationTranslation(C.Matrix3.fromQuaternion(q)), C.Matrix4.fromTranslation(C.Cartesian3.negate(p, new C.Cartesian3())), new C.Matrix4()), new C.Matrix4());
       }
@@ -996,7 +1012,7 @@ window.BoploSim = (() => {
       if (bladeNode) bladeNode.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(new C.Cartesian3(...AC.hub)), C.Matrix4.fromRotationTranslation(C.Matrix3.fromRotationZ(propA)), new C.Matrix4());
       if (discNode) discNode.show = rpm > 1200;
     }
-    let propA = 0, realDt = .016, gateT = 0;
+    let propA = 0, fanA = 0, realDt = .016, gateT = 0;
     function updateGates() {
       const W = circuit ? 70 : 110, Hh = circuit ? 40 : 60, pr = path.project(st.x, st.z), near = showGates && CAMS[camI][0] !== 'High' ? gates.filter(g => g.s > pr.s + 15).slice(0, 5) : [];
       gatePool.forEach(p => p.show = false);
@@ -1017,7 +1033,7 @@ window.BoploSim = (() => {
       const w = root.clientWidth, h = root.clientHeight, as = w / Math.max(h, 1), fov = camera.frustum.fov;
       const hfov = as >= 1 ? fov : 2 * Math.atan(Math.tan(fov / 2) * as);
       const [, kB, kH, depBase] = CAMS[camI];
-      const B0 = clamp(5.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 170), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
+      const B0 = clamp(4.6 * AC.S / 3.4 / Math.tan((as < 1 ? .34 : .24) * hfov), 16, 170), B = B0 * kB, Hc = (B0 * .2 + 1.5) * kH;
       camH += wrap180(st.hdg - camH) * Math.min(1, dt * (CAMS[camI][0] === 'High' ? 1.2 : 2.6));
       camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
       camD += (depBase - camD) * Math.min(1, dt * 3);

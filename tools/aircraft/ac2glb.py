@@ -12,6 +12,7 @@ ap.add_argument('--texdirs', default='')
 ap.add_argument('--dump', default='')
 ap.add_argument('--obj', default='')
 ap.add_argument('--drop', default='')
+ap.add_argument('--surf', action='append', default=[], help='kind=regex: animated control surfaces (flap, ail, elev, rud, spoil, fan)')
 ap.add_argument('--mirror', action='store_true')
 ap.add_argument('--fus', default=r'(?i)^fuselage')
 ap.add_argument('--exclude', default=r'(?i)fog|shadow|interior|inside|cockpit|flightdeck|light(s)?\b|lenz|lens|glow|halo|beam|_light|landlt|turnoff|logolt|winglts|strobe|beacon(lenz)?$|pilot|seat|yoke|panel|instrument|wiper|cargo_inside|windows-light')
@@ -24,6 +25,7 @@ ap.add_argument('--maxtex', type=int, default=2048)
 ap.add_argument('--keep', default='')
 a = ap.parse_args()
 texmap = dict(t.split('=', 1) for t in a.tex)
+SURF = [tuple(r.split('=', 1)) for r in a.surf]
 texdirs = [d for d in a.texdirs.split(',') if d]
 lines = []; i = 0; mats = []; matbase = 0; curdir = '.'; offset = np.zeros(3)
 def resolve(tex):
@@ -89,10 +91,12 @@ def parse_obj(M, L, path, skip):
         V = (WM @ verts.T).T + WL
         isgear = bool(re.search(a.gear, full)) or bool(re.search(a.geardoor, name))
         if a.obj and not re.search(a.obj, name): pass
-        else: add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, name)
+        else:
+            snode = next((k for k, rx in SURF if re.search(rx, name)), '') if not isgear else ''
+            add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, name, (snode + ':' + name + ':' + ('a' if V[:, 2].mean() > 0 else 'b')) if snode else '')
     for _ in range(nk): parse_obj(WM, WL, full, False)
 
-def add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, oname=''):
+def add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, oname='', snode=''):
     if os.environ.get('OBJBOX'): print('OBJ', oname, os.path.basename(tex or '-'), V.min(0).round(2).tolist(), V.max(0).round(2).tolist())
     # triangulate (fan), only polygons (flags type 0)
     tri = []  # (vi, u, v, mat)
@@ -116,7 +120,7 @@ def add_mesh(V, surfs, tex, texrep, texoff, crease, isgear, oname=''):
         for c in range(3): vf[t[c][0]].append(ti)
     for ti, t in enumerate(tri):
         if not ok[ti]: continue
-        key = (tex, t[3], isgear)
+        key = (tex, t[3], isgear, snode)
         g = groups.setdefault(key, {'p': [], 'n': [], 'uv': [], 'o': []})
         g['o'].append(oname)
         for c in range(3):
@@ -174,7 +178,7 @@ def tex_index(tex):
     teximg[tex] = (len(textures) - 1, hasA); return teximg[tex]
 
 allP = []
-for (tex, mi, gear), g in groups.items():
+for (tex, mi, gear, snode), g in groups.items():
     P = remap(np.array(g['p'], np.float32)).astype(np.float32); N = remap(np.array(g['n'], np.float32)).astype(np.float32); UV = np.array(g['uv'], np.float32)
     # remap flips handedness? x'=z,y'=y,z'=-x : det = +1 (rotation), winding preserved
     allP.append(P)
@@ -210,7 +214,7 @@ print('META', json.dumps({k: (round(v, 2) if isinstance(v, float) else v) for k,
 json.dump(meta, open(os.path.splitext(a.out)[0] + '.json', 'w'))
 if a.dump:
     D = {'P': [], 'UV': [], 'O': [], 'tex': []}
-    for (tex, mi, gear), g in groups.items():
+    for (tex, mi, gear, snode), g in groups.items():
         if tex and re.search(a.dump, os.path.basename(tex)):
             n = len(g['P']) // 3
             D['P'].append(g['P'].reshape(n, 3, 3)); D['UV'].append(g['UV'].reshape(n, 3, 2)); D['O'] += g['o']; D['tex'] += [os.path.basename(tex)] * n
@@ -218,7 +222,7 @@ if a.dump:
 print('bbox', mn.round(2), mx.round(2), 'size', (mx - mn).round(2), 'tris', stats['tris'])
 
 matcache = {}
-for (tex, mi, gear), g in groups.items():
+for (tex, mi, gear, snode), g in groups.items():
     P, N, UV = g['P'], g['N'], g['UV']
     key = np.concatenate([np.round(P, 4), np.round(N, 3), np.round(UV, 5)], 1)
     _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
@@ -232,6 +236,8 @@ for (tex, mi, gear), g in groups.items():
         if re.search(r'(?i)glass|window', m['name']) and not ti and alpha < .9: col, alpha = [.07, .09, .12], .92
         if not ti and max(m['emis']) > .3: col, alpha = [.08, .1, .13], 1
         pbr = {'baseColorFactor': [*[float(c) for c in col], float(alpha)], 'metallicFactor': 0.1, 'roughnessFactor': float(max(.15, 1 - min(m['shi'], 128) / 128 * .85))}
+        if ti: pbr['metallicFactor'], pbr['roughnessFactor'] = .08, .42  # painted skin: a satin gloss that picks up the sky
+        if col == [.07, .09, .12]: pbr['metallicFactor'], pbr['roughnessFactor'] = .4, .06  # glass
         if ti: pbr['baseColorTexture'] = {'index': ti[0]}
         md = {'name': m['name'][:40], 'pbrMetallicRoughness': pbr, 'doubleSided': True}
         if alpha < .99 or (ti and ti[1]): md['alphaMode'] = 'BLEND'
@@ -242,13 +248,33 @@ for (tex, mi, gear), g in groups.items():
     if ti: aT = len(accs); accs.append({'bufferView': addview(UV.tobytes(), 34962), 'componentType': 5126, 'count': n, 'type': 'VEC2'}); attrs['TEXCOORD_0'] = aT
     i16 = n < 65535
     aI = len(accs); accs.append({'bufferView': addview((idx.astype(np.uint16) if i16 else idx).tobytes(), 34963), 'componentType': 5123 if i16 else 5125, 'count': len(idx), 'type': 'SCALAR'})
-    meshes['gear' if gear else 'body'].append({'attributes': attrs, 'indices': aI, 'material': matcache[mk]})
+    meshes.setdefault('gear' if gear else (snode or 'body'), []).append({'attributes': attrs, 'indices': aI, 'material': matcache[mk]})
 
 gm = []; nodes = []
 for k in ('body', 'gear'):
-    if meshes[k]: gm.append({'name': k, 'primitives': meshes[k]}); nodes.append({'name': k, 'mesh': len(gm) - 1})
+    if meshes.get(k): gm.append({'name': k, 'primitives': meshes[k]}); nodes.append({'name': k, 'mesh': len(gm) - 1})
+# animated surfaces: one node per object, named kind+side+n, with the hinge (pivot, unit axis) in model coordinates
+surfmeta = []; count = {}
+for sk in sorted(k for k in meshes if ':' in k):
+    kind = sk.split(':')[0]
+    Pv = np.concatenate([g['P'] for kk, g in groups.items() if kk[3] == sk])
+    side = 1 if Pv[:, 0].mean() > 0 else -1
+    if kind == 'fan':
+        c = (Pv.min(0) + Pv.max(0)) / 2; piv, ax = c, np.array([0, 0, 1.])
+    else:
+        sv = Pv[:, 1] if kind == 'rud' else np.abs(Pv[:, 0]); lo, hi = sv.min(), sv.max(); band = max((hi - lo) * .08, .05)
+        A_ = Pv[sv <= lo + band]; B_ = Pv[sv >= hi - band]
+        pa = A_[A_[:, 2].argmax()]; pb = B_[B_[:, 2].argmax()]
+        ax = pb - pa; L_ = np.linalg.norm(ax)
+        ax = ax / L_ if L_ > .2 else (np.array([0, 1., 0]) if kind == 'rud' else np.array([1., 0, 0]))
+        if (kind == 'rud' and ax[1] < 0) or (kind != 'rud' and ax[0] < 0): ax = -ax
+        piv = pa
+    tag = kind + ('' if kind == 'rud' else 'L' if side > 0 else 'R'); count[tag] = count.get(tag, 0) + 1; nm = f'{tag}{count[tag]}'
+    gm.append({'name': nm, 'primitives': meshes[sk]}); nodes.append({'name': nm, 'mesh': len(gm) - 1})
+    surfmeta.append({'node': nm, 'kind': kind, 'side': side, 'pivot': [round(float(v), 3) for v in piv], 'axis': [round(float(v), 4) for v in ax]})
+print('SURF', len(surfmeta), sorted(set(m['node'][:-1] for m in surfmeta)))
 while len(bin_) % 4: bin_.append(0)
-J = {'asset': {'version': '2.0', 'generator': 'Boplo ac2glb'}, 'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes, 'meshes': gm, 'materials': gmats, 'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': len(bin_)}]}
+J = {'asset': {'version': '2.0', 'generator': 'Boplo ac2glb', 'extras': {'surfaces': surfmeta}}, 'scene': 0, 'scenes': [{'nodes': list(range(len(nodes)))}], 'nodes': nodes, 'meshes': gm, 'materials': gmats, 'accessors': accs, 'bufferViews': views, 'buffers': [{'byteLength': len(bin_)}]}
 if images: J['images'] = images; J['textures'] = textures; J['samplers'] = [{'magFilter': 9729, 'minFilter': 9987, 'wrapS': 10497, 'wrapT': 10497}]
 jb = json.dumps(J).encode()
 while len(jb) % 4: jb += b' '

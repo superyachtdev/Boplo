@@ -14,14 +14,16 @@ PLANES = [
   ('e175', FG + '/E-jet-family/Models', ['erj175.ac'], 'blank175|blank', [('blank175.png', 'cfg175.json'), ('blank.png', 'cfg175e.json')]),
   ('c750', FG + '/CitationX/Models', ['CitationX.ac', '--tex', 'livery1.png=Liveries/Blank.png', '--gear', r'(?i)wheel|shock|strut|tarm|geardoor|gear|well', '--drop', r'^(Cabin\.lwrdoor|step|LHspeedbrake|RHspeedbrake|Land1|Land2|Taxi|Bcn1|Bcn2|Strb1|Strb2|redlamp\..*)$'], 'Blank', [('Blank.png', 'cfgc750.json')]),
 ]
+SURF = {'a320': [('flap', '^Flap[LR][12]$'), ('ail', '^Aileron[LR]$'), ('elev', '^Elevator[LR]$'), ('rud', '^Rudder_1$'), ('spoil', '^Spoiler[LR]\\d$'), ('fan', '^fanWheel$|^blades$')], 'b737': [('flap', '^(rh)?(aft)?flap[IO]/B$'), ('ail', '^[lr]haileron$'), ('elev', '^[lr]helevator$'), ('rud', '^rudder$'), ('spoil', '^spoiler\\d+$'), ('fan', '^fan2?$')], 'b787': [('flap', '^[lr]h(ibflap|ibflapa|obflapa|obflapb)$'), ('ail', '^[lr]h(ib|ob)aileron$'), ('elev', '^[lr]helevator$'), ('rud', '^rudder$'), ('spoil', '^[lr]h(ib|ob)?spoiler[ab]$'), ('fan', '^eng[12]fan$')], 'a350': [('flap', '^flap\\d+$'), ('ail', '^aileron\\d$'), ('elev', '^elevator\\.\\d$'), ('rud', '^rudder$'), ('fan', '^fan_eng\\d$')], 'b748': [('flap', '^(doubleflaps_\\d|external_flap)_[LR]$'), ('ail', '^aileron(_int)?_[LR]$'), ('elev', '^elevator_(left|right)$'), ('rud', '^rudder_1$'), ('spoil', '^speedbrake_\\d_[LR]$'), ('fan', '^blades_\\d$')], 'e175': [('flap', '^flap\\.[lr]\\.\\d$'), ('ail', '^aileron\\.[lr]$'), ('elev', '^elevator\\.[lr]$'), ('rud', '^rudder$'), ('spoil', '^spoiler\\.[lr]\\.\\d$'), ('fan', '^fan\\.[lr]$')], 'c750': [('flap', '^[LR]HFlap[01]$'), ('ail', '^[LR]HAileron$'), ('elev', '^[LR]Helevator$'), ('rud', '^Rudder_1$'), ('spoil', '^[LR]H(spoiler|speedbrake)$'), ('fan', '^[LR]Hfan$')]}
 only = sys.argv[1:]
 os.makedirs(OUT, exist_ok=True)
 summary = {}
 for mid, cwd, args, dump, livs in PLANES:
     if only and mid not in only: continue
     glb = f'{FG}/{mid}.glb'
-    r = subprocess.run(['python3', SP + '/ac2glb.py', glb] + args + ['--dump', dump], cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run(['python3', SP + '/ac2glb.py', glb] + args + ['--dump', dump] + [x for k, rx in SURF.get(mid, []) for x in ('--surf', f'{k}={rx}')], cwd=cwd, capture_output=True, text=True)
     if r.returncode: print(r.stderr); sys.exit(1)
+    print([l for l in r.stdout.splitlines() if l.startswith('SURF')])
     meta = json.load(open(f'{FG}/{mid}.json'))
     os.makedirs(f'{OUT}/{mid}', exist_ok=True)
     reps = []

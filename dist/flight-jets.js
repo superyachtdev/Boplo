@@ -95,7 +95,7 @@
   }
 
   // ---- airliners from 3D models: the model is fetched once, and the chosen livery's textures are dropped into it ----
-  const modelCache = new Map(), MODEL_V = 2;
+  const modelCache = new Map(), MODEL_V = 3;
   const parseGLB = buf => { const dv = new DataView(buf), jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl, bl = dv.getUint32(bo, true); return { json, bin: new Uint8Array(buf, bo + 8, bl) }; };
   const pad4 = n => (n + 3) & ~3;
   const getBuf = url => { if (!modelCache.has(url)) modelCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).catch(e => { modelCache.delete(url); throw e; })); return modelCache.get(url); };
@@ -113,6 +113,7 @@
     dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, out.length, true);
     dv.setUint32(12, jb.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jb, 20);
     dv.setUint32(20 + jb.length, off, true); dv.setUint32(24 + jb.length, 0x004E4942, true); out.set(bin, 28 + jb.length);
+    out.surfaces = j.asset?.extras?.surfaces || [];
     return out;
   }
   function buildModel(J, LV, liveryId) {
@@ -120,7 +121,7 @@
     const AC = { glb: null, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -g.yMin, groundAtt: 0, jet: true, surfaces: {}, eye: g.eye,
       beacon: [0, g.hgt / 2 + .1, g.mainZ + 1.5], tips: { left: g.tip, right: [-g.tip[0], g.tip[1], g.tip[2]], tail: [0, g.hgt * .1, g.tailZ + .4] },
       perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len, credit: 'Jet models from FlightGear (GPL v2), converted and repainted by Boplo' };
-    AC.load = async () => { if (!AC.glb) AC.glb = await assemble(J, lid); return AC; };
+    AC.load = async () => { if (!AC.glb) { const g = await assemble(J, lid); AC.glb = g; AC.surfaces = Object.fromEntries(g.surfaces.map(sf => [sf.node, { ...sf, max: sf.kind === 'elev' ? 22 : sf.kind === 'rud' ? 25 : 20 }])); } return AC; };
     return AC;
   }
 
