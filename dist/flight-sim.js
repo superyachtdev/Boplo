@@ -1120,7 +1120,7 @@ window.BoploSim = (() => {
     };
     const groundAt = (x, z) => {
       const air = !fs?.ground, r = rwAt(x, z), e = elevAt(x, z);
-      if (r) return lastG = air && e != null && r.h > e + 15 ? e : r.h; // a runway height far above the terrain around it is a bad sample
+      if (r) return lastG = r.h;
       if (e != null) return lastG = air ? Math.min(e, approachCap(x, z)) : e;
       return fs?.ground ? lastG : lastG - 3000;
     };
