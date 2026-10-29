@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Owner analytics · Boplo Flight</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#020611">
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="/flight-app.css?v=17">
+  <style>
+    body{background:var(--cloud)}
+    .oh{margin:10px;border-radius:var(--r-frame);padding:clamp(22px,3.5vw,40px) clamp(18px,4vw,56px) clamp(64px,7vw,92px);box-shadow:inset 0 0 0 1px var(--hair-d)}
+    .oh>*{position:relative}
+    .oh nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(24px,4vw,48px)}
+    .oh h1{font-size:clamp(34px,5vw,64px)}
+    .oh-row{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
+    .oh p{margin-top:10px;color:rgba(222,233,255,.72);font-size:15px}
+    .seg{display:inline-flex;padding:4px;border-radius:999px;background:rgba(158,216,255,.08);box-shadow:inset 0 0 0 1px var(--hair-d)}
+    .seg button{height:34px;padding:0 14px;border-radius:999px;font:inherit;font-size:13.5px;font-weight:560;color:rgba(222,233,255,.8);background:none;border:0;cursor:pointer}
+    .seg button[aria-pressed=true]{background:#fff;color:var(--ink)}
+    .seg button:focus-visible{outline:2px solid var(--ice);outline-offset:2px}
+    main.ow{max-width:1240px;margin:-56px auto 0;padding:0 clamp(12px,2.5vw,28px) 64px;position:relative;display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+    .s3{grid-column:span 3}.s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}.s12{grid-column:1/-1}
+    @media (max-width:980px){.s3{grid-column:span 6}.s4,.s5,.s6,.s7,.s8{grid-column:1/-1}}
+    @media (max-width:520px){.s3{grid-column:1/-1}}
+    .ow h2{font-size:15px;font-weight:640;letter-spacing:-.005em;margin-bottom:4px}
+    .ow .sub{color:var(--ink-3);font-size:13px;margin-bottom:14px}
+    .kpi .lab{font-size:13.5px;color:var(--ink-2);font-weight:560}
+    .kpi .big{font-size:clamp(30px,3.4vw,42px);font-weight:640;letter-spacing:-.03em;font-variation-settings:'wdth' 106;margin:8px 0 6px;font-variant-numeric:tabular-nums}
+    .kpi small{font-size:13px;color:var(--ink-3)}
+    .delta{font-weight:600}.delta.up{color:var(--ok)}.delta.down{color:var(--danger)}
+    .chart{position:relative}
+    .chart svg{display:block;width:100%;height:auto;overflow:visible}
+    .chart .gl{stroke:var(--hair-l)}
+    .chart text{font-size:11px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+    .tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.45;white-space:nowrap;transform:translate(-50%,-100%);opacity:0;transition:opacity .12s}
+    .tip b{font-weight:640}
+    .bars{display:grid;gap:9px}
+    .bar{display:grid;grid-template-columns:minmax(80px,40%) 1fr auto;align-items:center;gap:10px;font-size:13.5px}
+    .bar .k{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+    .bar .t,.bar .f{display:block}
+    .bar .t{height:10px;border-radius:5px;background:var(--well);overflow:hidden}
+    .bar .f{height:100%;border-radius:5px;background:var(--electric);min-width:3px}
+    .bar .n{font-variant-numeric:tabular-nums;color:var(--ink-2);min-width:2.5em;text-align:right}
+    .bar .n em{font-style:normal;color:var(--ink-3);font-size:12px;margin-left:6px}
+    .funnel{display:grid;gap:12px}
+    .fs{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}
+    .fs .k{font-size:13.5px;color:var(--ink-2)}
+    .fs .t{height:34px;border-radius:9px;background:var(--well);position:relative;overflow:hidden}
+    .fs .f{position:absolute;inset:0 auto 0 0;background:var(--electric);border-radius:9px}
+    .fs .v{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13.5px;font-weight:620;color:#fff;mix-blend-mode:normal;white-space:nowrap}
+    .fs .v.out{color:var(--ink)}
+    .fs .v em{font-style:normal;font-weight:500;opacity:.8;margin-left:8px}
+    @media (max-width:520px){.fs{grid-template-columns:1fr;gap:4px}}
+    .plans{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    @media (max-width:700px){.plans{grid-template-columns:repeat(2,1fr)}}
+    .pl{background:var(--well);border-radius:14px;padding:14px}
+    .pl b{display:block;font-size:26px;font-weight:640;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+    .pl span{font-size:13px;color:var(--ink-2)}
+    .flags{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .chip.warn{background:#FFF1E8;color:#9A3A12;border-color:transparent}
+    .ostats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 12px}
+    @media (max-width:520px){.ostats{grid-template-columns:repeat(2,1fr)}}
+    .ostats b{display:block;font-size:24px;font-weight:640;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+    .ostats span{font-size:13px;color:var(--ink-2)}
+    .tw{overflow-x:auto;margin:0 -4px}
+    table.ot{width:100%;border-collapse:collapse;font-size:13.5px}
+    .ot th,.ot td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--hair-l);white-space:nowrap}
+    .ot th{font-weight:600;color:var(--ink-2);font-size:12.5px}
+    .ot td.r,.ot th.r{text-align:right;font-variant-numeric:tabular-nums}
+    .ot td small{color:var(--ink-3);display:block}
+    .empty-s{color:var(--ink-3);font-size:13.5px;padding:8px 0}
+    .note{grid-column:1/-1;color:var(--ink-3);font-size:13px;padding:4px 4px 0}
+    .gate{grid-column:1/-1;text-align:center;padding:48px 20px}
+    .gate h2{font-size:22px;margin-bottom:8px}
+    .gate p{color:var(--ink-2);margin-bottom:18px}
+    .sk{min-height:120px;background:linear-gradient(90deg,var(--paper),var(--well),var(--paper));background-size:200% 100%;animation:sk 1.4s linear infinite}
+    @keyframes sk{to{background-position:-200% 0}}
+    @media (prefers-reduced-motion:reduce){.sk{animation:none}}
+  </style>
+  <script src="/hit.js?v=1" defer></script>
+</head>
+<body>
+  <header class="oh night">
+    <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a><a class="btn btn-ghost btn-sm" href="/flight-app.html">Back to the flight desk</a></nav>
+    <div class="oh-row">
+      <div><h1 class="display">Owner analytics</h1><p data-gen>Visits, sign-ups, plans and revenue across Boplo Flight.</p></div>
+      <div class="seg" role="group" aria-label="Period">
+        <button type="button" data-days="7" aria-pressed="false">7 days</button>
+        <button type="button" data-days="30" aria-pressed="true">30 days</button>
+        <button type="button" data-days="90" aria-pressed="false">90 days</button>
+        <button type="button" data-days="365" aria-pressed="false">12 months</button>
+      </div>
+    </div>
+  </header>
+  <main class="ow" id="ow">
+    <section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section>
+    <section class="tile s12 sk" style="min-height:260px"></section>
+  </main>
+  <script src="/owner.js?v=1" defer></script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import { osmRunways, contributeOSM } from '../lib/osmrunways.js';
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
+import { recordHit, saveAttrib, ownerStats } from '../lib/owner.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
 import {switchInterval, health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
@@ -39,6 +40,7 @@ export async function onRequest({request,env,waitUntil}) {
  const url=new URL(request.url),path=url.pathname.replace(/^\/flight\/?/,'');
  if(!['GET','POST','PUT','DELETE'].includes(request.method))return json({error:'Method not allowed.'},405);
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
+ if(path==='hit'&&request.method==='POST'){const site=request.headers.get('Sec-Fetch-Site');if(site&&site!=='same-origin')return new Response(null,{status:204});return await recordHit(env,request).catch(()=>new Response(null,{status:204}));}
  if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request,fetch,c=>syncSchool(env,c));
  if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');return json(await runNudges(env,{origin:env.APP_ORIGIN||url.origin}));}
  if(path==='nudges/off'&&request.method==='GET')return await nudgesOff(env,url);
@@ -106,6 +108,8 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
   await env.DB.prepare('INSERT INTO flight_scans(user_id,day,n) VALUES(?,?,1) ON CONFLICT(user_id,day) DO UPDATE SET n=n+1').bind(user.id,day).run();
   return json(out);
  }
+ if(path==='attrib'&&request.method==='POST')return json(await saveAttrib(env,user,await body()));
+ if(path==='owner/stats'&&request.method==='GET')return json(await ownerStats(env,user,url));
  if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}

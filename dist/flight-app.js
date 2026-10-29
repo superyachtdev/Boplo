@@ -3160,7 +3160,7 @@
   /* ================= more (mobile) ================= */
   function morePage() {
     const items = [['profile', 'Profile', 'Licence, aircraft, rates and your data', 'profile'], ['plan', 'Plan & billing', isAdv() ? 'Your plan, renewal and invoices' : 'Upgrade to Advanced', 'plan'], ['school', 'Flight school', SCH() ? SCH().name : 'Join your school with its code, or set up your school', 'school']];
-    shell('more', { title: 'Account', sub: state.user?.email ? `Signed in as ${esc(state.user.email)}` : '' }, `<div class="more-grid">${items.map(([id, t, d, ic]) => `<a class="tile more-item" href="#${id}">${ico(ic)}<span><b>${t}</b><small>${esc(d)}</small></span></a>`).join('')}</div>
+    shell('more', { title: 'Account', sub: state.user?.email ? `Signed in as ${esc(state.user.email)}` : '' }, `<div class="more-grid">${items.map(([id, t, d, ic]) => `<a class="tile more-item" href="#${id}">${ico(ic)}<span><b>${t}</b><small>${esc(d)}</small></span></a>`).join('')}${B().owner && !preview ? `<a class="tile more-item" href="/owner.html">${ico('analytics')}<span><b>Owner analytics</b><small>Visits, sign-ups, plans and revenue</small></span></a>` : ''}</div>
       <div class="acct-links"><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact support</a><button type="button" class="link" data-logout>${preview ? 'Leave example desk' : 'Sign out'}</button></div>`);
     $$('[data-logout]').forEach(b => b.onclick = logout);
   }
@@ -3617,6 +3617,7 @@
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
       state = ws; state.billing = ws.billing || null; state.school = ws.school || null; addSchoolNav(); saveSnapshot(ws); setTimeout(flushOutbox, 1500);
+      try { const f = localStorage.getItem('boplo-first'); if (f && !localStorage.getItem('boplo-first-sent')) api('attrib', 'POST', JSON.parse(f)).then(() => localStorage.setItem('boplo-first-sent', '1')).catch(() => { }); } catch { }
       const q = new URLSearchParams(location.search);
       try { if (localStorage.getItem('boplo-school-intent')) { localStorage.removeItem('boplo-school-intent'); if (!state.school) history.replaceState(null, '', location.pathname + '#school'); } } catch { }
       if (q.get('school_checkout')) { history.replaceState(null, '', location.pathname + '#school'); render(); finishSchoolCheckout(); return; }
