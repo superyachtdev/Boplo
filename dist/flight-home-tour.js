@@ -20,6 +20,6 @@
   };
   show(keys[0]);
   if (!('IntersectionObserver' in window)) return;
-  const io = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) show(e.target.dataset.k); }); }, { rootMargin: '-45% 0px -45% 0px' });
+  const io = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) show(e.target.dataset.k); }); }, { rootMargin: matchMedia('(max-width: 900px)').matches ? '-62% 0px -26% 0px' : '-45% 0px -45% 0px' });
   steps.forEach(s => io.observe(s));
 })();

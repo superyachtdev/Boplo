@@ -39,13 +39,15 @@
 @media (prefers-reduced-motion:reduce){.shot,.tour-step{transition:none}}
 /* phones and small tablets: each feature carries its own phone */
 @media (max-width:900px){
-  .tour-grid{display:block}
-  .tour-stage{display:none}
-  .tour-step{min-height:0;opacity:1;padding:36px 0;border-top:1px solid var(--hair-d)}
-  .tour-step .ph{display:block;position:relative;width:min(70%,280px);margin:28px auto 0}
-  .tour-step .ph small{position:absolute;left:0;right:0;bottom:-24px;text-align:center;font-size:11.5px;color:rgba(158,216,255,.5)}
-  .tour-step .ph img{position:absolute;left:0;right:0;bottom:0;top:6.2%;width:100%;height:93.8%;object-fit:cover;object-position:top}
-  .tour-step .ph img.full{top:0;height:100%}
+  /* phones: the phone stays pinned at the top and switches screens as each feature scrolls up under it */
+  .tour-grid{display:flex;flex-direction:column;align-items:stretch}
+  .tour-stage .stage{display:flex;justify-content:center}
+  .tour-stage{order:-1;position:sticky;top:76px;z-index:2;height:min(54svh,520px);margin:0 calc(-1 * var(--gutter));padding:8px var(--gutter) 26px;background:linear-gradient(rgba(7,20,64,.96) 82%,rgba(7,20,64,0))}
+  .tour-stage .lap,.tour-dots{display:none}
+  .tour-stage .phn.iph{position:relative;right:auto;bottom:auto;height:100%;width:auto;max-width:none;margin:0 auto}
+  .tour-credit{left:0;right:0;bottom:-20px;text-align:center}
+  .tour-step{min-height:62svh;justify-content:flex-start;padding:28px 0 40px;border-top:1px solid rgba(158,216,255,.12)}
+  .tour-step .ph{display:none}
 }
 .tour-note{color:var(--mist);font-size:14px}
 .statement{padding-bottom:clamp(70px,9vw,120px)}
