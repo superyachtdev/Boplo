@@ -244,7 +244,7 @@
 .sim.hud-on .pfd{display:block}
 .sim.hud-on .sim-panel{display:none}
 .pfd svg{display:block;overflow:visible}
-.pfd-tape{position:absolute;top:46%;transform:translateY(-50%);height:300px;-webkit-mask:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent);mask:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent)}
+.pfd-tape{position:absolute;top:46%;transform:translateY(-50%);height:300px;border-radius:12px;background:linear-gradient(90deg,rgba(4,10,24,.34),rgba(4,10,24,.2));-webkit-mask:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent);mask:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent)}
 .pfd-spd{left:calc(50% - min(31vw,420px));width:58px}
 .pfd-alt{right:calc(50% - min(31vw,420px));width:66px}
 .pfd-tape svg{width:100%;height:100%}
@@ -299,7 +299,7 @@
 .pfd-bar div{display:grid;gap:0;text-align:center;min-width:0}
 .pfd-bar span{font:600 8.5px var(--font,'Archivo',sans-serif);letter-spacing:.07em;text-transform:uppercase;color:var(--pfd-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pfd-bar b{font:650 13px var(--font,'Archivo',sans-serif);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sim.hud-on .sim-credits{top:auto;bottom:calc(env(safe-area-inset-bottom) + 44px)}
+.sim.hud-on .sim-credits{top:calc(env(safe-area-inset-top) + 66px);bottom:auto;right:calc(env(safe-area-inset-right) + 14px);left:auto;transform:none;text-align:right;max-width:min(46vw,360px)}
 .sim.is-replay .pfd-flaps,.sim.is-replay .pfd-thr,.sim.is-replay .pfd-bar,.sim.is-replay .pfd-dock{display:none}
 .sim.is-touch .pfd-thr,.sim.is-touch .pfd-bar,.sim.is-touch .pfd-flaps{display:none}
 .sim.is-touch .pfd-dock{bottom:auto;top:calc(env(safe-area-inset-top) + 64px);left:auto;right:calc(env(safe-area-inset-right) + 10px);transform:none;flex-direction:column;padding:5px;gap:3px}

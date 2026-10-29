@@ -8,7 +8,7 @@ window.BoploSim = (() => {
   const CES = 'https://cdn.jsdelivr.net/npm/cesium@1.144.0/Build/Cesium/';
   const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
   // Sentinel-2 cloudless 2017 by EOX: CC BY 4.0 (later years are non-commercial, so this layer is pinned)
-  const IMG = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2017_3857/default/g/{z}/{y}/{x}.jpg';
+  const IMG = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg';
   const KT = 0.514444, FT = 0.3048, G = 9.81, NM = 1852, D2R = Math.PI / 180, R2D = 180 / Math.PI;
   const FOV = 0.6435011087932844; // MapLibre's vertical field of view
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=12'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=13'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -760,8 +760,13 @@ window.BoploSim = (() => {
     }
     if (!tileset) {
       scene.terrainProvider = terrariumTerrain(C);
-      scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless 2017 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2017), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
-      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = GFX === 'fast' ? 3 : 2; g.tileCacheSize = 400; g.preloadSiblings = true; g.enableLighting = false;
+      // satellite imagery draped on the terrain: Google's 2D satellite tiles when a Maps key is configured (sharp at airport
+      // level), otherwise Sentinel-2 cloudless (10 m pixels)
+      let gsat = null;
+      if (O.googleKey) { try { const r = await Promise.race([fetch(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(O.googleKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapType: 'satellite', language: 'en-US', region: 'US' }) }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]); const j = r.ok ? await r.json() : null; if (j?.session) gsat = j.session; } catch (e) { console.warn('satellite tiles', e); } }
+      if (gsat) scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${gsat}&key=${encodeURIComponent(O.googleKey)}`, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 19, credit: new C.Credit('Imagery © Google · Terrain: AWS Terrain Tiles') }));
+      else scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
+      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = 2; g.tileCacheSize = 600; g.preloadSiblings = true; g.enableLighting = false;
     }
     root.classList.toggle('is-google', scenery === 'google');
     // light level: tint the photo scenery (it has its own baked lighting) and the imagery for dusk and night
@@ -1710,7 +1715,7 @@ window.BoploSim = (() => {
     // adaptive quality: hold a smooth frame rate by trading scenery detail, render resolution and shadows
     const QUAL = [{ sse: SSE0, res: RES0, sh: true }, { sse: SSE0 * 1.4, res: RES0 * .9, sh: true }, { sse: SSE0 * 1.9, res: RES0 * .8, sh: false }, { sse: SSE0 * 2.5, res: RES0 * .7, sh: false }, { sse: SSE0 * 3.2, res: RES0 * .6, sh: false }];
     let qi = 0, fpsN = 0, fpsT = performance.now(), calm = 0;
-    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = (GFX === 'fast' ? 3 : 2) * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
+    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = 2 * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
     let shadowsOK = !coarse; applyQ();
     function loop(now) {
       if (!alive) return;
