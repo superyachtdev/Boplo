@@ -93,7 +93,7 @@
 
     main.innerHTML = `
       <section class="tile kpi s3"><div class="lab">Visitors</div><div class="big">${nf(V.visitors)}</div>${delta(V.visitors, V.prevVisitors, label)}<br><small>${nf(V.views)} page views</small></section>
-      <section class="tile kpi s3"><div class="lab">New sign-ups</div><div class="big">${nf(S.recent)}</div>${delta(S.recent, S.prev, label)}<br><small>${pct(S.recent, V.visitors)} of visitors signed up</small></section>
+      <section class="tile kpi s3"><div class="lab">New sign-ups</div><div class="big">${nf(S.recent)}</div>${delta(S.recent, S.prev, label)}<br><small>${S.recent <= V.visitors && V.visitors ? pct(S.recent, V.visitors) + ' of visitors signed up' : 'Sign-up rate shows once more visits are counted'}</small></section>
       <section class="tile kpi s3"><div class="lab">Paying customers</div><div class="big">${nf(paying + d.schools.filter(s => ['active', 'trialing', 'past_due'].includes(s.status)).length)}</div><small>${nf(paying)} individual${paying === 1 ? '' : 's'} · ${nf(d.schools.filter(s => ['active', 'trialing', 'past_due'].includes(s.status)).length)} school${d.schools.filter(s => ['active', 'trialing', 'past_due'].includes(s.status)).length === 1 ? '' : 's'}</small><br><small>${pct(paying, S.total)} of all users pay</small></section>
       <section class="tile kpi s3"><div class="lab">Monthly recurring revenue</div><div class="big">${money(P.mrr)}</div><small>${money(P.arr)} a year at today’s plans, before tax and Stripe fees</small></section>
       ${tracking}
