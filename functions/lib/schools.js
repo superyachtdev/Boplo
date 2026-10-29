@@ -2,6 +2,7 @@
 // The school admin is the paying customer. Students choose to join (and can leave); while they're members, the school's instructors see their training progress.
 // No free trial: the school pays for the year at checkout.
 import { stripe } from './billing.js';
+import { rosterCoach, threadFor } from './coach.js';
 
 export const SCHOOL_PLANS = {
   school: { lookup: 'boplo_flight_school_yearly', amount: 99900, currency: 'usd', interval: 'year', seats: 25, staff: 10, label: 'School' },
@@ -140,6 +141,7 @@ async function roster(env, schoolId) {
   const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
   const agg = await env.DB.prepare(`SELECT user_id, COUNT(*) n, SUM(json_extract(data,'$.minutes')) mins, SUM(CASE WHEN json_extract(data,'$.role')!='dual' THEN json_extract(data,'$.minutes') ELSE 0 END) solo, SUM(json_extract(data,'$.landings')) landings, MAX(json_extract(data,'$.date')) last, SUM(CASE WHEN json_extract(data,'$.date')>=? THEN json_extract(data,'$.minutes') ELSE 0 END) recent FROM flight_records WHERE user_id IN (SELECT user_id FROM flight_school_members WHERE school_id=?) GROUP BY user_id`).bind(since, schoolId).all();
   const by = Object.fromEntries((agg.results || []).map(r => [r.user_id, r]));
+  const co = await rosterCoach(env, schoolId).catch(() => ({}));
   return (people.results || []).map(r => {
     const p = parse(r.pdata, {}) || {}, f = by[r.id] || {}, study = parse(p.study, {}) || {}, mocks = Array.isArray(study._mocks) ? study._mocks : [];
     return {
@@ -147,25 +149,28 @@ async function roster(env, schoolId) {
       licence: p.licence || '', authority: p.authority || '', regime: p.regime || '', countryCode: p.countryCode || '', goalHours: num(p.goalHours), openingMinutes: num(p.openingMinutes),
       syllabus: p.syllabus || '', exams: p.exams || '', nextLesson: p.nextLesson || '', lessonDate: p.lessonDate || '', setup: !!p.complete,
       flights: num(f.n), minutes: num(f.mins) + num(p.openingMinutes), soloMinutes: num(f.solo), landings: num(f.landings), lastFlight: f.last || '', recentMinutes: num(f.recent),
-      lastMock: mocks.length ? mocks[mocks.length - 1] : null
+      lastMock: mocks.length ? mocks[mocks.length - 1] : null,
+      unread: co[r.id]?.unread || 0, toDebrief: co[r.id]?.toDebrief || 0, lastCoached: co[r.id]?.lastCoached || null
     };
   });
 }
 // one student's record, as on the instructor share page but for the school's staff
-async function studentDetail(env, schoolId, studentId) {
+async function studentDetail(env, schoolId, studentId, viewer = true) {
   const m = await env.DB.prepare("SELECT role FROM flight_school_members WHERE user_id=? AND school_id=?").bind(studentId, schoolId).first();
   if (!m) fail(404, 'That student isn’t in your school.');
   const row = await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(studentId).first();
   const p = parse(row?.data, {}) || {};
-  const recs = await env.DB.prepare('SELECT data FROM flight_records WHERE user_id=? ORDER BY created_at DESC LIMIT 300').bind(studentId).all();
-  const flights = (recs.results || []).map(r => parse(r.data, null)).filter(Boolean).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const pick = f => ({ date: f.date, departure: f.departure, arrival: f.arrival, aircraft: f.aircraft, registration: f.registration, role: f.role, minutes: f.minutes, landings: f.landings, lesson: f.lesson, instructor: f.instructor, notes: f.notes, win: f.win });
+  const recs = await env.DB.prepare('SELECT id, data FROM flight_records WHERE user_id=? ORDER BY created_at DESC LIMIT 300').bind(studentId).all();
+  const flights = (recs.results || []).map(r => { const f = parse(r.data, null); return f && { ...f, id: r.id }; }).filter(Boolean).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const pick = f => ({ id: f.id, date: f.date, departure: f.departure, arrival: f.arrival, aircraft: f.aircraft, registration: f.registration, role: f.role, minutes: f.minutes, landings: f.landings, lesson: f.lesson, instructor: f.instructor, notes: f.notes, win: f.win });
   return {
     student: { id: studentId, name: clean(p.name, 80), licence: p.licence || '', authority: p.authority || '', regime: p.regime || '', countryCode: p.countryCode || '', airport: p.airport || '', aircraft: p.aircraft || '', goalHours: num(p.goalHours), openingMinutes: num(p.openingMinutes), target: p.target || '' },
     next: { lesson: p.nextLesson || '', date: p.lessonDate || '', questions: p.questions || '', checklist: p.checklist || '' },
     syllabus: p.syllabus || '', exams: p.exams || '', study: (() => { const s = parse(p.study, {}) || {}; return { mocks: Array.isArray(s._mocks) ? s._mocks.slice(-6) : [] }; })(),
     totals: { flights: flights.length, minutes: flights.reduce((n, f) => n + num(f.minutes), 0) + num(p.openingMinutes), solo: flights.filter(f => f.role !== 'dual').reduce((n, f) => n + num(f.minutes), 0), landings: flights.reduce((n, f) => n + num(f.landings), 0) },
-    recent: flights.slice(0, 15).map(pick)
+    recent: flights.slice(0, 15).map(pick),
+    signoffs: p.signoffs || '',
+    thread: viewer ? await threadFor(env, schoolId, studentId, true).catch(() => []) : []
   };
 }
 

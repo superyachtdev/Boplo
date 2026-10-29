@@ -828,7 +828,7 @@
     const hour = new Date().getHours(), greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
     shell('overview', { title: `${greet}, ${esc(firstName(p.name))}.`, sub: list.length ? `${list.length} flight${list.length === 1 ? '' : 's'} logged, ${hrs(totalMin())} hours recorded in total.` : 'Log your first flight and your desk starts filling in.' },
-      `<div class="grid">${lessonDayTile()}
+      `<div class="grid">${lessonDayTile()}${coachTile()}
         <section class="tile dark next span-7" aria-labelledby="next-h">${contours('b')}
           <div class="tile-head"><h2 id="next-h">Up next</h2><span class="chip">${esc(when)}</span></div>
           <h3 class="display">${esc(p.nextLesson || 'Add your next lesson')}</h3>
@@ -3213,7 +3213,7 @@
     const coords = (f.points || []).map(x => `${x.lat},${x.lng}`).join('\n');
     sheet.innerHTML = `<form method="dialog" novalidate data-sheet>
       <header class="sheet-head"><h2 id="sheet-title" class="display">${editing ? 'Flight record' : 'Log a flight'}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></header>
-      <div class="sheet-body">
+      <div class="sheet-body">${editing ? debriefBlock(f) : ''}
         ${!editing && !f.points?.length ? '<button type="button" class="rec-cta" data-record><span class="rec-dot"></span><span><b>About to fly? Record it with GPS</b><small>Boplo fills in the times, landings and track for you.</small></span></button>' : ''}${!editing && f.routeKind === 'track' && f.points?.length ? `<p class="callout">From your GPS track: ${f.points.length} points${f.minutes ? `, ${hm(f.minutes)}` : ''}${f.landings !== '' && f.landings != null ? `, ${f.landings} landing${f.landings === 1 ? '' : 's'}` : ''}. Check the times and add your debrief.</p>` : ''}
         <div class="group"><h3>The flight</h3><div class="fields">
           ${input('Date', 'date', f.date || todayISO(), 'date', `required max="${todayISO()}"`)}
@@ -3391,15 +3391,17 @@
     const jf = $('[data-joinform]'); jf.onsubmit = e => { e.preventDefault(); const c = jf.querySelector('[name=code]').value.trim(); if (!c) { jf.querySelector('.form-error').textContent = 'Enter the code your school gave you.'; return; } joinSheet(c); };
     wireSetup();
   }
-  const SHARED = 'your name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and your next lesson';
+  const SHARED = 'your name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and your next lesson. They can debrief your flights, set your next lesson and sign off syllabus lessons, but they can’t change your flights or notes';
   function schoolStudent() {
     const s = SCH();
     schoolFrame({ title: esc(s.name), sub: 'Your flight school on Boplo.' },
       `<section class="tile dark plan-now">${contours('a')}<div><span class="kicker">${s.active ? 'Covered by your school' : 'Plan not active'}</span><h2 class="display">${s.active ? 'Advanced, paid for by ' + esc(s.name) : esc(s.name) + '’s plan has lapsed'}</h2><p>${s.active ? 'Everything in Advanced is unlocked while you’re a member.' : 'You’re on Free until your school renews. Your records are all still here.'}</p></div></section>
+      ${s.active ? `<section class="tile" style="margin-top:16px" aria-labelledby="cob-h"><div class="tile-head"><h2 id="cob-h">You and your instructors</h2></div><p class="hint" style="margin-bottom:12px">Debriefs, lesson plans and sign-offs from ${esc(s.name)} land here. Message your instructors any time.</p><div data-cobox><p class="hint">Loading…</p></div></section>` : ''}
       <section class="tile" style="margin-top:16px"><div class="tile-head"><h2>What your instructors can see</h2></div>
-        <p>While you’re a member, ${esc(s.name)}’s instructors can see ${SHARED}. They can’t edit anything.</p>
+        <p>While you’re a member, ${esc(s.name)}’s instructors can see ${SHARED}.</p>
         <p class="hint" style="margin-top:10px">Leaving stops sharing straight away. You keep all your records, and your desk moves to Free unless you have your own plan.</p>
         <button type="button" class="btn btn-line" data-leave style="margin-top:14px">Leave ${esc(s.name)}</button></section>`);
+    if (s.active) studentCoach();
     $('[data-leave]').onclick = () => {
       sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Leave ${esc(s.name)}?</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
         <div class="sheet-body"><p>Your instructors will stop seeing your training. Your desk moves to Free unless you have your own plan. You can rejoin later with the school’s code.</p><p class="form-error" role="alert"></p></div>
@@ -3431,7 +3433,8 @@
     let syl = null; try { const S = R.syllabusFor(reg), st = readJSON(m.syllabus)[S.id] || {}; syl = Math.round(S.items.filter(i => st[i.id] === 'd').length / S.items.length * 100); } catch { }
     const quiet = m.lastFlight ? daysSince(m.lastFlight) : null;
     const flag = m.role !== 'student' ? '' : !m.setup ? 'Hasn’t set up Boplo yet' : !m.flights ? (daysSince(new Date(m.joinedAt).toISOString().slice(0, 10)) > 7 ? 'No flights logged yet' : '') : quiet > 21 ? `Hasn’t flown in ${quiet} days` : '';
-    return { ...m, goal, goalPct: Math.min(100, Math.round(m.minutes / 60 / goal * 100)), syl, quiet, flag };
+    const waiting = m.role === 'student' && ((m.unread || 0) + (m.toDebrief || 0)) > 0;
+    return { ...m, goal, goalPct: Math.min(100, Math.round(m.minutes / 60 / goal * 100)), syl, quiet, flag, waiting };
   }
   const lastFlew = r => r.lastFlight ? (r.quiet <= 0 ? 'Today' : r.quiet === 1 ? 'Yesterday' : `${r.quiet} days ago`) : '—';
   async function loadRoster(force) {
@@ -3448,8 +3451,8 @@
     }
     if (!ui.roster || ui.rosterAt < Date.now() - 60000) { if (!ui.rosterLoading) { ui.rosterLoading = true; loadRoster().finally(() => { ui.rosterLoading = false; if (current() === 'school') schoolDash(); }); } }
     const rows = (ui.roster || []).map(rosterRow), students = rows.filter(r => r.role === 'student'), staff = rows.filter(r => r.role !== 'student');
-    const active14 = students.filter(r => r.quiet != null && r.quiet <= 14).length, flagged = students.filter(r => r.flag), hours30 = students.reduce((n, r) => n + r.recentMinutes, 0);
-    const f = ui.rosterFilter, list = (f === 'staff' ? staff : f === 'attention' ? flagged : students).slice().sort((a, b) => f === 'staff' ? a.name.localeCompare(b.name) : (!!b.flag - !!a.flag) || ((b.quiet ?? 9999) - (a.quiet ?? 9999)));
+    const active14 = students.filter(r => r.quiet != null && r.quiet <= 14).length, flagged = students.filter(r => r.flag), hours30 = students.reduce((n, r) => n + r.recentMinutes, 0), waiting = students.filter(r => r.waiting), nMsg = students.reduce((n, r) => n + (r.unread || 0), 0), nDeb = students.reduce((n, r) => n + (r.toDebrief || 0), 0);
+    const f = ui.rosterFilter, list = (f === 'staff' ? staff : f === 'attention' ? flagged : f === 'waiting' ? waiting : students).slice().sort((a, b) => f === 'staff' ? a.name.localeCompare(b.name) : (!!b.waiting - !!a.waiting) || (!!b.flag - !!a.flag) || ((b.quiet ?? 9999) - (a.quiet ?? 9999)));
     const status = !admin ? '' : s.status === 'trialing' ? `Free trial until ${longDate(s.trialEnd)}. ${s.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money0(s.amount, s.currency)} a year.`}` : s.cancelAtPeriodEnd ? `Cancelled. Your school keeps Boplo until ${longDate(s.periodEnd)}.` : s.status === 'past_due' ? 'The last payment didn’t go through. Update the card to keep your school on Boplo.' : `Renews on ${longDate(s.periodEnd)}.`;
     schoolFrame({ title: esc(s.name), sub: `${esc(s.planLabel)} plan${status ? ' · ' + esc(status) : ''}`, actions: admin ? `<button class="btn btn-line" data-rename>Rename</button><button class="btn btn-line" data-billing ${preview ? 'disabled' : ''}>Billing and invoices</button>` : '' },
       `${s.status === 'past_due' && admin ? '<p class="callout warn" style="margin-bottom:16px">Payment failed. Update the card under Billing and invoices so your students keep Advanced.</p>' : ''}
@@ -3459,6 +3462,7 @@
         <div class="stat"><span>Need a nudge</span><b>${flagged.length}</b><em>Quiet 3+ weeks, or not started</em></div>
         <div class="stat"><span>Hours, last 30 days</span><b>${hrs(hours30)}<small>h</small></b><em>Logged by your students</em></div>
       </section>
+      ${waiting.length ? `<button type="button" class="co-waiting" data-rf="waiting">${ico('ask')}<span><b>Waiting on you</b> ${[nMsg && `${nMsg} message${nMsg === 1 ? '' : 's'} from students`, nDeb && `${nDeb} dual flight${nDeb === 1 ? '' : 's'} to debrief`].filter(Boolean).join(' · ')}</span><em>Show them</em></button>` : ''}
       <div class="grid">
         <section class="tile span-12 sch-invite" aria-label="Invite" ${students.length ? 'style="order:2"' : ''}>
           <div class="sch-inv-col"><h2>Invite students</h2><p class="hint">Students join with this code or link and get Advanced straight away. They see exactly what’s shared before they join, and can leave any time.</p>
@@ -3469,17 +3473,17 @@
             <div class="sch-code-actions"><button type="button" class="btn btn-line btn-sm" data-copy="${esc(s.staffLink || '')}">Copy instructor link</button>${admin ? '<button type="button" class="btn btn-line btn-sm" data-newcode="staff">New code</button>' : ''}</div></div>
         </section>
         <section class="tile span-12 sch-roster" aria-labelledby="ro-h">
-          <div class="tile-head"><h2 id="ro-h">Students</h2><div class="filter" role="group" aria-label="Show">${[['all', `All ${students.length}`], ['attention', `Need a nudge ${flagged.length}`], ['staff', `Instructors ${staff.length}`]].map(([v, l]) => `<button data-rf="${v}" aria-pressed="${f === v}">${l}</button>`).join('')}</div></div>
-          ${ui.rosterErr ? `<p class="callout warn">${esc(ui.rosterErr)}</p>` : !ui.roster ? '<p class="hint">Loading your students…</p>' : !list.length ? `<div class="empty center"><h3>${f === 'attention' ? 'Everyone’s flying.' : f === 'staff' ? 'No other instructors yet.' : 'No students yet.'}</h3><p>${f === 'attention' ? 'Nobody has gone quiet for more than three weeks.' : f === 'staff' ? 'Share the instructor code with your team.' : 'Share your student code or link, and students appear here as they join.'}</p></div>` : f === 'staff'
+          <div class="tile-head"><h2 id="ro-h">Students</h2><div class="filter" role="group" aria-label="Show">${[['all', `All ${students.length}`], ['waiting', `Waiting on you ${waiting.length}`], ['attention', `Need a nudge ${flagged.length}`], ['staff', `Instructors ${staff.length}`]].map(([v, l]) => `<button data-rf="${v}" aria-pressed="${f === v}">${l}</button>`).join('')}</div></div>
+          ${ui.rosterErr ? `<p class="callout warn">${esc(ui.rosterErr)}</p>` : !ui.roster ? '<p class="hint">Loading your students…</p>' : !list.length ? `<div class="empty center"><h3>${f === 'attention' ? 'Everyone’s flying.' : f === 'waiting' ? 'You’re all caught up.' : f === 'staff' ? 'No other instructors yet.' : 'No students yet.'}</h3><p>${f === 'waiting' ? 'No unread messages, and every recent dual flight has a debrief.' : f === 'attention' ? 'Nobody has gone quiet for more than three weeks.' : f === 'staff' ? 'Share the instructor code with your team.' : 'Share your student code or link, and students appear here as they join.'}</p></div>` : f === 'staff'
             ? `<div class="airports">${list.map(r => `<div><span>${esc(r.name)}${r.role === 'admin' ? ' <i class="hint">manages the plan</i>' : ''}</span><b>${esc(r.email)}</b></div>`).join('')}</div>`
             : `<div class="table-wrap flat"><table><thead><tr><th>Student</th><th class="r">Hours</th><th>Last flew</th><th>Syllabus</th><th>Hours goal</th><th>Next lesson</th></tr></thead><tbody>${list.map(r => `<tr data-student="${esc(r.id)}" tabindex="0" aria-label="Open ${esc(r.name)}">
-                <td><b>${esc(r.name)}</b>${r.flag ? `<small class="sch-flag">${esc(r.flag)}</small>` : `<small>${esc([r.licence, r.authority].filter(Boolean).join(' · '))}</small>`}</td>
+                <td><b>${esc(r.name)}</b>${r.flag ? `<small class="sch-flag">${esc(r.flag)}</small>` : `<small>${esc([r.licence, r.authority].filter(Boolean).join(' · '))}</small>`}${r.waiting ? `<span class="co-badges">${r.unread ? `<i class="co-dot">${r.unread} new message${r.unread === 1 ? '' : 's'}</i>` : ''}${r.toDebrief ? `<i class="co-dot soft">${r.toDebrief} to debrief</i>` : ''}</span>` : ''}</td>
                 <td class="r"><b>${hrs(r.minutes)}</b><small>${hrs(r.soloMinutes)} solo</small></td>
                 <td>${lastFlew(r)}</td>
                 <td>${r.syl == null ? '—' : `<span class="sch-mini" role="img" aria-label="${r.syl}% of syllabus done"><i style="width:${r.syl}%"></i></span><small>${r.syl}%</small>`}</td>
                 <td><span class="sch-mini" role="img" aria-label="${r.goalPct}% of ${r.goal} hours"><i style="width:${r.goalPct}%"></i></span><small>${r.goalPct}% of ${r.goal} h</small></td>
                 <td>${r.nextLesson ? `${esc(r.nextLesson)}${r.lessonDate ? `<small>${esc(fmtDate(r.lessonDate))}</small>` : ''}` : '—'}</td></tr>`).join('')}</tbody></table></div>
-              <div class="cards">${list.map(r => `<button class="card" data-student="${esc(r.id)}"><span class="froute"><b>${esc(r.name)}</b><small>${r.flag ? esc(r.flag) : `Last flew ${lastFlew(r).toLowerCase()} · ${r.goalPct}% of ${r.goal} h`}</small></span><span class="ftime">${hrs(r.minutes)} h</span></button>`).join('')}</div>`}
+              <div class="cards">${list.map(r => `<button class="card" data-student="${esc(r.id)}"><span class="froute"><b>${esc(r.name)}</b><small>${r.waiting ? [r.unread && `${r.unread} new message${r.unread === 1 ? '' : 's'}`, r.toDebrief && `${r.toDebrief} to debrief`].filter(Boolean).join(' · ') : r.flag ? esc(r.flag) : `Last flew ${lastFlew(r).toLowerCase()} · ${r.goalPct}% of ${r.goal} h`}</small></span><span class="ftime">${hrs(r.minutes)} h</span></button>`).join('')}</div>`}
         </section>
         </section>
       </div>`);
@@ -3502,34 +3506,146 @@
       sheet.showModal();
     };
   }
-  async function studentSheet(id) {
+  /* ---------------- coaching: shared pieces ---------------- */
+  const RATING = { 'needs-work': 'Needs more work', 'on-track': 'On track', great: 'Really good' };
+  const coAgo = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'Just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : fmtDate(new Date(t).toISOString().slice(0, 10), { day: 'numeric', month: 'short' }); };
+  const flLabel = f => f ? `${fmtDate(f.date, { day: 'numeric', month: 'short' })} · ${upper(f.departure)} → ${upper(f.arrival)}` : 'a flight';
+  // one note in the thread; `mine` decides which side a message sits on
+  function coItem(it, { flights = [], mine = false } = {}) {
+    const who = `<span class="co-who">${esc(it.author || (it.fromStaff ? 'Instructor' : 'Student'))} · ${esc(coAgo(it.at))}</span>`;
+    if (it.kind === 'msg') return `<div class="co-msg${mine ? ' me' : ''}">${who}<p>${esc(it.text)}</p></div>`;
+    if (it.kind === 'debrief') { const f = flights.find(x => x.id === it.flightId); return `<div class="co-card">${who}<h4>${ico('logbook')}Debrief for ${esc(flLabel(f))}</h4><span class="chip co-r-${esc(it.rating)}">${esc(RATING[it.rating] || '')}</span>${it.wentWell ? `<p><b>Went well.</b> ${esc(it.wentWell)}</p>` : ''}${it.workOn ? `<p><b>Work on.</b> ${esc(it.workOn)}</p>` : ''}${it.note ? `<p>${esc(it.note)}</p>` : ''}</div>`; }
+    if (it.kind === 'plan') return `<div class="co-card">${who}<h4>${ico('prepare')}Next lesson: ${esc(it.lesson)}</h4>${it.date ? `<span class="chip">${esc(fmtDate(it.date, { weekday: 'short', day: 'numeric', month: 'short' }))}</span>` : ''}${it.prep?.length ? `<ul class="co-prep">${it.prep.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${it.note ? `<p>${esc(it.note)}</p>` : ''}</div>`;
+    if (it.kind === 'signoff') return `<div class="co-card co-slim">${who}<h4>${ico('check')}${it.status === 'd' ? 'Signed off' : it.status === 'p' ? 'Marked in progress' : 'Reopened'}: ${esc(it.itemName || 'syllabus lesson')}</h4>${it.note ? `<p>${esc(it.note)}</p>` : ''}</div>`;
+    return '';
+  }
+  const coThread = (items, opts) => items.length ? `<div class="co-thread">${items.slice().sort((a, b) => a.at - b.at).map(it => coItem(it, { ...opts, mine: opts.staff ? it.fromStaff : !it.fromStaff })).join('')}</div>` : `<p class="hint">${opts.staff ? 'Nothing here yet. Debrief a flight, set the next lesson or send a message, and the student sees it in their desk.' : 'Nothing from your instructors yet. Send them a message, or they’ll debrief your flights here.'}</p>`;
+  const coComposer = (ph) => `<form class="co-compose" data-cocompose><label class="sr" for="co-text">Message</label><textarea id="co-text" name="text" rows="2" maxlength="2000" placeholder="${esc(ph)}"></textarea><button class="btn btn-blue btn-sm">Send</button></form>`;
+
+  /* ---------------- coaching: instructor view of one student ---------------- */
+  async function studentSheet(id, tab) {
     const s = SCH(), admin = s.role === 'admin';
     let d; try { d = preview ? demoStudent(id) : await api('school/students/' + encodeURIComponent(id)); } catch (x) { toast(x.message); return; }
+    ui.coStudent = { id, d }; ui.coTab = tab || ui.coTab || 'coach';
+    const r = (ui.roster || []).find(m => m.id === id); if (r) { r.unread = 0; }
+    drawStudent();
+    sheet.showModal();
+  }
+  function drawStudent(form) {
+    const s = SCH(), admin = s.role === 'admin', { id, d } = ui.coStudent;
     const st = d.student, reg = regimeOf(st), lic = R.licence(reg, st.licence), goal = st.goalHours || lic?.minHours || (reg === 'faa' ? 40 : 45);
-    let sylLine = ''; try { const S = R.syllabusFor(reg), all = readJSON(d.syllabus)[S.id] || {}, done = S.items.filter(i => all[i.id] === 'd'), prog = S.items.filter(i => all[i.id] === 'p'); sylLine = `<div class="tile-head" style="margin-top:18px"><h3>${esc(S.title)}</h3><span class="chip">${done.length} of ${S.items.length} done</span></div><div class="syl-bar"><i style="width:${Math.round(done.length / S.items.length * 100)}%"></i></div>${prog.length ? `<p class="hint" style="margin-top:8px">In progress: ${esc(prog.map(i => i.name).join(', '))}</p>` : ''}`; } catch { }
+    let S = null, sylState = {}; try { S = R.syllabusFor(reg); sylState = readJSON(d.syllabus)[S.id] || {}; } catch { }
+    const signs = readJSON(d.signoffs) || {};
     let exams = []; try { exams = (JSON.parse(d.exams || '[]') || []).filter(e => e.date && daysUntil(e.date) >= 0); } catch { }
-    const mocks = d.study?.mocks || [];
-    sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">${esc(st.name || 'Student')}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
-      <div class="sheet-body sch-detail">
-        <p class="hint">${esc([st.licence, st.authority, st.airport, st.aircraft].filter(Boolean).join(' · '))}</p>
-        <div class="stats" style="margin-top:12px"><div class="stat"><span>Total</span><b>${hrs(d.totals.minutes)}<small>h</small></b><em>${Math.min(100, Math.round(d.totals.minutes / 60 / goal * 100))}% of ${goal} h</em></div><div class="stat"><span>Solo and PIC</span><b>${hrs(d.totals.solo)}<small>h</small></b></div><div class="stat"><span>Flights</span><b>${d.totals.flights}</b></div><div class="stat"><span>Landings</span><b>${d.totals.landings}</b></div></div>
-        <div class="tile-head" style="margin-top:18px"><h3>Next lesson</h3>${d.next.date ? `<span class="chip">${esc(fmtDate(d.next.date))}</span>` : ''}</div>
-        <p>${esc(d.next.lesson || 'Not set yet')}</p>
-        ${d.next.questions ? `<p class="hint" style="margin-top:6px"><b>Questions for you:</b></p><p class="pre">${esc(d.next.questions)}</p>` : ''}
-        ${sylLine}
-        ${exams.length || mocks.length ? `<div class="tile-head" style="margin-top:18px"><h3>Theory</h3></div><div class="airports">${exams.map(e => `<div><span>${esc(e.name)}</span><b>${esc(fmtDate(e.date, { day: 'numeric', month: 'short', year: 'numeric' }))}</b></div>`).join('')}${mocks.slice(-3).reverse().map(m => `<div><span>Mock exam, ${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b>${m.s}%</b></div>`).join('')}</div>` : ''}
-        <div class="tile-head" style="margin-top:18px"><h3>Recent flights</h3></div>
-        ${d.recent.length ? `<div class="sch-flights">${d.recent.map(f => `<div class="sch-fl"><div><b>${esc(fmtDate(f.date, { day: 'numeric', month: 'short' }))} · ${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><span class="chip role-${esc(f.role)}"><i></i>${esc(roleName(f.role))}</span><span class="r">${hm(f.minutes)}</span></div>${f.lesson ? `<small>${esc(f.lesson)}</small>` : ''}${f.notes ? `<p>${esc(f.notes.slice(0, 280))}${f.notes.length > 280 ? '…' : ''}</p>` : ''}</div>`).join('')}</div>` : '<p class="hint">No flights logged yet.</p>'}
-        <p class="form-error" role="alert"></p>
-      </div>
-      <footer class="sheet-foot">${admin ? '<button type="button" class="btn btn-line" data-remove>Remove from school</button>' : '<span></span>'}<div class="right" style="margin-left:auto"><button type="button" class="btn btn-blue" data-close>Done</button></div></footer>`;
-    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    const mocks = d.study?.mocks || [], thread = d.thread || [];
+    const debriefOf = fid => thread.filter(t => t.kind === 'debrief' && t.flightId === fid).sort((a, b) => b.at - a.at)[0];
+    const tab = ui.coTab;
+    const done = S ? S.items.filter(i => sylState[i.id] === 'd').length : 0;
+    const tabs = [['coach', 'Coaching'], ['flights', `Flights${d.recent.filter(f => f.role === 'dual' && !debriefOf(f.id)).length ? ` <i class="co-dot">${d.recent.filter(f => f.role === 'dual' && !debriefOf(f.id)).length}</i>` : ''}`], ['syllabus', 'Syllabus'], ['record', 'Record']];
+    let body = '';
+    if (form === 'plan') body = `<form class="co-form" data-coplan><h3>Set ${esc(firstName(st.name) || 'their')}’s next lesson</h3><p class="hint">It goes straight into their desk: the lesson, the date and a prep checklist they tick off.</p>
+      <div class="fields">${input('Lesson', 'lesson', d.next.lesson || '', 'text', 'maxlength="120" required placeholder="e.g. Lesson 12 · Navigation"')}${input('Date', 'date', d.next.date || '', 'date', '', true)}</div>
+      <label class="field full"><span>Prep before the lesson <i>(one per line)</i></span><textarea name="prep" rows="4" maxlength="1400" placeholder="Plot the route and mark the turn points&#10;Read the radio calls for the zone transit&#10;Chair-fly the forced landing drill"></textarea></label>
+      ${input('Note for them', 'note', '', 'textarea', 'rows="2" maxlength="800"', true)}
+      <p class="form-error" role="alert"></p><div class="co-acts"><button type="button" class="btn btn-line" data-coback>Cancel</button><button class="btn btn-blue">Send to ${esc(firstName(st.name) || 'student')}</button></div></form>`;
+    else if (form && form.startsWith('debrief:')) {
+      const fid = form.slice(8), f = d.recent.find(x => x.id === fid), prev = debriefOf(fid) || {};
+      body = `<form class="co-form" data-codebrief="${esc(fid)}"><h3>Debrief: ${esc(flLabel(f))}</h3>${f?.lesson ? `<p class="hint">${esc(f.lesson)}</p>` : ''}${f?.notes ? `<p class="callout" style="margin:8px 0 4px"><b>Their notes:</b> ${esc(f.notes.slice(0, 400))}</p>` : ''}
+        <div class="co-rate" role="radiogroup" aria-label="How it went">${Object.entries(RATING).map(([k, l]) => `<label><input type="radio" name="rating" value="${k}" ${(prev.rating || 'on-track') === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+        ${input('What went well', 'wentWell', prev.wentWell || '', 'textarea', 'rows="2" maxlength="600"', true)}${input('What to work on next', 'workOn', prev.workOn || '', 'textarea', 'rows="2" maxlength="600"', true)}${input('Anything else', 'note', prev.note || '', 'textarea', 'rows="2" maxlength="1200"', true)}
+        <p class="form-error" role="alert"></p><div class="co-acts"><button type="button" class="btn btn-line" data-coback>Cancel</button><button class="btn btn-blue">${prev.id ? 'Update debrief' : 'Send debrief'}</button></div></form>`;
+    }
+    else if (tab === 'coach') body = `<div class="co-quick"><button type="button" class="btn btn-line btn-sm" data-coform="plan">${ico('prepare')} Set next lesson</button>${d.recent[0] ? `<button type="button" class="btn btn-line btn-sm" data-coform="debrief:${esc(d.recent[0].id)}">${ico('logbook')} Debrief last flight</button>` : ''}<button type="button" class="btn btn-line btn-sm" data-cotab="syllabus">${ico('check')} Sign off lessons</button></div>
+      <div class="co-next"><span class="hint">Next lesson</span><b>${esc(d.next.lesson || 'Not set yet')}</b>${d.next.date ? `<span class="chip">${esc(fmtDate(d.next.date))}</span>` : ''}${d.next.questions ? `<p class="hint" style="margin-top:6px"><b>Their questions for you:</b></p><p class="pre">${esc(d.next.questions)}</p>` : ''}</div>
+      ${coThread(thread, { flights: d.recent, staff: true })}${coComposer(`Message ${firstName(st.name) || 'your student'}…`)}`;
+    else if (tab === 'flights') body = d.recent.length ? `<div class="sch-flights">${d.recent.map(f => { const db = debriefOf(f.id); return `<div class="sch-fl"><div><b>${esc(flLabel(f))}</b><span class="chip role-${esc(f.role)}"><i></i>${esc(roleName(f.role))}</span><span class="r">${hm(f.minutes)}</span></div>${f.lesson ? `<small>${esc(f.lesson)}</small>` : ''}${f.notes ? `<p>${esc(f.notes.slice(0, 280))}${f.notes.length > 280 ? '…' : ''}</p>` : ''}
+      <div class="co-flfoot">${db ? `<span class="chip co-r-${esc(db.rating)}">${ico('check')}Debriefed · ${esc(RATING[db.rating] || '')}</span><button type="button" class="link" data-coform="debrief:${esc(f.id)}">Edit debrief</button>` : `<button type="button" class="btn ${f.role === 'dual' ? 'btn-blue' : 'btn-line'} btn-sm" data-coform="debrief:${esc(f.id)}">Debrief this flight</button>`}</div></div>`; }).join('')}</div>` : '<p class="hint">No flights logged yet.</p>';
+    else if (tab === 'syllabus') body = S ? `<div class="tile-head"><h3>${esc(S.title)}</h3><span class="chip">${done} of ${S.items.length} done</span></div><div class="syl-bar"><i style="width:${Math.round(done / S.items.length * 100)}%"></i></div>
+      <p class="hint" style="margin:10px 0">Sign off a lesson when it’s complete. ${esc(firstName(st.name) || 'The student')} sees who signed it off.</p>
+      <div class="co-syl">${S.items.map(i => { const v = sylState[i.id] || '', so = signs[S.id + ':' + i.id]; return `<div class="co-si"><span><b>${esc(i.name)}</b>${so && v === 'd' ? `<small>Signed off by ${esc(so.by)}, ${esc(fmtDate(new Date(so.at).toISOString().slice(0, 10), { day: 'numeric', month: 'short' }))}</small>` : v === 'd' ? '<small>Marked done by the student</small>' : ''}</span><div class="seg-s" role="group" aria-label="${esc(i.name)}">${[['', 'Not yet'], ['p', 'In progress'], ['d', 'Signed off']].map(([k, l]) => `<button type="button" data-sign="${esc(i.id)}" data-v="${k}" aria-pressed="${v === k}">${l}</button>`).join('')}</div></div>`; }).join('')}</div>` : '<p class="hint">This student hasn’t chosen a licence yet, so there’s no syllabus to sign off.</p>';
+    else body = `<div class="stats"><div class="stat"><span>Total</span><b>${hrs(d.totals.minutes)}<small>h</small></b><em>${Math.min(100, Math.round(d.totals.minutes / 60 / goal * 100))}% of ${goal} h</em></div><div class="stat"><span>Solo and PIC</span><b>${hrs(d.totals.solo)}<small>h</small></b></div><div class="stat"><span>Flights</span><b>${d.totals.flights}</b></div><div class="stat"><span>Landings</span><b>${d.totals.landings}</b></div></div>
+      ${exams.length || mocks.length ? `<div class="tile-head" style="margin-top:18px"><h3>Theory</h3></div><div class="airports">${exams.map(e => `<div><span>${esc(e.name)}</span><b>${esc(fmtDate(e.date, { day: 'numeric', month: 'short', year: 'numeric' }))}</b></div>`).join('')}${mocks.slice(-3).reverse().map(m => `<div><span>Mock exam, ${esc(fmtDate(m.d, { day: 'numeric', month: 'short' }))}</span><b>${m.s}%</b></div>`).join('')}</div>` : '<p class="hint" style="margin-top:14px">No exam dates or mock exams yet.</p>'}`;
+    sheet.innerHTML = `<div class="sheet-head"><div><h2 class="display" id="sheet-title">${esc(st.name || 'Student')}</h2><p class="hint" style="margin-top:4px">${esc([st.licence, st.authority, st.airport, st.aircraft].filter(Boolean).join(' · '))}</p></div><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
+      ${form ? '' : `<nav class="co-tabs" aria-label="Student">${tabs.map(([k, l]) => `<button type="button" data-cotab="${k}" aria-pressed="${tab === k}">${l}</button>`).join('')}</nav>`}
+      <div class="sheet-body sch-detail">${body}<p class="form-error" role="alert"></p></div>
+      <footer class="sheet-foot">${admin && !form ? '<button type="button" class="btn btn-line" data-remove>Remove from school</button>' : '<span></span>'}<div class="right" style="margin-left:auto"><button type="button" class="btn btn-blue" data-close>Done</button></div></footer>`;
+    wireStudent();
+  }
+  async function coPost(payload) {
+    const { id, d } = ui.coStudent;
+    const item = preview ? { id: 'x' + Date.now(), at: Date.now(), fromStaff: true, author: preview ? 'Sam Patel' : 'You', ...payload } : (await api('school/coach', 'POST', { studentId: id, ...payload })).item;
+    if (item.kind === 'debrief') d.thread = d.thread.filter(t => !(t.kind === 'debrief' && t.flightId === item.flightId && t.fromStaff));
+    d.thread.push(item);
+    if (item.kind === 'plan') { d.next.lesson = item.lesson; if (item.date) d.next.date = item.date; const r = (ui.roster || []).find(m => m.id === id); if (r) { r.nextLesson = item.lesson; if (item.date) r.lessonDate = item.date; } }
+    if (item.kind === 'debrief') { const r = (ui.roster || []).find(m => m.id === id); if (r && r.toDebrief) r.toDebrief = d.recent.filter(f => f.role === 'dual' && !d.thread.some(t => t.kind === 'debrief' && t.flightId === f.id)).length; }
+    return item;
+  }
+  function wireStudent() {
+    const s = SCH(), { id, d } = ui.coStudent, err = sheet.querySelector('.form-error');
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => { sheet.close(); if (current() === 'school') schoolDash(); });
+    sheet.querySelectorAll('[data-cotab]').forEach(b => b.onclick = () => { ui.coTab = b.dataset.cotab; drawStudent(); });
+    sheet.querySelectorAll('[data-coform]').forEach(b => b.onclick = () => drawStudent(b.dataset.coform));
+    sheet.querySelectorAll('[data-coback]').forEach(b => b.onclick = () => drawStudent());
+    const busy = (btn, on, txt) => { btn.disabled = on; if (txt) btn.textContent = txt; };
+    const cm = sheet.querySelector('[data-cocompose]');
+    if (cm) cm.onsubmit = async e => { e.preventDefault(); const t = cm.text.value.trim(); if (!t) return; const b = cm.querySelector('button'); busy(b, true); try { await coPost({ kind: 'msg', text: t }); drawStudent(); const th = sheet.querySelector('.co-thread'); if (th) th.lastElementChild?.scrollIntoView({ block: 'nearest' }); } catch (x) { err.textContent = x.message; busy(b, false); } };
+    const pf = sheet.querySelector('[data-coplan]');
+    if (pf) pf.onsubmit = async e => { e.preventDefault(); const b = pf.querySelector('button.btn-blue'); busy(b, true, 'Sending…'); try { await coPost({ kind: 'plan', lesson: pf.lesson.value.trim(), date: pf.date.value, prep: pf.prep.value.split('\n').map(x => x.trim()).filter(Boolean), note: pf.note.value.trim() }); toast(`Sent. ${firstName(d.student.name) || 'They'} will see it in their desk.`); ui.coTab = 'coach'; drawStudent(); } catch (x) { pf.querySelector('.form-error').textContent = x.message; busy(b, false, 'Try again'); } };
+    const df = sheet.querySelector('[data-codebrief]');
+    if (df) df.onsubmit = async e => { e.preventDefault(); const b = df.querySelector('button.btn-blue'); busy(b, true, 'Sending…'); try { await coPost({ kind: 'debrief', flightId: df.dataset.codebrief, rating: df.querySelector('[name=rating]:checked')?.value, wentWell: df.wentWell.value.trim(), workOn: df.workOn.value.trim(), note: df.note.value.trim() }); toast('Debrief sent.'); drawStudent(); } catch (x) { df.querySelector('.form-error').textContent = x.message; busy(b, false, 'Try again'); } };
+    sheet.querySelectorAll('[data-sign]').forEach(b => b.onclick = async () => {
+      let S; try { S = R.syllabusFor(regimeOf(d.student)); } catch { return; }
+      const item = S.items.find(i => i.id === b.dataset.sign), v = b.dataset.v;
+      b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      try { await coPost({ kind: 'signoff', sylId: S.id, itemId: item.id, itemName: item.name, status: v }); const all = readJSON(d.syllabus) || {}; all[S.id] = { ...(all[S.id] || {}) }; if (v) all[S.id][item.id] = v; else delete all[S.id][item.id]; d.syllabus = JSON.stringify(all); const so = readJSON(d.signoffs) || {}; if (v === 'd') so[S.id + ':' + item.id] = { by: state.profile?.name || 'you', at: Date.now() }; else delete so[S.id + ':' + item.id]; d.signoffs = JSON.stringify(so); drawStudent(); }
+      catch (x) { err.textContent = x.message; drawStudent(); }
+    });
     const rm = sheet.querySelector('[data-remove]');
     if (rm) rm.onclick = async () => {
-      if (!rm.classList.contains('armed')) { rm.classList.add('armed'); rm.textContent = `Remove ${st.name || 'student'}? Tap again`; return; }
-      rm.disabled = true; try { if (!preview) await api('school/remove', 'POST', { userId: id }); ui.roster = (ui.roster || []).filter(m => m.id !== id); state.school = { ...s, students: Math.max(0, s.students - 1) }; sheet.close(); toast('Removed. They keep their own records.'); schoolDash(); } catch (x) { sheet.querySelector('.form-error').textContent = x.message; rm.disabled = false; }
+      if (!rm.classList.contains('armed')) { rm.classList.add('armed'); rm.textContent = `Remove ${d.student.name || 'student'}? Tap again`; return; }
+      rm.disabled = true; try { if (!preview) await api('school/remove', 'POST', { userId: id }); ui.roster = (ui.roster || []).filter(m => m.id !== id); state.school = { ...s, students: Math.max(0, s.students - 1) }; sheet.close(); toast('Removed. They keep their own records.'); schoolDash(); } catch (x) { err.textContent = x.message; rm.disabled = false; }
     };
-    sheet.showModal();
+  }
+  /* ---------------- coaching: the student's side ---------------- */
+  const inSchool = () => SCH()?.role === 'student' && SCH()?.active;
+  async function loadCoach() {
+    if (!inSchool()) return;
+    if (preview) { state.coach = { unread: 2, debriefs: [], latest: demoThread()[2], school: SCH().name }; return; }
+    try { state.coach = await api('coach/count'); } catch { }
+  }
+  // overview tile: the latest thing an instructor sent, or an invitation to message them
+  function coachTile() {
+    if (!inSchool()) return '';
+    const c = state.coach || {}, it = c.latest, s = SCH();
+    const line = !it ? `Your instructors at ${esc(s.name)} can debrief your flights, set your next lesson and sign off lessons here.` : it.kind === 'debrief' ? `${esc(it.author)} debriefed your flight · ${esc(RATING[it.rating] || '')}${it.workOn ? `. Work on: ${esc(it.workOn.slice(0, 90))}` : ''}` : it.kind === 'plan' ? `${esc(it.author)} set your next lesson: ${esc(it.lesson)}` : it.kind === 'signoff' ? `${esc(it.author)} ${it.status === 'd' ? 'signed off' : 'updated'} ${esc(it.itemName || 'a lesson')}` : `${esc(it.author)}: “${esc(it.text.slice(0, 110))}${it.text.length > 110 ? '…' : ''}”`;
+    return `<section class="tile span-12 co-tile${c.unread ? ' new' : ''}" aria-labelledby="co-h"><div class="co-tile-ic">${ico('ask')}</div><div class="co-tile-tx"><h2 id="co-h">From your instructor${c.unread ? ` <span class="co-dot">${c.unread} new</span>` : ''}</h2><p>${line}</p></div><a class="btn ${c.unread ? 'btn-blue' : 'btn-line'} btn-sm" href="#school">${c.unread ? 'Open' : it ? 'See all' : 'Message your instructor'}</a></section>`;
+  }
+  // inside a logged flight: the instructor's debrief, if there is one
+  function debriefBlock(f) {
+    const db = (state.coach?.debriefs || []).find(x => x.flightId === f.id);
+    if (!db) return '';
+    return `<div class="co-card co-in-sheet"><span class="co-who">Debrief from ${esc(db.author || 'your instructor')}</span><span class="chip co-r-${esc(db.rating)}">${esc(RATING[db.rating] || '')}</span>${db.wentWell ? `<p><b>Went well.</b> ${esc(db.wentWell)}</p>` : ''}${db.workOn ? `<p><b>Work on.</b> ${esc(db.workOn)}</p>` : ''}${db.note ? `<p>${esc(db.note)}</p>` : ''}</div>`;
+  }
+  async function studentCoach() {
+    const box = $('[data-cobox]'); if (!box) return;
+    let items;
+    try { items = preview ? demoThread() : (await api('coach')).items; } catch (x) { box.innerHTML = `<p class="callout warn">${esc(x.message)}</p>`; return; }
+    if (state.coach) state.coach.unread = 0;
+    const draw = () => {
+      box.innerHTML = coThread(items, { flights: state.flights, staff: false }) + coComposer('Ask your instructor something, or tell them how it’s going…');
+      const cm = box.querySelector('[data-cocompose]');
+      cm.onsubmit = async e => { e.preventDefault(); const t = cm.text.value.trim(); if (!t) return; const b = cm.querySelector('button'); b.disabled = true; try { items.push(preview ? { id: 'm' + Date.now(), kind: 'msg', text: t, fromStaff: false, author: state.profile?.name || 'You', at: Date.now() } : (await api('coach/msg', 'POST', { text: t })).item); draw(); toast('Sent to your instructors.'); } catch (x) { toast(x.message); b.disabled = false; } };
+    };
+    draw();
+  }
+  function demoThread() {
+    const t = n => Date.now() - n * 36e5, f = sorted();
+    return [
+      { id: 'd1', kind: 'debrief', fromStaff: true, author: 'Rosa Diaz', flightId: f[0]?.id, rating: 'on-track', wentWell: 'Radio calls were clear and you held 2,000 ft well on the first leg.', workOn: 'Start the turn timing from overhead the reservoir, not abeam it.', at: t(50) },
+      { id: 'd2', kind: 'msg', fromStaff: false, author: state.profile?.name || 'Alex Morgan', text: 'Thanks! Should I re-plan the reservoir leg before Saturday?', at: t(30) },
+      { id: 'd3', kind: 'plan', fromStaff: true, author: 'Rosa Diaz', lesson: 'Lesson 12 · Navigation', date: (() => { const d = new Date(Date.now() + 4 * 864e5); return d.toISOString().slice(0, 10); })(), prep: ['Re-plan the reservoir leg with the forecast wind', 'Work out diversion timings to Thruxton', 'Read through the zone transit calls'], note: 'Yes, and bring the printed log.', at: t(26) },
+      { id: 'd4', kind: 'signoff', fromStaff: true, author: 'Rosa Diaz', itemName: 'Forced landings without power', status: 'd', at: t(25) }
+    ];
   }
   // example school for ?preview=1#school
   function demoRoster() {
@@ -3539,11 +3655,11 @@
     const base = ['1', '1E', '2', '3', '4', '5', '6', '7', '8', '9', '10A', '10B', '11', '12', '13', '12E/13E', '14', '15', '16', '17', '18A', '18B', '18C', '19'];
     const P = [['Alex Morgan', 2, 892, 70, 'Lesson 12 · Navigation', 4, 17], ['Priya Shah', 1, 1904, 420, 'Qualifying cross-country', 2, 22], ['Tom Okafor', 26, 610, 40, 'Circuits', 0, 12], ['Grace Lee', 5, 1260, 160, 'Forced landings', 6, 15], ['Ben Walsh', 41, 380, 0, 'Stalling', 0, 8], ['Hannah Novak', 9, 2310, 640, 'Skill test prep', 3, 23], ['Leo Martins', null, 0, 0, '', 0, 0]];
     return [{ id: 'adm', role: 'admin', name: 'Sam Patel', email: 'sam@pophamflying.example', joinedAt: Date.now() - 90 * 864e5 }, { id: 'ins', role: 'instructor', name: 'Rosa Diaz', email: 'rosa@pophamflying.example', joinedAt: Date.now() - 80 * 864e5 },
-      ...P.map(([name, last, min, solo, next, inDays, n], i) => ({ id: 'st' + i, role: 'student', name, email: '', joinedAt: Date.now() - (i === 6 ? 12 : 70) * 864e5, licence: 'PPL(A)', authority: 'UK CAA', regime: 'uk', countryCode: 'GB', goalHours: 45, setup: i !== 6 || true, syllabus: syl(base.slice(0, n)), nextLesson: next, lessonDate: inDays ? ahead(inDays) : '', flights: Math.round(min / 60), minutes: min, soloMinutes: solo, landings: Math.round(min / 12), lastFlight: last == null ? '' : ago(last), recentMinutes: last != null && last < 30 ? Math.min(min, 240 - i * 20) : 0, lastMock: null }))];
+      ...P.map(([name, last, min, solo, next, inDays, n], i) => ({ id: 'st' + i, role: 'student', name, email: '', joinedAt: Date.now() - (i === 6 ? 12 : 70) * 864e5, licence: 'PPL(A)', authority: 'UK CAA', regime: 'uk', countryCode: 'GB', goalHours: 45, setup: i !== 6 || true, syllabus: syl(base.slice(0, n)), nextLesson: next, lessonDate: inDays ? ahead(inDays) : '', flights: Math.round(min / 60), minutes: min, soloMinutes: solo, landings: Math.round(min / 12), lastFlight: last == null ? '' : ago(last), recentMinutes: last != null && last < 30 ? Math.min(min, 240 - i * 20) : 0, lastMock: null, unread: i === 0 ? 1 : 0, toDebrief: i === 1 ? 2 : i === 3 ? 1 : 0 }))];
   }
   function demoStudent(id) {
     const m = demoRoster().find(r => r.id === id) || demoRoster()[2];
-    return { student: { id, name: m.name, licence: m.licence, authority: m.authority, regime: 'uk', countryCode: 'GB', airport: 'EGHP · Popham', aircraft: 'PA-28 Warrior', goalHours: 45, openingMinutes: 0 }, next: { lesson: m.nextLesson, date: m.lessonDate, questions: 'When would you divert if the reservoir turn is late?' }, syllabus: m.syllabus, exams: JSON.stringify([{ name: 'Navigation', date: m.lessonDate || todayISO() }]), study: { mocks: [{ d: todayISO(), s: 81 }] }, totals: { flights: m.flights, minutes: m.minutes, solo: m.soloMinutes, landings: m.landings }, recent: id === 'st0' ? state.flights.slice(0, 8).map(f => ({ ...f })) : [] };
+    return { student: { id, name: m.name, licence: m.licence, authority: m.authority, regime: 'uk', countryCode: 'GB', airport: 'EGHP · Popham', aircraft: 'PA-28 Warrior', goalHours: 45, openingMinutes: 0 }, next: { lesson: m.nextLesson, date: m.lessonDate, questions: 'When would you divert if the reservoir turn is late?' }, syllabus: m.syllabus, exams: JSON.stringify([{ name: 'Navigation', date: m.lessonDate || todayISO() }]), study: { mocks: [{ d: todayISO(), s: 81 }] }, totals: { flights: m.flights, minutes: m.minutes, solo: m.soloMinutes, landings: m.landings }, recent: id === 'st0' ? sorted().slice(0, 8).map(f => ({ ...f })) : [], signoffs: '', thread: id === 'st0' ? demoThread().filter(t => t.kind !== 'signoff') : [] };
   }
 
   async function finishSchoolCheckout() {
@@ -3617,6 +3733,7 @@
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
       state = ws; state.billing = ws.billing || null; state.school = ws.school || null; addSchoolNav(); saveSnapshot(ws); setTimeout(flushOutbox, 1500);
+      loadCoach().then(() => { if (state.coach && current() === 'overview' && state.profile?.complete && !sheet.open) render(); });
       try { const f = localStorage.getItem('boplo-first'); if (f && !localStorage.getItem('boplo-first-sent')) api('attrib', 'POST', JSON.parse(f)).then(() => localStorage.setItem('boplo-first-sent', '1')).catch(() => { }); } catch { }
       const q = new URLSearchParams(location.search);
       try { if (localStorage.getItem('boplo-school-intent')) { localStorage.removeItem('boplo-school-intent'); if (!state.school) history.replaceState(null, '', location.pathname + '#school'); } } catch { }

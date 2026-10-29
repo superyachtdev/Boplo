@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Boplo for flight schools</title>
-  <meta name="description" content="One yearly plan gives every student at your flight school Boplo Advanced, and gives your instructors a dashboard of each student’s hours, progress and next lesson.">
+  <meta name="description" content="Boplo connects your instructors and students between lessons: flight debriefs, next-lesson prep, syllabus sign-offs, messages and a weekly list of who needs a call. Every student gets Boplo Advanced.">
   <meta name="theme-color" content="#020611">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://boplo.app/schools.html">
   <meta property="og:title" content="Boplo for flight schools">
-  <meta property="og:description" content="Every student on Boplo Advanced, and one dashboard for your instructors. From $999 a year.">
+  <meta property="og:description" content="Keep every student flying between lessons. Debriefs, lesson prep, sign-offs and a weekly list of who needs a call. From $999 a year.">
   <meta property="og:image" content="https://boplo.app/assets/og.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
@@ -18,35 +18,87 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
-  <link rel="stylesheet" href="/flight-app.css?v=36">
+  <link rel="stylesheet" href="/flight-app.css?v=38">
   <style>
     body{background:var(--cloud)}
-    .s-hero{margin:10px;border-radius:var(--r-frame);padding:clamp(24px,4vw,48px) clamp(20px,5vw,64px) 0;box-shadow:inset 0 0 0 1px var(--hair-d);overflow:hidden}
+    .s-hero{margin:10px;border-radius:var(--r-frame);padding:clamp(24px,4vw,48px) clamp(20px,5vw,64px) clamp(40px,6vw,80px);box-shadow:inset 0 0 0 1px var(--hair-d);overflow:hidden}
     .s-hero>*{position:relative}
-    .s-hero nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(40px,7vw,88px)}
+    .s-hero nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(36px,6vw,72px)}
     .s-hero nav .links{display:flex;align-items:center;gap:18px}
     .s-hero nav .links a:not(.btn){color:rgba(222,233,255,.76);font-size:14.5px;font-weight:550}
-    .s-hero h1{font-size:clamp(40px,6.4vw,92px);max-width:14ch}
-    .s-hero .lede{margin-top:20px;color:rgba(222,233,255,.78);font-size:clamp(16px,1.4vw,19.5px);max-width:36em;line-height:1.55}
-    .s-hero .ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:30px}
+    .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:clamp(28px,4vw,56px);align-items:center}
+    .s-hero h1{font-size:clamp(40px,5.6vw,84px);max-width:12ch}
+    .s-hero .lede{margin-top:20px;color:rgba(222,233,255,.8);font-size:clamp(16px,1.35vw,19px);max-width:34em;line-height:1.55}
+    .s-hero .ctas{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;margin-top:28px}
     .s-hero .ctas .link{color:var(--ice);font-weight:550}
-    .s-shot{margin:clamp(40px,6vw,72px) auto 0;max-width:1120px;border-radius:18px 18px 0 0;overflow:hidden;box-shadow:0 -1px 0 rgba(158,216,255,.25),0 30px 80px rgba(10,98,255,.28);background:var(--cloud)}
-    .s-shot img{display:block;width:100%;height:auto}
+    .s-hero .fine{margin-top:18px;color:rgba(222,233,255,.6);font-size:14px}
+
+    /* the loop: an instructor's debrief arriving on a student's phone */
+    .loop{position:relative;min-height:500px;max-width:680px;margin-left:auto;width:100%}
+    .ins{position:absolute;left:0;top:0;width:min(62%,410px);background:var(--paper);color:var(--ink);border-radius:20px;padding:20px;box-shadow:0 30px 80px -30px rgba(10,98,255,.5),0 0 0 1px rgba(158,216,255,.2)}
+    .ins .who{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-3)}
+    .ins h3{font-size:18px;font-weight:640;margin:6px 0 2px}
+    .ins .sm{font-size:13.5px;color:var(--ink-3)}
+    .rate{display:flex;gap:6px;margin:14px 0 12px;flex-wrap:wrap}
+    .rate span{height:30px;display:inline-flex;align-items:center;padding:0 12px;border-radius:999px;border:1px solid var(--hair-l);font-size:13px;font-weight:560;color:var(--ink-2)}
+    .rate span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .ins dl{display:grid;gap:10px;margin:0}
+    .ins dt{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+    .ins dd{margin:3px 0 0;font-size:14px;background:var(--well);border-radius:10px;padding:9px 11px;color:var(--ink)}
+    .ins .send{margin-top:14px;display:flex;justify-content:flex-end}
+    .ins .send span{height:38px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--electric);color:#fff;font-weight:600;font-size:14px}
+    .phone{position:absolute;right:0;bottom:0;width:250px;height:440px;border-radius:38px;background:#0B1638;padding:10px;box-shadow:0 40px 90px -30px rgba(0,0,0,.7),0 0 0 1px rgba(158,216,255,.22)}
+    .scr{height:100%;border-radius:30px;background:var(--cloud);color:var(--ink);overflow:hidden;position:relative;padding:44px 12px 12px;display:grid;align-content:start;gap:10px}
+    .scr .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:80px;height:22px;border-radius:12px;background:#0B1638}
+    .scr .hi{font-size:19px;font-weight:640;font-style:italic;font-variation-settings:'wdth' 110;letter-spacing:-.02em;padding:0 4px}
+    .toast-n{background:rgba(255,255,255,.96);border-radius:16px;padding:10px 12px;box-shadow:0 10px 30px -10px rgba(5,11,31,.35);display:grid;grid-template-columns:28px 1fr;gap:4px 9px;align-items:center}
+    .toast-n i{grid-row:span 2;width:28px;height:28px;border-radius:8px;background:var(--electric);display:grid;place-items:center}
+    .toast-n i svg{width:15px;height:15px;fill:#fff}
+    .toast-n b{font-size:12.5px}
+    .toast-n span{font-size:12px;color:var(--ink-2);line-height:1.35}
+    .scr .pc{background:var(--paper);border-radius:14px;padding:11px 12px;border:1px solid var(--hair-l);display:grid;gap:5px}
+    .scr .pc h4{font-size:13px;font-weight:620}
+    .scr .pc p{font-size:12px;color:var(--ink-2);line-height:1.4}
+    .scr .chipg{justify-self:start;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;background:#E6F6EE;color:#13603F}
+    .scr .prep{font-size:12px;color:var(--ink-2);display:grid;gap:5px}
+    .scr .prep span{display:flex;gap:7px;align-items:center}
+    .scr .prep span::before{content:'';width:12px;height:12px;border-radius:4px;border:1.5px solid var(--mist);flex:none}
+    @media (prefers-reduced-motion:no-preference){
+      .toast-n{animation:drop .7s var(--ease) 1.1s both}
+      .ins .send span{animation:press .5s ease .8s both}
+      @keyframes drop{from{opacity:0;transform:translateY(-26px) scale(.96)}to{opacity:1;transform:none}}
+      @keyframes press{50%{transform:scale(.94)}}
+    }
+
     .s-sec{max-width:1180px;margin:0 auto;padding:clamp(56px,8vw,104px) clamp(16px,3vw,32px) 0}
-    .s-sec>h2{font-size:clamp(30px,4vw,52px);max-width:18ch}
-    .s-sec>.sub{margin-top:14px;color:var(--ink-2);font-size:17px;max-width:40em;line-height:1.55}
-    .gets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px}
-    .gets .tile h3{font-size:19px;font-weight:620;letter-spacing:-.015em;font-variation-settings:'wdth' 106}
-    .gets .tile p{margin-top:8px;color:var(--ink-2);line-height:1.55}
-    .gets .tile.wide{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:24px;align-items:start}
-    .gets ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;margin:0;padding:0;list-style:none}
-    .gets li{padding-left:20px;position:relative;color:var(--ink-2)}
-    .gets li::before{content:'';position:absolute;left:0;top:.55em;width:8px;height:8px;border-radius:50%;background:var(--electric)}
-    .steps-s{padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px;counter-reset:s}
-    .steps-s li{list-style:none;counter-increment:s;padding:24px;border-radius:var(--r-tile);background:var(--paper);border:1px solid var(--hair-l)}
-    .steps-s li::before{content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;font-weight:620;margin-bottom:14px}
-    .steps-s b{display:block;font-size:17px;font-weight:620}
-    .steps-s span{display:block;margin-top:6px;color:var(--ink-2);line-height:1.5}
+    .s-sec>h2{font-size:clamp(30px,4vw,52px);max-width:20ch}
+    .s-sec>.sub{margin-top:14px;color:var(--ink-2);font-size:17px;max-width:42em;line-height:1.55}
+    /* a lesson-to-lesson timeline: these really are in order */
+    .cycle{list-style:none;padding:0;margin:40px 0 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;position:relative}
+    .cycle::before{content:'';position:absolute;left:18px;right:18px;top:17px;height:2px;background:linear-gradient(90deg,var(--electric),var(--ice))}
+    .cycle li{position:relative;padding:0 18px 0 0}
+    .cycle .when{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:999px;background:var(--ink);color:#fff;font-size:13.5px;font-weight:600;position:relative}
+    .cycle h3{font-size:19px;font-weight:620;letter-spacing:-.01em;margin-top:18px}
+    .cycle p{margin-top:8px;color:var(--ink-2);line-height:1.55;font-size:15.5px}
+    .cycle .who{display:block;margin-top:10px;font-size:13px;color:var(--ink-3)}
+    .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:36px}
+    .split .tile h3{font-size:20px;font-weight:620}
+    .split .tile>p{color:var(--ink-2);margin-top:6px}
+    .ticks{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:10px}
+    .ticks li{display:grid;grid-template-columns:22px 1fr;gap:10px;color:var(--ink-2);line-height:1.5}
+    .ticks li::before{content:'';width:20px;height:20px;border-radius:50%;margin-top:1px;background:rgba(10,98,255,.1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230A62FF' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center/13px no-repeat}
+    .ticks b{color:var(--ink);font-weight:600}
+    .dark .ticks li{color:rgba(222,233,255,.8)}.dark .ticks b{color:#fff}.dark .ticks li::before{background-color:rgba(158,216,255,.14)}
+    .split .tile.dark>*{position:relative}.split .tile.dark>p{color:rgba(222,233,255,.75)}
+    /* does it pay for itself */
+    .calc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px;margin-top:36px;align-items:stretch}
+    .calc form{display:grid;gap:16px;align-content:start}
+    .calc .field input{font-variant-numeric:tabular-nums}
+    .calc .out{display:grid;align-content:center;gap:10px}
+    .calc .out>*{position:relative}
+    .calc .big{font-size:clamp(40px,5vw,64px);font-weight:640;letter-spacing:-.04em;font-variation-settings:'wdth' 110;line-height:1;color:#fff;font-variant-numeric:tabular-nums}
+    .calc .out p{color:rgba(222,233,255,.8);line-height:1.55;max-width:32em}
+    .calc .out small{color:rgba(222,233,255,.55);font-size:13px}
     .prices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:36px;align-items:stretch}
     .price{display:grid;align-content:start;gap:10px}
     .price h3{font-size:20px;font-weight:620}
@@ -62,6 +114,7 @@
     .faq{margin-top:28px;display:grid;gap:8px;max-width:860px}
     .faq details{background:var(--paper);border:1px solid var(--hair-l);border-radius:16px;padding:18px 20px}
     .faq summary{cursor:pointer;font-weight:600;font-size:16.5px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+    .faq summary::-webkit-details-marker{display:none}
     .faq summary::after{content:'+';color:var(--electric);font-weight:500;font-size:22px;line-height:1}
     .faq details[open] summary::after{content:'–'}
     .faq p{margin-top:10px;color:var(--ink-2);line-height:1.6}
@@ -70,11 +123,17 @@
     .contact .btn{justify-self:start}
     .contact .ok{display:none}.contact.sent form{display:none}.contact.sent .ok{display:block}
     .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
-    footer.sf{max-width:1180px;margin:0 auto;padding:72px clamp(16px,3vw,32px) 48px;color:var(--ink-3);font-size:13.5px;display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:space-between}
+    .end-cta{margin-top:clamp(56px,8vw,104px);border-radius:var(--r-frame);padding:clamp(32px,5vw,64px);display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap}
+    .end-cta>*{position:relative}
+    .end-cta h2{font-size:clamp(28px,3.6vw,46px);color:#fff;max-width:18ch}
+    .end-cta div{display:flex;gap:12px 18px;flex-wrap:wrap;align-items:center}
+    .end-cta .link{color:var(--ice);font-weight:550}
+    footer.sf{max-width:1180px;margin:0 auto;padding:56px clamp(16px,3vw,32px) 48px;color:var(--ink-3);font-size:13.5px;display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:space-between}
     footer.sf nav{display:flex;gap:18px;flex-wrap:wrap}
     footer.sf a{color:var(--ink-2)}
-    @media (max-width:960px){.gets,.steps-s,.prices{grid-template-columns:1fr}.gets .tile.wide,.contact,.trust{grid-template-columns:1fr}.s-hero nav .links a:not(.btn){display:none}}
-    @media (max-width:640px){.gets ul{grid-template-columns:1fr}}
+    @media (max-width:1040px){.hero-grid{grid-template-columns:1fr}.loop{max-width:560px;margin-top:10px}}
+    @media (max-width:960px){.cycle{grid-template-columns:1fr 1fr;gap:28px 0}.cycle::before{display:none}.prices,.split,.calc,.contact,.trust{grid-template-columns:1fr}.s-hero nav .links a:not(.btn){display:none}}
+    @media (max-width:640px){.cycle{grid-template-columns:1fr}.loop{min-height:0;display:grid;gap:16px}.ins,.phone{position:relative}.ins{width:100%}.phone{justify-self:end;width:230px;height:400px;margin-top:-24px}}
   </style>
   <script src="/hit.js?v=1" defer></script>
 </head>
@@ -82,41 +141,74 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></symbol></svg>
   <header class="s-hero night">
     <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>
-      <div class="links"><a href="#pricing">Pricing</a><a href="#faq">Questions</a><a class="btn btn-ghost btn-sm" href="/flight-app.html#school">Sign in</a></div></nav>
-    <h1 class="display">See every student’s training in one place.</h1>
-    <p class="lede">One plan gives every student at your school Boplo Advanced. Your instructors see each student’s hours, syllabus progress and next lesson, and who hasn’t flown in weeks.</p>
-    <div class="ctas"><a class="btn btn-light btn-has-spark" href="/flight-app.html#school">Set up your school <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a><a class="link" href="/flight-app.html?preview=1#school">See the example dashboard</a></div>
-    <figure class="s-shot"><img src="/assets/school-dashboard.webp" width="1400" height="1145" alt="The Boplo school dashboard: students, hours, last flight, syllabus progress, hours goal and next lesson, with students who haven’t flown recently flagged."></figure>
+      <div class="links"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a><a class="btn btn-ghost btn-sm" href="/flight-app.html#school">Sign in</a></div></nav>
+    <div class="hero-grid">
+      <div>
+        <h1 class="display">Keep every student flying between lessons.</h1>
+        <p class="lede">Boplo connects your instructors to their students between lessons. Instructors debrief flights, set the next lesson with a prep checklist, sign off the syllabus and reply to questions. Every Monday they get a list of who needs a call.</p>
+        <div class="ctas"><a class="btn btn-light btn-has-spark" href="/flight-app.html#school">Set up your school <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a><a class="link" href="/flight-app.html?preview=1#school">Try the example school</a></div>
+        <p class="fine">Every student also gets Boplo Advanced, normally $99.99 a year each. From $999 a year for 25 students.</p>
+      </div>
+      <div class="loop" role="img" aria-label="An instructor sends a flight debrief, and it arrives on the student’s phone with their prep for the next lesson.">
+        <div class="ins" aria-hidden="true">
+          <div class="who"><span>Rosa Diaz, instructor</span><span>2 min after landing</span></div>
+          <h3>Debrief for Alex Morgan</h3>
+          <p class="sm">Tue 27 Oct · KPDK → KPDK · Lesson 7, steep turns</p>
+          <div class="rate"><span>Needs more work</span><span class="on">On track</span><span>Really good</span></div>
+          <dl><div><dt>What went well</dt><dd>Coordinated turns and a good lookout before each one.</dd></div><div><dt>What to work on next</dt><dd>You lost 150 ft in the left turn. Add back pressure as the bank builds.</dd></div></dl>
+          <div class="send"><span>Send debrief</span></div>
+        </div>
+        <div class="phone" aria-hidden="true"><div class="scr"><span class="notch"></span>
+          <div class="toast-n"><i><svg viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></svg></i><b>Rosa debriefed your flight</b><span>On track. Work on: you lost 150 ft in the left turn.</span></div>
+          <p class="hi">Good evening, Alex.</p>
+          <div class="pc"><h4>From your instructor</h4><span class="chipg">On track</span><p>Add back pressure as the bank builds.</p></div>
+          <div class="pc"><h4>Next lesson: slow flight and stalls</h4><p>Thursday 29 October</p><div class="prep"><span>Read the stall recovery steps</span><span>Chair-fly a power-off stall</span></div></div>
+        </div></div>
+      </div>
+    </div>
   </header>
 
   <main>
-    <section class="s-sec" aria-labelledby="gets-h">
-      <h2 class="display" id="gets-h">What your school gets</h2>
-      <p class="sub">Boplo is the training companion your students use between lessons. The school plan connects it to your instructors.</p>
-      <div class="gets">
-        <article class="tile"><h3>Spot students before they drift</h3><p>The dashboard flags anyone who hasn’t flown in three weeks or hasn’t started, so an instructor can call before the gap costs them their progress.</p></article>
-        <article class="tile"><h3>Students arrive prepared</h3><p>Each student preps their next lesson in Boplo: the exercise, a checklist and questions for their instructor. Theory practice uses the FAA or UK CAA pass mark.</p></article>
-        <article class="tile"><h3>Progress without the paperwork</h3><p>Hours against the published minimum, syllabus exercises done, exam dates, mock exam scores and recent debriefs, for each student.</p></article>
-        <article class="tile wide"><div><h3>Every student gets Advanced</h3><p>Normally $99.99 a year per student. On a school plan, they pay nothing.</p></div>
-          <ul><li>Unlimited logbook with GPS recording</li><li>Lesson prep and voice debriefs</li><li>Study by subject and mock exams</li><li>Landing practice in the 3D simulator</li><li>Nav logs, weather and preflight tools</li><li>Ask Boplo, the training assistant</li></ul></article>
+    <section class="s-sec" id="how" aria-labelledby="how-h">
+      <h2 class="display" id="how-h">From one lesson to the next</h2>
+      <p class="sub">Most of a student’s training happens between lessons, out of your sight. Boplo gives your instructors a light way to stay with them, a minute or two at a time.</p>
+      <ol class="cycle">
+        <li><span class="when">After the flight</span><h3>Debrief in a minute</h3><p>The student’s logged flight is waiting. The instructor marks how it went, what went well and what to work on. It lands in the student’s logbook and on their phone.</p><span class="who">Instructor</span></li>
+        <li><span class="when">Before the next</span><h3>Prep that gets done</h3><p>Set the next lesson and a short prep checklist. It goes straight into the student’s desk, with an optional reminder the evening before, so they arrive ready to fly.</p><span class="who">Instructor sets it · student ticks it off</span></li>
+        <li><span class="when">In between</span><h3>Questions get answered</h3><p>Students message their instructor from the app, and instructors reply from the dashboard. There’s no swapping personal numbers, and every thread stays with the school.</p><span class="who">Both</span></li>
+        <li><span class="when">Every Monday</span><h3>Know who needs a call</h3><p>Each instructor gets an email listing students who’ve gone quiet, flights waiting for a debrief, unanswered messages and the week’s lessons.</p><span class="who">Instructor</span></li>
+      </ol>
+    </section>
+
+    <section class="s-sec" aria-labelledby="two-h">
+      <h2 class="display" id="two-h">Something for both sides of the cockpit</h2>
+      <div class="split">
+        <article class="tile"><h3>Your instructors</h3><p>One dashboard for every student they teach.</p>
+          <ul class="ticks"><li><span><b>Waiting on you.</b> Unread messages and dual flights without a debrief, all in one list.</span></li><li><span><b>Syllabus sign-off.</b> Mark lessons in progress or signed off. The student sees who signed and when.</span></li><li><span><b>Students who are drifting.</b> Anyone who hasn’t flown in three weeks, or joined but never started.</span></li><li><span><b>The whole record.</b> Hours against the minimum, solo time, exam dates, mock exam scores and the student’s own notes.</span></li></ul></article>
+        <article class="tile dark"><h3>Your students</h3><p>Boplo Advanced, paid for by your school.</p>
+          <ul class="ticks"><li><span><b>Their instructor’s feedback</b> on each flight, kept with the flight in their logbook.</span></li><li><span><b>Lesson prep</b> with a checklist, questions for the instructor and an optional reminder the night before.</span></li><li><span><b>Study tools.</b> Practice by subject and mock exams at the FAA or UK CAA pass mark.</span></li><li><span><b>Practice and planning.</b> Landing practice in the 3D simulator, plus nav logs, weather and preflight tools.</span></li></ul></article>
       </div>
     </section>
 
-    <section class="s-sec" aria-labelledby="how-h">
-      <h2 class="display" id="how-h">Set up in five minutes</h2>
-      <ol class="steps-s">
-        <li><b>Set up your school</b><span>Name your school, choose a plan and pay securely with Stripe.</span></li>
-        <li><b>Share your student code</b><span>Pin it in the briefing room or send the link. Instructors get their own code.</span></li>
-        <li><b>Watch your dashboard fill</b><span>Students appear as they join, with their hours and progress up to date.</span></li>
-      </ol>
+    <section class="s-sec" aria-labelledby="calc-h">
+      <h2 class="display" id="calc-h">Does it pay for itself?</h2>
+      <p class="sub">A student who stops flying takes the rest of their training budget with them. Put in your own numbers.</p>
+      <div class="calc">
+        <form class="tile" data-calc novalidate>
+          <label class="field"><span>Students at your school</span><input name="n" type="number" inputmode="numeric" min="1" max="500" value="25"></label>
+          <label class="field"><span>What a student spends with you, start to finish, in US dollars</span><input name="spend" type="number" inputmode="numeric" min="0" step="500" value="15000"><small class="hint">Aircraft, instructor and ground time for the whole licence. Use your own figure.</small></label>
+          <label class="field"><span>How far through, on average, when a student quits</span><select name="at"><option value=".25">A quarter of the way</option><option value=".5" selected>Halfway</option><option value=".75">Three quarters of the way</option></select></label>
+        </form>
+        <div class="tile dark out" aria-live="polite"><p>Keeping one student who would otherwise have quit is worth about</p><div class="big" data-out>$7,500</div><p data-line>That’s more than 7 times the cost of a year of Boplo for 25 students.</p><small>An estimate from your inputs, not a promise of results. Boplo helps you notice and support students, and your instructors do the rest.</small></div>
+      </div>
     </section>
 
     <section class="s-sec" id="pricing" aria-labelledby="pr-h">
       <h2 class="display" id="pr-h">One price for the whole school</h2>
-      <p class="sub">Billed yearly in US dollars, plus tax where it applies. Cancel any time.</p>
+      <p class="sub">Billed yearly in US dollars, plus tax where it applies. Instructors and students are all included. Cancel any time.</p>
       <div class="prices">
-        <article class="tile price"><h3>School</h3><p class="amt">$999<small> a year</small></p><p class="per">Up to 25 students and 10 instructors. That’s under $40 a student.</p><a class="btn btn-blue" href="/flight-app.html#school">Get started</a></article>
-        <article class="tile dark price"><h3>School Plus</h3><p class="amt">$1,999<small> a year</small></p><p class="per">Up to 75 students and 25 instructors. That’s under $27 a student.</p><a class="btn btn-light" href="/flight-app.html#school">Get started</a></article>
+        <article class="tile price"><h3>School</h3><p class="amt">$999<small> a year</small></p><p class="per">Up to 25 students and 10 instructors. About $3.33 a student a month.</p><a class="btn btn-blue" href="/flight-app.html#school">Get started</a></article>
+        <article class="tile dark price"><h3>School Plus</h3><p class="amt">$1,999<small> a year</small></p><p class="per">Up to 75 students and 25 instructors. About $2.22 a student a month.</p><a class="btn btn-light" href="/flight-app.html#school">Get started</a></article>
         <article class="tile price"><h3>Larger schools</h3><p class="amt">Custom</p><p class="per">More than 75 students, several bases, or paying by invoice. Tell us about your school.</p><a class="btn btn-line" href="#contact">Get in touch</a></article>
       </div>
     </section>
@@ -124,27 +216,29 @@
     <section class="s-sec" aria-labelledby="tr-h">
       <h2 class="display" id="tr-h">Built around your students’ consent</h2>
       <div class="trust">
-        <article class="tile"><h3>Students choose to join</h3><p>Before joining, a student sees exactly what your instructors will see: their name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and next lesson. They can leave at any time and keep all their records.</p></article>
-        <article class="tile"><h3>It supports your training, it doesn’t replace it</h3><p>Boplo doesn’t replace your syllabus, your instructors or the official logbook. Instructors can see a student’s record but can’t change it, and nothing in Boplo authorises a flight.</p></article>
+        <article class="tile"><h3>Students choose to join</h3><p>Before joining, a student sees exactly what your instructors will see and do: their flights and hours, lesson notes, syllabus progress, exam dates and scores, and next lesson. Instructors can debrief flights, set the next lesson and sign off lessons. Students can leave at any time and keep all their records.</p></article>
+        <article class="tile"><h3>It supports your training, it doesn’t replace it</h3><p>Boplo doesn’t replace your syllabus, your instructors, your scheduling software or the official logbook. Instructors can’t change a student’s flights or notes, and nothing in Boplo authorises a flight or counts as an endorsement.</p></article>
       </div>
     </section>
 
     <section class="s-sec" id="faq" aria-labelledby="faq-h">
       <h2 class="display" id="faq-h">Questions</h2>
       <div class="faq">
+        <details><summary>Does it replace our scheduling or billing software?</summary><p>No. Boplo doesn’t book aircraft or bill students. It sits alongside whatever you use for that, and covers the part those tools don’t: what students do between lessons.</p></details>
+        <details><summary>How long does a debrief take an instructor?</summary><p>About a minute. Pick how it went, then write one line on what went well and one on what to work on. Students see it straight away, and instructors can edit it later.</p></details>
+        <details><summary>Do instructors need to install anything?</summary><p>No. Boplo runs in the browser on a phone, tablet or computer, and can be added to the home screen like an app. Instructors join with your instructor code.</p></details>
         <details><summary>Do students pay anything?</summary><p>No. While they’re members of your school, Advanced is covered by your plan. If a student already pays for Advanced themselves, they can cancel their own subscription from Plan &amp; billing.</p></details>
         <details><summary>Does it work for FAA and UK schools?</summary><p>Yes. Students choose their country and licence, and Boplo follows the matching syllabus: FAA Private Pilot, UK PPL(A) and NPPL, and EASA PPL(A). Other countries get a general ICAO outline.</p></details>
+        <details><summary>Can instructors turn off the weekly email?</summary><p>Yes, with one click at the bottom of it. It only goes out when there’s something to act on.</p></details>
         <details><summary>Can we cancel?</summary><p>Yes, any time from Billing and invoices on your school dashboard. Your plan runs to the end of the year you’ve paid for. After that, students move to the Free plan and keep their records.</p></details>
-        <details><summary>What if we grow past 25 students?</summary><p>Email <a class="link" href="mailto:support@boplo.app">support@boplo.app</a> and we’ll move you to School Plus.</p></details>
         <details><summary>Can we pay by invoice or bank transfer?</summary><p>For larger schools, yes. <a class="link" href="#contact">Get in touch</a> with your details.</p></details>
-        <details><summary>Who can see the dashboard?</summary><p>The person who sets up the plan, and instructors who join with your instructor code. You can change either code at any time, and remove anyone from your school.</p></details>
       </div>
     </section>
 
     <section class="s-sec" id="contact" aria-labelledby="ct-h">
       <h2 class="display" id="ct-h">Talk to us</h2>
       <div class="contact" data-contact>
-        <div><p class="sub" style="margin-top:0">For larger schools, several bases, invoices, or anything you’d like to ask first. We’ll reply by email.</p><p class="hint" style="margin-top:12px">Or email <a class="link" href="mailto:support@boplo.app">support@boplo.app</a>.</p></div>
+        <div><p class="sub" style="margin-top:0">Want a walk-through first, have several bases, or need to pay by invoice? Tell us about your school and we’ll reply by email.</p><p class="hint" style="margin-top:12px">Or email <a class="link" href="mailto:support@boplo.app">support@boplo.app</a>.</p></div>
         <div class="tile">
           <form data-lead novalidate>
             <div class="fields">
@@ -152,7 +246,7 @@
               <label class="field"><span>Email</span><input name="email" type="email" autocomplete="email" maxlength="160" required></label>
               <label class="field"><span>School</span><input name="school" autocomplete="organization" maxlength="120" required></label>
               <label class="field"><span>Country</span><input name="country" autocomplete="country-name" maxlength="60"></label>
-              <label class="field"><span>Number of students</span><input name="students" inputmode="numeric" maxlength="20" placeholder="e.g. 120"></label>
+              <label class="field"><span>Number of students</span><input name="students" inputmode="numeric" maxlength="20" placeholder="e.g. 30"></label>
             </div>
             <label class="field full"><span>Message <i>(optional)</i></span><textarea name="message" maxlength="2000"></textarea></label>
             <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
@@ -163,6 +257,8 @@
         </div>
       </div>
     </section>
+
+    <div class="s-sec" style="padding-top:0"><section class="end-cta night" aria-labelledby="end-h"><h2 class="display" id="end-h">Give your students a reason to keep flying.</h2><div><a class="btn btn-light btn-has-spark" href="/flight-app.html#school">Set up your school <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a><a class="link" href="/flight-app.html?preview=1#school">Try the example school</a></div></section></div>
   </main>
 
   <footer class="sf"><span>© <span data-year>2026</span> Boplo</span><nav><a href="/">For student pilots</a><a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a><a href="/refunds.html">Refunds</a><a href="mailto:support@boplo.app">Contact</a></nav></footer>
@@ -171,6 +267,16 @@
       document.querySelectorAll('[data-year]').forEach(e => e.textContent = new Date().getFullYear());
       // remember where they were heading, so sign-in lands on the school setup
       document.querySelectorAll('a[href="/flight-app.html#school"]').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('boplo-school-intent', '1'); } catch { } }));
+      // the pay-for-itself estimate
+      const c = document.querySelector('[data-calc]'), out = document.querySelector('[data-out]'), line = document.querySelector('[data-line]');
+      const usd = n => '$' + Math.round(n).toLocaleString('en-US');
+      const calc = () => {
+        const n = Math.max(1, Math.min(500, +c.n.value || 25)), spend = Math.max(0, +c.spend.value || 0), at = +c.at.value;
+        const plan = n <= 25 ? 999 : n <= 75 ? 1999 : null, saved = spend * (1 - at);
+        out.textContent = usd(saved);
+        line.textContent = !plan ? 'For more than 75 students, get in touch for a price.' : saved >= plan ? `That’s ${saved / plan >= 2 ? Math.floor(saved / plan) + ' times' : 'more than'} the cost of a year of Boplo for ${n} student${n === 1 ? '' : 's'} (${usd(plan)}).` : `A year of Boplo for ${n} student${n === 1 ? '' : 's'} costs ${usd(plan)}.`;
+      };
+      c.addEventListener('input', calc); calc();
       const f = document.querySelector('[data-lead]'), box = document.querySelector('[data-contact]');
       f.onsubmit = async e => {
         e.preventDefault();

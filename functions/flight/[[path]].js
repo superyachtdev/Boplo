@@ -3,6 +3,7 @@ import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
 import { recordHit, saveAttrib, ownerStats } from '../lib/owner.js';
+import { coachRoutes, runDigest, digestOff } from '../lib/coach.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
 import {switchInterval, health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
@@ -42,7 +43,8 @@ export async function onRequest({request,env,waitUntil}) {
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
  if(path==='hit'&&request.method==='POST'){const site=request.headers.get('Sec-Fetch-Site');if(site&&site!=='same-origin')return new Response(null,{status:204});return await recordHit(env,request).catch(()=>new Response(null,{status:204}));}
  if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request,fetch,c=>syncSchool(env,c));
- if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');return json(await runNudges(env,{origin:env.APP_ORIGIN||url.origin}));}
+ if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');const o={origin:env.APP_ORIGIN||url.origin};const r=await runNudges(env,o);const dg=await runDigest(env,o).catch(e=>({digestError:e.message}));return json({...r,...dg});}
+ if(path==='digest/off'&&request.method==='GET')return await digestOff(env,url);
  if(path==='nudges/off'&&request.method==='GET')return await nudgesOff(env,url);
  if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
@@ -113,6 +115,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
+ if(path==='school/coach'||path==='coach'||path.startsWith('coach/')){const r=await coachRoutes(env,path,request.method,user,smem,body,url.origin);if(r)return json(r);fail(404,'Not found.');}
  if(path==='school'||path.startsWith('school/')){const r=await schoolRoutes(env,path,request.method,user,body,url.origin,!!brow?.owner);if(r)return json(r);}
  // ---------- plan and billing ----------
  if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));
