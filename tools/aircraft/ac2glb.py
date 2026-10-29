@@ -2,7 +2,7 @@
 Usage: python ac2glb.py model.ac out.glb [--exclude regex] [--gear regex] [--crease deg] [--tex name=path ...] [--maxtex 2048]
 Axes: AC (FlightGear) x aft, y up, z left  ->  glTF +Z forward, +Y up, +X left (Boplo convention).
 """
-import sys, re, os, json, struct, io, math, argparse
+import os, sys, re, os, json, struct, io, math, argparse
 import numpy as np
 from PIL import Image
 
@@ -16,8 +16,9 @@ ap.add_argument('--surf', action='append', default=[], help='kind=regex: animate
 ap.add_argument('--mirror', action='store_true')
 ap.add_argument('--fus', default=r'(?i)^fuselage')
 ap.add_argument('--exclude', default=r'(?i)fog|shadow|interior|inside|cockpit|flightdeck|light(s)?\b|lenz|lens|glow|halo|beam|_light|landlt|turnoff|logolt|winglts|strobe|beacon(lenz)?$|pilot|seat|yoke|panel|instrument|wiper|cargo_inside|windows-light')
-ap.add_argument('--gear', default=r'(?i)^[NBWFM]LG|_LG|gear|wheel|tyre|tire|strut|compressor|hyd|torque|bogie|axle|brake|oleo|truck|drag.?brace|nosewheel|steer|tiller')
-ap.add_argument('--geardoor', default=r'(?i)gear.?door|nosedoor|gearibdoor|geardoor')
+ap.add_argument('--gear', default=r'(?i)^[NBWFM]LG|_LG|gear|wheel|tyre|tire|strut|compressor|hyd|torque|bogie|axle|brake|oleo|truck|drag.?brace|nosewheel|steer|tiller|(^|/)(mg|ng)(lh|rh)?(link|rim)|(^|/)n?link(upper|lower)$|rim(lh|rh)$|ac(u|tu)?tator|(^|/)links?\.|link\.fit|bearing|scissor|damper')
+ap.add_argument('--gear-extra', default='', help='more object names that belong to the gear, for one model')
+ap.add_argument('--geardoor', default=r'(?i)gear.?door|nosedoor|gearibdoor|geardoor|^[lr]hngdoor$')
 ap.add_argument('--crease', type=float, default=40)
 ap.add_argument('--tex', action='append', default=[])
 ap.add_argument('--droptex', default=r'(?i)lights?/|glass_shader|fog|lightmap|surge|windows-lights')
@@ -89,7 +90,8 @@ def parse_obj(M, L, path, skip):
     if verts is not None and surfs and not sk:
         stats['objs'] += 1
         V = (WM @ verts.T).T + WL
-        isgear = bool(re.search(a.gear, full)) or bool(re.search(a.geardoor, name))
+        isgear = bool(re.search(a.gear, full)) or bool(re.search(a.geardoor, name)) or bool(a.gear_extra and re.search(a.gear_extra, name))
+        if os.environ.get('ACLIST'): print('OBJ', 'G' if isgear else '-', full, np.round(V.min(0), 2).tolist(), np.round(V.max(0), 2).tolist())
         if a.obj and not re.search(a.obj, name): pass
         else:
             snode = next((k for k, rx in SURF if re.search(rx, name)), '') if not isgear else ''

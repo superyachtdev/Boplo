@@ -28,7 +28,7 @@
       gear: { track: 0, r: .6, leg: 1 }, livery: 'northwind', perf: { vs: 125, vr: 130, appr: 128, cruise: 250, vmax: 320, climb: 2800 } },
     // airliners use 3D models from FlightGear (GPL v2, github.com/FGMEMBERS), converted to glTF and repainted by Boplo (tools/aircraft)
     { id: 'narrow', kind: 'jet', cat: 'Airliner', name: 'Narrowbody airliner', blurb: 'The 180-seat workhorse of short-haul flying, modelled on the A320.',
-      model: 'a320', tex: ["A320-NWA.png",  "NWA.png"], span: 34.04, len: 37.57, geo: { dia: 3.95, hgt: 4.14, yMin: -4.42, mainZ: -1.01, noseZ: 11.62, noseTip: 16.52, tailZ: -21.05, tip: [17.02, 0.79, -5.81], fin: [-0.0, 7.94, -18.8], eye: [0.5, 0.95, 13.92] },
+      model: 'a320', tex: ["A320-NWA.png",  "NWA.png"], span: 34.04, len: 37.57, geo: { dia: 3.95, hgt: 4.14, yMin: -4.42, mainZ: -1.0, noseZ: 11.52, noseTip: 16.54, tailZ: -21.04, tip: [17.02, 0.79, -5.79], fin: [-0.0, 7.94, -18.78], eye: [0.5, 0.95, 13.94] },
       gear: { track: 0, r: .6, leg: 1 }, livery: 'boplo', perf: { vs: 140, vr: 145, appr: 137, cruise: 250, vmax: 340, climb: 2500 } },
     { id: 'narrow2', kind: 'jet', cat: 'Airliner', name: 'Classic narrowbody', blurb: 'The best-selling jetliner shape, modelled on the 737-800: low to the ground with blended winglets.',
       model: 'b737', tex: ["737-800.png"], span: 35.69, len: 39.42, geo: { dia: 3.72, hgt: 3.96, yMin: -3.59, mainZ: -1.26, noseZ: 14.54, noseTip: 18.84, tailZ: -20.58, tip: [17.85, 2.46, -6.28], fin: [0.0, 9.34, -18.63], eye: [0.5, 0.9, 16.24] },
@@ -95,7 +95,7 @@
   }
 
   // ---- airliners from 3D models: the model is fetched once, and the chosen livery's textures are dropped into it ----
-  const modelCache = new Map(), MODEL_V = 3;
+  const modelCache = new Map(), MODEL_V = 4;
   const parseGLB = buf => { const dv = new DataView(buf), jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl, bl = dv.getUint32(bo, true); return { json, bin: new Uint8Array(buf, bo + 8, bl) }; };
   const pad4 = n => (n + 3) & ~3;
   const getBuf = url => { if (!modelCache.has(url)) modelCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).catch(e => { modelCache.delete(url); throw e; })); return modelCache.get(url); };
