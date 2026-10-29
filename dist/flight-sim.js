@@ -569,7 +569,7 @@ window.BoploSim = (() => {
     const coarse = matchMedia('(pointer: coarse)').matches;
     // graphics level. Fast: terrain and satellite imagery, no 3D city. Balanced: the photo-real 3D scenery at a lighter level of
     // detail and screen-resolution rendering. Detailed: full 3D detail, sharp on high-density screens, HDR and sun glare.
-    const GFX = ['fast', 'balanced', 'detailed'].includes(O.gfx) ? O.gfx : (coarse ? 'fast' : 'balanced');
+    const GFX = ['fast', 'balanced', 'detailed'].includes(O.gfx) ? O.gfx : 'fast';
     const SSE0 = GFX === 'detailed' ? (coarse ? 18 : 12) : (coarse ? 32 : 24), RES0 = GFX === 'detailed' && !coarse ? Math.min(1, 1.5 / (window.devicePixelRatio || 1)) : 1;
     const audio = engineAudio(O.jet);
     const cleanups = [];
