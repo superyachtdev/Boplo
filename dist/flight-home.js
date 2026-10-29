@@ -158,7 +158,8 @@
   const frame = $('.frame', section);
   const canvas = $('[data-canvas]');
   // low-memory or few-core phones get the still version of the hero instead of the 3D flight
-  const lowEnd = matchMedia('(max-width: 820px)').matches && ((navigator.deviceMemory || 8) <= 3 || (navigator.hardwareConcurrency || 8) <= 4);
+  // (iPhones report few cores and no memory figure, so only a phone that reports very little memory gets the still)
+  const lowEnd = matchMedia('(max-width: 820px)').matches && navigator.deviceMemory != null && navigator.deviceMemory <= 2;
   const gl = !reduce && !lowEnd && canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
 
   if (!gl) {
@@ -676,6 +677,7 @@
 
     // ---- copy + HUD
     heroCopy.classList.toggle('away', prog > .045);
+    if (hud) hud.classList.toggle('early', mobile && prog <= .045);
     frame.classList.toggle('flying', prog > .045);
     const stage = prog < .06 ? -1 : prog < .3 ? 0 : prog < .6 ? 1 : prog < .85 ? 2 : 3;
     if (stage !== lastStage) { captions.forEach((cEl, i) => cEl.classList.toggle('on', i === stage)); lastStage = stage; }
