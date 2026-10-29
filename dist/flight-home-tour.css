@@ -26,10 +26,6 @@
 .lap-scr{position:relative;aspect-ratio:16/10;border-radius:6px;overflow:hidden;background:var(--cloud)}
 .lap-base{height:14px;margin:0 -5%;border-radius:2px 2px 14px 14px;background:linear-gradient(#26345C,#111A38);box-shadow:0 0 0 1px rgba(158,216,255,.12)}
 .lap-base::after{content:'';display:block;width:16%;height:5px;margin:0 auto;border-radius:0 0 8px 8px;background:#0A1230}
-/* a generic phone */
-.phn{position:absolute;right:0;bottom:0;width:30%;max-width:250px;aspect-ratio:600/1298;border-radius:13%/6%;background:#030A1E;padding:2.6%;box-shadow:0 0 0 1px rgba(158,216,255,.2),0 40px 90px -30px rgba(0,0,0,.75)}
-.phn-scr{position:relative;height:100%;border-radius:11%/5.2%;overflow:hidden;background:var(--cloud)}
-.phn-scr::after{content:'';position:absolute;top:1.6%;left:50%;width:30%;height:3.4%;margin-left:-15%;border-radius:99px;background:#030A1E;z-index:3}
 .shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;opacity:0;transform:scale(1.015);transition:opacity .6s var(--ease),transform .9s var(--ease)}
 .shot.on{opacity:1;transform:none}
 .tour-credit{position:absolute;left:0;bottom:-26px;font-size:12px;color:rgba(158,216,255,.5);opacity:0;transition:opacity .4s}
@@ -46,11 +42,27 @@
   .tour-grid{display:block}
   .tour-stage{display:none}
   .tour-step{min-height:0;opacity:1;padding:36px 0;border-top:1px solid var(--hair-d)}
-  .tour-step .ph{display:block;position:relative;width:min(72%,290px);margin:26px auto 0;aspect-ratio:600/1298;border-radius:13%/6%;background:#0D1530;padding:2.6%;box-shadow:0 0 0 1px rgba(158,216,255,.2),0 30px 70px -30px rgba(10,98,255,.5)}
-  .tour-step .ph img{display:block;width:100%;height:100%;object-fit:cover;object-position:top;border-radius:11%/5.2%}
-  .tour-step .ph small{position:absolute;left:0;right:0;bottom:-22px;text-align:center;font-size:11.5px;color:rgba(158,216,255,.5)}
+  .tour-step .ph{display:block;position:relative;width:min(70%,280px);margin:28px auto 0}
+  .tour-step .ph small{position:absolute;left:0;right:0;bottom:-24px;text-align:center;font-size:11.5px;color:rgba(158,216,255,.5)}
+  .tour-step .ph img{position:absolute;left:0;right:0;bottom:0;top:6.2%;width:100%;height:93.8%;object-fit:cover;object-position:top}
+  .tour-step .ph img.full{top:0;height:100%}
 }
 .tour-note{color:var(--mist);font-size:14px}
-.phn-scr .shot{top:5.2%;height:94.8%}
-.phn-scr .shot.full{top:0;height:100%}
 .statement{padding-bottom:clamp(70px,9vw,120px)}
+
+/* a realistic phone: metal rim, black bezel, rounded screen, camera pill and status bar */
+.iph{aspect-ratio:71.6/146.6;border-radius:17.5%/8.6%;padding:1.1%;background:linear-gradient(145deg,#4B5163 0%,#1C2030 16%,#0B0D16 48%,#22273A 76%,#5A6074 100%);box-shadow:0 0 0 .5px rgba(255,255,255,.18) inset,0 1px 1px rgba(255,255,255,.35) inset,0 50px 90px -30px rgba(0,0,0,.8),0 20px 40px -20px rgba(10,98,255,.35);position:relative}
+.phn.iph{position:absolute;right:0;bottom:0;width:29%;max-width:250px}
+.iph::before{content:'';position:absolute;right:-1.4%;top:27%;width:1.6%;height:13%;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#4A5369,#20263A)}
+.iph::after{content:'';position:absolute;left:-1.4%;top:19%;width:1.6%;height:5%;border-radius:3px 0 0 3px;background:linear-gradient(270deg,#4A5369,#20263A);box-shadow:0 260% 0 #2E354B,0 520% 0 #2E354B}
+.iph-bez{height:100%;border-radius:16%/7.8%;background:#000;padding:3.6%}
+.iph-scr{position:relative;height:100%;border-radius:12.8%/6.1%;overflow:hidden;background:var(--cloud);isolation:isolate}
+.iph-scr::after{content:'';position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;background:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.05) 22%,rgba(255,255,255,0) 40%);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.iph-sb{position:absolute;left:0;right:0;top:0;height:6.2%;z-index:3;display:flex;align-items:center;justify-content:space-between;padding:0 7.5% 0 11%;background:#F6F8FD;color:#050B1F;container-type:inline-size}
+.iph-sb b{font-size:max(9px,4.6cqw);font-weight:640;letter-spacing:-.01em}
+.iph-sb svg{width:22%;height:auto}
+.iph-isl{position:absolute;left:50%;top:22%;width:31%;height:56%;margin-left:-15.5%;border-radius:99px;background:#000}
+.iph-scr .shot{top:6.2%;height:93.8%}
+.iph-scr .shot.full{top:0;height:100%}
+.iph-scr:has(.shot.full.on) .iph-sb{background:transparent;color:#fff}
+.ph .iph-scr:has(img.full) .iph-sb{background:transparent;color:#fff}
