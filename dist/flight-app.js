@@ -2284,8 +2284,10 @@
   /* ================= simulator ================= */
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })(), livery: (() => { try { return localStorage.getItem('boplo-sim-liv') || null; } catch { return null; } })() };
   const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
+  // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
+  const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return matchMedia('(pointer: coarse)').matches ? 'fast' : 'balanced'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=5', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=5', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=32', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=5', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=33', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2325,7 +2327,7 @@
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
       Sim.open({
         googleKey,
-        id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day',
+        id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day', gfx: ui.sim.gfx || simGfx(),
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
         runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), livery: ui.sim.livery || null, radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
@@ -2383,6 +2385,7 @@
           <fieldset><legend>Weather</legend><select name="wx" class="sim-wxsel">${[['live', 'Live at departure (METAR)'], ['clear', 'Clear skies'], ['fair', 'Fair, a few cumulus'], ['scattered', 'Scattered cloud, light bumps'], ['broken', 'Broken cloud'], ['overcast', 'Low overcast'], ['hazy', 'Hazy, 4 km visibility'], ['gusty', 'Gusty crosswind (16 G26 kt)']].map(([v, l]) => `<option value="${v}" ${ui.sim.wx === v ? 'selected' : ''}>${l}</option>`).join('')}</select></fieldset>
           <fieldset><legend>Time of day</legend><div class="segmented">${[['day', 'Day'], ['golden', 'Golden hour'], ['night', 'Night']].map(([v, l]) => `<label><input type="radio" name="time" value="${v}" ${(ui.sim.time || 'day') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
           <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Graphics</legend><div class="segmented">${[['fast', 'Fast'], ['balanced', 'Balanced'], ['detailed', 'Detailed 3D']].map(([v, l]) => `<label><input type="radio" name="gfx" value="${v}" ${(ui.sim.gfx || simGfx()) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
         </form>
       </section>
       <section class="tile pr-box" aria-labelledby="pr-h">
@@ -2413,7 +2416,7 @@
       const note = $('[data-acnote]'); if (note) note.textContent = cur === 'auto' ? 'Each flight flies in the aircraft you logged for it.' + (auto ? '' : ' Unknown types use the Cessna 172.') : `Every flight flies in the ${A.byId(cur).name}.`;
     };
     loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
-    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; ui.sim.wx = v.wx; ui.sim.time = v.time; try { localStorage.setItem('boplo-sim-wx', v.wx); } catch { } };
+    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; ui.sim.wx = v.wx; ui.sim.time = v.time; ui.sim.gfx = v.gfx; try { localStorage.setItem('boplo-sim-wx', v.wx); localStorage.setItem('boplo-sim-gfx', v.gfx); } catch { } };
     // practice picker: airfields in the pilot's country, runway ends from the surveyed runway data
     { const cc = countryCodeOf(state.profile), inp = $('[data-prap]'), sel = $('[data-prrw]'), dl = $('[data-prlist]');
       let afs = [];

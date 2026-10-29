@@ -567,6 +567,10 @@ window.BoploSim = (() => {
     const root = dlg.querySelector('.sim'), $ = s => root.querySelector(s), $$ = s => [...root.querySelectorAll(s)];
     let alive = true, raf = 0, viewer = null;
     const coarse = matchMedia('(pointer: coarse)').matches;
+    // graphics level. Fast: terrain and satellite imagery, no 3D city. Balanced: the photo-real 3D scenery at a lighter level of
+    // detail and screen-resolution rendering. Detailed: full 3D detail, sharp on high-density screens, HDR and sun glare.
+    const GFX = ['fast', 'balanced', 'detailed'].includes(O.gfx) ? O.gfx : (coarse ? 'fast' : 'balanced');
+    const SSE0 = GFX === 'detailed' ? (coarse ? 18 : 12) : (coarse ? 32 : 24), RES0 = GFX === 'detailed' && !coarse ? Math.min(1, 1.5 / (window.devicePixelRatio || 1)) : 1;
     const audio = engineAudio(O.jet);
     const cleanups = [];
     const on = (t, ev, fn, o) => { t.addEventListener(ev, fn, o); cleanups.push(() => t.removeEventListener(ev, fn, o)); };
@@ -712,14 +716,14 @@ window.BoploSim = (() => {
     try {
       viewer = new C.CesiumWidget($('[data-map]'), {
         baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !coarse, terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
-        useBrowserRecommendedResolution: !!coarse, msaaSamples: coarse ? 1 : 4, creditContainer: $('[data-credits]'), requestRenderMode: false
+        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: coarse ? 1 : GFX === 'detailed' ? 4 : 2, creditContainer: $('[data-credits]'), requestRenderMode: false
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
     scene.screenSpaceCameraController.enableInputs = false;
     scene.postProcessStages.fxaa.enabled = true;
     // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
-    if (!coarse) { try { viewer.resolutionScale = Math.min(1, 1.6 / (window.devicePixelRatio || 1)); scene.highDynamicRange = true; } catch { } }
+    if (!coarse && GFX === 'detailed') { try { scene.highDynamicRange = true; } catch { } }
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
     // a fixed mid-morning sun at the departure airfield, for good shadows and colour
@@ -735,8 +739,8 @@ window.BoploSim = (() => {
     dlg.dataset.tod = TOD;
     const LIGHT = TOD === 'night' ? [.13, .15, .24] : TOD === 'golden' ? [1, .8, .62] : [1, 1, 1];
     // a soft sun glare, as a camera sees it
-    if (!coarse && TOD !== 'night') { try { const lf = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(lf.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(lf); } catch (e) { console.warn('flare', e); } }
-    if (scene.shadowMap) { scene.shadowMap.size = 2048; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = true; scene.shadowMap.darkness = .4; }
+    if (!coarse && GFX === 'detailed' && TOD !== 'night') { try { const lf = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(lf.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(lf); } catch (e) { console.warn('flare', e); } }
+    if (scene.shadowMap) { scene.shadowMap.size = GFX === 'detailed' ? 2048 : 1024; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = GFX === 'detailed'; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
     const LLH = (x, z, h) => { const [lng, lat] = F.ll(x, z); return C.Cartesian3.fromDegrees(lng, lat, h); };
@@ -745,9 +749,9 @@ window.BoploSim = (() => {
     camera.setView({ destination: LLH(P[0][0] - Math.sin(path.at(80)[2]) * 400, P[0][1] - Math.cos(path.at(80)[2]) * 400, (O.fromElevFt || 0) * FT + 250), orientation: { heading: path.at(80)[2], pitch: C.Math.toRadians(-22), roll: 0 } });
 
     let tileset = null, scenery = 'globe';
-    if (O.googleKey) {
+    if (O.googleKey && GFX !== 'fast') {
       try {
-        tileset = await C.createGooglePhotorealistic3DTileset({ key: O.googleKey, onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: coarse ? 22 : 14, dynamicScreenSpaceError: true, dynamicScreenSpaceErrorFactor: 18, foveatedScreenSpaceError: true, cacheBytes: 640 * 1024 * 1024, skipLevelOfDetail: true, shadows: C.ShadowMode.RECEIVE_ONLY });
+        tileset = await C.createGooglePhotorealistic3DTileset({ key: O.googleKey, onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: SSE0, dynamicScreenSpaceError: true, dynamicScreenSpaceErrorFactor: 18, foveatedScreenSpaceError: true, cacheBytes: 640 * 1024 * 1024, skipLevelOfDetail: true, shadows: C.ShadowMode.RECEIVE_ONLY });
         scene.primitives.add(tileset); scene.globe.show = false; scenery = 'google';
         let failed = 0; tileset.tileFailed.addEventListener(() => failed++);
         const ok = await Promise.race([new Promise(r => tileset.initialTilesLoaded.addEventListener(() => r(true))), new Promise(r => setTimeout(() => r(false), 14000))]);
@@ -757,7 +761,7 @@ window.BoploSim = (() => {
     if (!tileset) {
       scene.terrainProvider = terrariumTerrain(C);
       scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless 2017 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2017), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
-      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = coarse ? 3 : 2; g.tileCacheSize = 400; g.preloadSiblings = true; g.enableLighting = false;
+      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = GFX === 'fast' ? 3 : 2; g.tileCacheSize = 400; g.preloadSiblings = true; g.enableLighting = false;
     }
     root.classList.toggle('is-google', scenery === 'google');
     // light level: tint the photo scenery (it has its own baked lighting) and the imagery for dusk and night
@@ -780,10 +784,10 @@ window.BoploSim = (() => {
         cloudCol = scene.primitives.add(new C.CloudCollection({ noiseDetail: 16, noiseOffset: new C.Cartesian3(Math.random() * 100, 0, 0) }));
         const R = 9000, per = { FEW: 10, SCT: 28, BKN: 60, OVC: 110, VV: 110 };
         for (const L of cloudLayers) {
-          const n = Math.min(110, per[L.cover] || 20), base = (+L.base) * FT;
+          const n = Math.round(Math.min(110, per[L.cover] || 20) * (GFX === 'detailed' ? 1 : .6)), base = (+L.base) * FT;
           for (let i = 0; i < n; i++) {
             // each cloud is a cluster of smaller puffs: the procedural clouds stay crisp at this size
-            const a = Math.random() * 2 * Math.PI, rr = Math.sqrt(Math.random()) * R, cw = (L.cover === 'OVC' ? 1400 : 600) + Math.random() * 700, np = L.cover === 'OVC' ? 4 : 3;
+            const a = Math.random() * 2 * Math.PI, rr = Math.sqrt(Math.random()) * R, cw = (L.cover === 'OVC' ? 1400 : 600) + Math.random() * 700, np = GFX === 'detailed' ? (L.cover === 'OVC' ? 4 : 3) : 2;
             for (let j = 0; j < np; j++) {
               const w = cw * (.38 + Math.random() * .22), h = w * (.5 + Math.random() * .3), ox = (Math.random() - .5) * cw * .75, oz = (Math.random() - .5) * cw * .45, oy = (Math.random() - .3) * h * .35;
               cloudCells.push({ dx: Math.cos(a) * rr + ox, dz: Math.sin(a) * rr + oz, base: base + oy, w, h, c: cloudCol.add({ position: C.Cartesian3.ZERO, scale: new C.Cartesian2(w, h), maximumSize: new C.Cartesian3(26 + Math.random() * 10, 12 + Math.random() * 8, 18), slice: .32 + Math.random() * .22, brightness: TOD === 'night' ? .12 : TOD === 'golden' ? .9 : 1.05, color: TOD === 'golden' ? C.Color.fromCssColorString('#ffd9b8') : C.Color.WHITE }) });
@@ -1704,15 +1708,15 @@ window.BoploSim = (() => {
     /* ---- loop ---- */
     let prev = performance.now(), hudT = 0;
     // adaptive quality: hold a smooth frame rate by trading scenery detail, render resolution and shadows
-    const QUAL = [{ sse: coarse ? 22 : 14, res: 1, sh: true }, { sse: 20, res: .9, sh: true }, { sse: 26, res: .8, sh: false }, { sse: 34, res: .7, sh: false }, { sse: 44, res: .6, sh: false }];
-    let qi = coarse ? 1 : 0, fpsN = 0, fpsT = performance.now(), calm = 0;
-    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = q.sse / 7; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
+    const QUAL = [{ sse: SSE0, res: RES0, sh: true }, { sse: SSE0 * 1.4, res: RES0 * .9, sh: true }, { sse: SSE0 * 1.9, res: RES0 * .8, sh: false }, { sse: SSE0 * 2.5, res: RES0 * .7, sh: false }, { sse: SSE0 * 3.2, res: RES0 * .6, sh: false }];
+    let qi = 0, fpsN = 0, fpsT = performance.now(), calm = 0;
+    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = (GFX === 'fast' ? 3 : 2) * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
     let shadowsOK = !coarse; applyQ();
     function loop(now) {
       if (!alive) return;
       raf = requestAnimationFrame(loop); pumping = false;
       fpsN++; if (now - fpsT > 2000) { const fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now;
-        if (!document.hidden && !paused) { if (fps < 28 && qi < QUAL.length - 1) { qi++; applyQ(); calm = 0; } else if (fps > 52 && qi > 0 && ++calm > 3) { qi--; applyQ(); calm = 0; } } }
+        if (!document.hidden && !paused) { if (fps < 40 && qi < QUAL.length - 1) { qi++; applyQ(); calm = 0; } else if (fps > 57 && qi > 0 && ++calm > 4) { qi--; applyQ(); calm = 0; } } }
       const real = Math.min(.1, (now - prev) / 1000); prev = now;
       if (!paused && !ended) {
         let simT = real * rate;
