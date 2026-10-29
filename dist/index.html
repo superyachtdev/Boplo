@@ -27,9 +27,11 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
   <link rel="stylesheet" href="flight-home.css?v=8">
   <link rel="stylesheet" href="flight-home-fx.css?v=1">
+  <link rel="stylesheet" href="flight-home-tour.css?v=1">
   <script src="vendor/lenis.min.js" defer></script>
   <script src="flight-home.js?v=8" defer></script>
   <script src="flight-home-fx.js?v=2" defer></script>
+  <script src="flight-home-tour.js?v=1" defer></script>
   <script src="/hit.js?v=1" defer></script>
 </head>
 <body>
@@ -45,7 +47,7 @@
       <span>Flight</span>
     </a>
     <nav class="nav-links" aria-label="Sections">
-      <a href="#desk">The desk</a>
+      <a href="#features">Features</a>
       <a href="#rules">Rules</a>
       <a href="#pricing">Pricing</a>
       <a href="/plan.html">Cost planner</a>
@@ -136,6 +138,35 @@
     <!-- Statement -->
     <section class="statement" aria-label="Why Boplo Flight">
       <p>Flight training is spread across a paper logbook, a notes app and whatever you remember from the debrief. <span>Boplo keeps the next lesson, the last one and every hour in between in one place.</span></p>
+    </section>
+
+    <!-- Feature tour: the real app, on the laptop and the phone -->
+    <section class="tour" id="features" aria-labelledby="tour-h" data-tour>
+      <div class="tour-inner">
+        <header class="section-head">
+          <h2 id="tour-h">One flight desk, on every screen you fly with.</h2>
+          <p>Plan on the laptop the night before, check it on your phone at the airfield. These are real screens from the example account.</p>
+        </header>
+        <div class="tour-grid">
+          <ol class="tour-steps">
+            <li class="tour-step on" data-k="prep"><span class="kind">Before the lesson</span><h3>Turn up knowing what you’re flying.</h3><p>Your next lesson, a prep checklist and the questions for your instructor, all in one place. Print it as a kneeboard, or get a plan for the hour if the weather scrubs it.</p><ul><li>Prep checklist and questions</li><li>Reminder the evening before</li><li>A refresher when it’s been a while</li></ul><div class="ph"><img src="/assets/tour/prep-m.webp" alt="Lesson prep on a phone" width="600" height="1298" loading="lazy"></div></li>
+            <li class="tour-step" data-k="log"><span class="kind">After the flight</span><h3>A logbook that keeps the lesson with it.</h3><p>Record the flight with GPS, or type it in afterwards. Time, role, landings and your debrief stay together, and the track sits on the map.</p><ul><li>GPS recording and routes</li><li>Import, export and scan a paper logbook</li><li>Voice debriefs, tidied up for you</li></ul><div class="ph"><img src="/assets/tour/log-m.webp" alt="The logbook on a phone" width="600" height="1298" loading="lazy"></div></li>
+            <li class="tour-step" data-k="progress"><span class="kind">Your licence</span><h3>See exactly what’s left.</h3><p>Hours against your authority’s published minimum, syllabus exercises done, and where the time went by month and by role.</p><ul><li>FAA, UK CAA and EASA requirements</li><li>Syllabus progress</li><li>A budget for the rest of your training</li></ul><div class="ph"><img src="/assets/tour/progress-m.webp" alt="Training analytics on a phone" width="600" height="1298" loading="lazy"></div></li>
+            <li class="tour-step" data-k="study"><span class="kind">Theory</span><h3>Pass the written exams first time.</h3><p>Practise by subject, with explanations, and sit mock exams at the real pass mark. Questions you miss come back until they stick.</p><ul><li>Mock exams at the pass mark</li><li>Spaced review of what you missed</li><li>Radio call practice</li></ul><div class="ph"><img src="/assets/tour/study-m.webp" alt="Study and mock exams on a phone" width="600" height="1298" loading="lazy"></div></li>
+            <li class="tour-step" data-k="sim"><span class="kind">Practice</span><h3>Fly the approach before you fly it.</h3><p>A 3D simulator over real airports. Practise short finals on the runway you’ll land on, or fly your logged routes again.</p><ul><li>Real terrain and photo-real scenery</li><li>Trainers and airliners</li><li>Landing scores and leaderboards</li></ul><div class="ph"><img src="/assets/tour/sim-m.webp" alt="The 3D simulator on short final at San Diego" width="600" height="1298" loading="lazy"><small>Scenery: Google</small></div></li>
+            <li class="tour-step" data-k="ask"><span class="kind">Questions</span><h3>Ask Boplo, with the source attached.</h3><p>A training assistant that knows your licence and your desk, and links the official source for its answers so you can check them.</p><ul><li>Answers with links to official sources</li><li>Mock checkrides</li><li>Knows your next lesson</li></ul><div class="ph"><img src="/assets/tour/ask-m.webp" alt="Ask Boplo on a phone" width="600" height="1298" loading="lazy"></div></li>
+            <li class="tour-step" data-k="school"><span class="kind">With your school</span><h3>Your instructor, between lessons.</h3><p>If your school is on Boplo, your instructor can debrief your flights, set your next lesson and sign off syllabus lessons. You can message them from the app.</p><ul><li>Debriefs on each flight</li><li>Next lesson and prep, set by your instructor</li><li>Messages with your instructor</li></ul><div class="ph"><img src="/assets/tour/school-m.webp" alt="An instructor’s debrief and lesson plan on a phone" width="600" height="1298" loading="lazy"></div></li>
+          </ol>
+          <div class="tour-stage" aria-hidden="true">
+            <div class="stage">
+              <div class="lap"><div class="lap-lid"><div class="lap-scr" data-lap></div></div><div class="lap-base"></div></div>
+              <div class="phn"><div class="phn-scr" data-phn></div></div>
+              <p class="tour-credit" data-credit>Simulator scenery: Google</p>
+            </div>
+          </div>
+        </div>
+        <div class="tour-foot"><a class="btn btn-light" href="/flight-app.html">Start free <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a><a class="alt" href="/flight-app.html?preview=1">Open the example desk</a><span class="tour-note">Free to start. Some features are part of Advanced.</span></div>
+      </div>
     </section>
 
     <!-- The desk -->
