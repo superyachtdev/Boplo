@@ -213,5 +213,5 @@ window.BoploMap = (() => {
     q('[data-pdone]').onclick = () => { const first = pts[0], last = pts[pts.length - 1]; ctx?.map.remove(); onDone && onDone({ points: pts.map(p => ({ lat: p.lat, lng: p.lng })), from: first?.code || '', to: last?.code || '' }); };
   }
 
-  return { airfields, findAirfield, mountOverview, mountPlotter, loadLib, nm };
+  return { airfields, findAirfield, mountOverview, mountPlotter, loadLib, nm, brg, style };
 })();

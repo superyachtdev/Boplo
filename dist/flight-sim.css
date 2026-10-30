@@ -307,3 +307,12 @@
 @media (max-width:1100px){.pfd-bar{grid-template-columns:repeat(6,minmax(0,1fr))}.pfd-bar div:nth-child(2),.pfd-bar div:nth-child(4),.pfd-bar div:nth-child(9){display:none}.pfd-spd{left:calc(env(safe-area-inset-left) + 70px)}.pfd-alt{right:calc(env(safe-area-inset-right) + 86px)}.pfd-dk{width:50px}}
 @media (max-width:760px){.pfd-tape{height:220px}.pfd-spd{left:calc(env(safe-area-inset-left) + 8px);width:50px}.pfd-alt{right:calc(env(safe-area-inset-right) + 20px);width:58px}.pfd-bar{display:none}.pfd-thr{display:none}.pfd-flaps{display:none}.pfd-dock{bottom:calc(env(safe-area-inset-bottom) + 10px);gap:2px;padding:4px}.pfd-dk{width:42px;height:44px}.pfd-dk span{display:none}}
 @media (max-height:620px){.pfd-tape{height:220px}.pfd-thr-track{height:160px}.pfd-dk{height:44px}.pfd-fl button{height:24px}}
+/* in-flight map */
+.sim-mini{position:absolute;right:calc(env(safe-area-inset-right) + 14px);top:calc(env(safe-area-inset-top) + 72px);z-index:12;width:min(280px,34vw);aspect-ratio:1;border-radius:20px;overflow:hidden;background:rgba(4,11,34,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:inset 0 0 0 1px rgba(158,216,255,.2),0 12px 32px rgba(2,6,17,.4)}
+.sim-mini[hidden]{display:none}
+.sim-mini canvas{display:block;width:100%;height:100%}
+.sim-mini-z{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:4px;padding:3px;border-radius:12px;background:rgba(4,11,34,.8);box-shadow:inset 0 0 0 1px rgba(158,216,255,.18)}
+.sim-mini-z button{width:28px;height:28px;border:0;border-radius:9px;background:rgba(158,216,255,.12);color:#fff;font:600 16px/1 system-ui,sans-serif;cursor:pointer}
+.sim-mini-z button:focus-visible{outline:2px solid #9ED8FF;outline-offset:1px}
+.sim-mini-z b{min-width:48px;text-align:center;font:600 11.5px/1 var(--font,'Archivo',sans-serif);color:#DEE9FF;font-variant-numeric:tabular-nums}
+@media (max-width:760px){.sim-mini{width:44vw;top:calc(env(safe-area-inset-top) + 56px);right:10px}}

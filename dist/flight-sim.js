@@ -69,12 +69,15 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=13'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=14'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
     const kx = Math.cos(lat0 * D2R) * 111320, kz = 111132;
-    return { to: (lat, lng) => [(lng - lng0) * kx, (lat - lat0) * kz], ll: (x, z) => [lng0 + x / kx, lat0 + z / kz] };
+    // the frame is flat (equirectangular), so on a long route east-west metres stretch by cos(lat)/cos(lat0) away from the start:
+    // sx() is that stretch at a given z, used to turn frame headings into true ones for drawing
+    const c0 = Math.cos(lat0 * D2R);
+    return { lat0, to: (lat, lng) => [(lng - lng0) * kx, (lat - lat0) * kz], ll: (x, z) => [lng0 + x / kx, lat0 + z / kz], sx: z => Math.cos((lat0 + z / kz) * D2R) / c0 };
   }
 
   /* ---------------- route path ---------------- */
@@ -479,6 +482,7 @@ window.BoploSim = (() => {
           <button type="button" class="sim-b" data-cam aria-label="Change camera" title="Camera (C)"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span data-caml>Chase</span></button>
           <button type="button" class="sim-b" data-sixb aria-pressed="false" title="Instrument panel (I)"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><span>Panel</span></button>
           <button type="button" class="sim-b" data-ap aria-pressed="false" title="Autopilot (P)"><span>AP</span></button>
+          <button type="button" class="sim-b" data-mapb aria-pressed="false" aria-label="Map" title="Map (O)"><svg viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></svg></button>
           <button type="button" class="sim-b" data-gates aria-pressed="false" title="Route gates (G)"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1.5"/><rect x="9" y="9.5" width="6" height="5" rx="1"/></svg></button>
           <button type="button" class="sim-b" data-setb aria-label="Control settings" title="Controls (K)"><svg viewBox="0 0 24 24"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
           <button type="button" class="sim-b" data-mute aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9.5h4L13 5v14l-5-4.5H4z"/><path data-wave d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
@@ -487,6 +491,7 @@ window.BoploSim = (() => {
         </div>
       </header>
       <div class="sim-warn" data-warn role="status" aria-live="assertive"></div>
+      <div class="sim-mini" data-mini hidden role="img" aria-label="Map of your route"><canvas data-minic></canvas><div class="sim-mini-z"><button type="button" data-miniz="-1" aria-label="Zoom out">−</button><b data-minir>10 NM</b><button type="button" data-miniz="1" aria-label="Zoom in">+</button></div></div>
       <div class="sim-radio" data-radio hidden role="region" aria-label="Radio" aria-live="polite">
         <div class="sr-top"><span class="sr-k" data-rk>Radio · your call</span><button type="button" class="sr-x" data-rskip aria-label="Skip this call">Skip</button></div>
         <b data-rtitle></b><small data-rhint></small>
@@ -657,33 +662,33 @@ window.BoploSim = (() => {
     const stripFor = (R0, hdg) => { const f = [Math.sin(hdg), Math.cos(hdg)]; const A = add(R0.C0, f, -275), B = add(R0.C0, f, 275); const r = { A, B, len: 550, wid: 18, le: '', he: '', surf: 'grass', leD: 0, heD: 0, approx: 2, code: R0.ap.code }; R0.list.push(r); return r; };
     const endsOf = rw => [{ rw, T: rw.A, far: rw.B, disp: rw.leD, id: rw.le }, { rw, T: rw.B, far: rw.A, disp: rw.heD, id: rw.he }].map(e => ({ ...e, dir: unit(e.T, e.far), hdg: Math.atan2(e.far[0] - e.T[0], e.far[1] - e.T[1]) }));
     // best runway end: into a real wind, otherwise lined up with where the route goes, preferring long paved runways
-    function pickEnd(R0, want) {
+    function pickEnd(R0, want, force) {
       if (!R0.list.length) stripFor(R0, want ?? windFrom ?? 0);
       let best = null, bs = -Infinity;
       for (const rw of R0.list) for (const e of endsOf(rw)) {
         const head = windFrom != null ? Math.cos(windFrom - e.hdg) * O.wind.spd : 0;
         const align = want != null ? Math.cos(wrap180((want - e.hdg) * R2D) * D2R) : 0;
-        const sc = (windFrom != null ? head * 3 : 0) + align * 6 + Math.min(rw.len, 2500) / 1000 + (PAVED(rw.surf) ? 1 : 0) - (rw.approx ? .5 : 0) + (PR?.end && e.id === PR.end ? 100 : 0);
+        const sc = (windFrom != null ? head * 3 : 0) + align * 6 + Math.min(rw.len, 2500) / 1000 + (PAVED(rw.surf) ? 1 : 0) - (rw.approx ? .5 : 0) + (PR?.end && e.id === PR.end ? 100 : 0) + (force && e.id === force ? 200 : 0);
         if (sc > bs) { bs = sc; best = e; }
       }
       return best;
     }
     const bearing = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);
-    let depE = null, arrE = null, rwys = [], rollEnd = 0;
+    let depE = null, arrE = null, rwys = [], rollEnd = 0, miniAps = [];
     const circuitLike = span < 6000 && (!arrR || !depR || arrR === depR);
     if (depOn || arrOn) {
       if (circuitLike && depOn) {
         // circuits or a short local flight: a standard left-hand circuit off the real runway
-        const e = pickEnd(depR, P.length > 1 ? bearing(P[0], P.find(p => dist2(p, P[0]) > 800) || P[1]) : null);
+        const e = pickEnd(depR, P.length > 1 ? bearing(P[0], P.find(p => dist2(p, P[0]) > 800) || P[1]) : null, O.depEnd || O.arrEnd);
         depE = arrE = e; const f = e.dir, l = leftOf(f), at = (a, b) => add(add(e.T, f, a), l, b), Ln = e.rw.len;
         const td = Math.max(e.disp, 0);
         P = [at(25, 0), at(Ln, 0), at(Ln + 800, 0), at(Ln + 1150, 380), at(Ln + 1150, 1000), at(-900, 1000), at(-1350, 560), at(-1300, 0), at(td, 0), at(Ln - 60, 0)];
         synthetic = true; rollEnd = Ln - 60 - td;
       } else {
         const outbound = depOn ? (P.find(p => dist2(p, depR.C0) > 2500) || P[P.length - 1]) : null;
-        if (depOn) depE = pickEnd(depR, outbound && dist2(outbound, depR.C0) > 1000 ? bearing(depR.C0, outbound) : null);
+        if (depOn) depE = pickEnd(depR, outbound && dist2(outbound, depR.C0) > 1000 ? bearing(depR.C0, outbound) : null, O.depEnd);
         const inbound = arrOn ? ([...P].reverse().find(p => dist2(p, arrR.C0) > 3500) || P[0]) : null;
-        if (arrOn) arrE = pickEnd(arrR, inbound && dist2(inbound, arrR.C0) > 1000 ? bearing(inbound, arrR.C0) : null);
+        if (arrOn) arrE = pickEnd(arrR, inbound && dist2(inbound, arrR.C0) > 1000 ? bearing(inbound, arrR.C0) : null, O.arrEnd);
         const clearDep = depE ? depE.rw.len + 1800 : 0, clearArr = arrE ? 6000 : 0;
         let mid = P.filter(p => (!depE || dist2(p, depR.C0) > clearDep) && (!arrE || dist2(p, arrR.C0) > clearArr));
         const out = [];
@@ -981,6 +986,7 @@ window.BoploSim = (() => {
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
       if (!alive) return;
+      miniAps = list.filter(a => a.type !== 'W').map(a => ({ code: a.code, t: a.type, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < L + 150000);
       list.filter(a => a.type !== 'S' && a.type !== 'H' && Number.isFinite(a.elev)).map(a => ({ a, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < Math.max(70000, L + 40000)).slice(0, 220)
         .forEach(({ a, xz }) => labels.add({ ...labelStyle, text: a.code, position: LLH(xz[0], xz[1], a.elev * FT + geoN + 45), fillColor: C.Color.fromCssColorString('#CFE8FF'), font: '600 13px Archivo, system-ui, sans-serif' }));
     });
@@ -988,7 +994,8 @@ window.BoploSim = (() => {
     function placeAircraft() {
       if (!model) return;
       const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop);
-      const hpr = new C.HeadingPitchRoll(C.Math.toRadians(st.hdg - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
+      const sx = F.sx(st.z), th = Math.abs(sx - 1) < 1e-4 ? st.hdg : Math.atan2(Math.sin(st.hdg * D2R) * sx, Math.cos(st.hdg * D2R)) * R2D;
+      const hpr = new C.HeadingPitchRoll(C.Math.toRadians(th - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
       C.Transforms.headingPitchRollToFixedFrame(pos, hpr, C.Ellipsoid.WGS84, undefined, model.modelMatrix);
       model.show = !st.crashed && !cockpit(); lights.show = !cockpit();
       // nav lights: model frame after axis conversion is x forward, y left, z up
@@ -1062,7 +1069,7 @@ window.BoploSim = (() => {
         const cy = Math.cos(yaw * D2R), sy = Math.sin(yaw * D2R), cp = Math.cos(pit * D2R), sp = Math.sin(pit * D2R);
         const dir = [0, 1, 2].map(i => F[i] * cy * cp + R[i] * sy * cp + U[i] * sp), rgt = [0, 1, 2].map(i => R[i] * cy - F[i] * sy);
         const upv = [dir[1] * rgt[2] - dir[2] * rgt[1], dir[2] * rgt[0] - dir[0] * rgt[2], dir[0] * rgt[1] - dir[1] * rgt[0]]; // basis is east, up, north (left-handed), as in the flight model
-        const dest = LLH(px, pz, py), enu = C.Transforms.eastNorthUpToFixedFrame(dest), toW = v => C.Cartesian3.normalize(C.Matrix4.multiplyByPointAsVector(enu, new C.Cartesian3(v[0], v[2], v[1]), new C.Cartesian3()), new C.Cartesian3());
+        const dest = LLH(px, pz, py), enu = C.Transforms.eastNorthUpToFixedFrame(dest), sxc = F.sx(st.z), toW = v => C.Cartesian3.normalize(C.Matrix4.multiplyByPointAsVector(enu, new C.Cartesian3(v[0] * sxc, v[2], v[1]), new C.Cartesian3()), new C.Cartesian3());
         camera.setView({ destination: dest, orientation: { direction: toW(dir), up: toW(upv) } });
       } else if (camName === 'Flyby') {
         // a camera parked ahead on the flight path, just off to one side: the aircraft flies past it, then it jumps ahead again
@@ -1223,6 +1230,7 @@ window.BoploSim = (() => {
       if (k === 'h' && !replay && !O.jet) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
       if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
       if (k === 'k') { openSet(); return; }
+      if (k === 'o' && !e.repeat) { setMini(!miniOn); return; }
       if (k === 'y' && !replay) { CS.mouse = !CS.mouse; saveCS(); syncSet(); tipNow = CS.mouse ? 'Mouse yoke on: move the mouse to fly' : 'Mouse yoke off'; tipUntil = performance.now() + 1800; return; }
       if (k === 'escape' && !$('[data-set]').hidden) { $('[data-set]').hidden = true; e.stopImmediatePropagation(); return; }
       if (k === 'j') { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
@@ -1481,6 +1489,7 @@ window.BoploSim = (() => {
       const lamp = (k, v) => H.ind[k]?.classList.toggle('on', !!v); lamp('park', fc.parking); lamp('brake', fc.brake > .05); lamp('carb', fc.carbHeat); lamp('rud', fc.autoRudder);
       H.flaps.textContent = FM.notches > 1 ? `Flaps ${FM.flapLabel()}` : 'No flaps'; H.flaps.classList.toggle('on', fc.flaps > 0);
       if (root.classList.contains('hud-on')) pfd(vk, pr);
+      drawMini();
       // next waypoint
       let next = wpts.find(w => w.s > pr.s + 80);
       const endS = L, [nx, nz] = next ? F.to(next.lat, next.lng) : path.at(endS);
@@ -1538,6 +1547,45 @@ window.BoploSim = (() => {
     });
     $$('[data-apd]').forEach(b => b.onclick = () => { const m = b.dataset.apd, dlt = +b.dataset.d; if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT); AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : Math.max(0, AP[m] + dlt); if (!apOn) setAP(true); apUI(); });
     function setSix(v) { showSix = v; store.set('six2', v); applyView(); }
+    /* ---- in-flight map: north up, your route, runways, waypoints and airfields around you ---- */
+    const MINI_R = [1, 2, 5, 10, 25, 50, 100];
+    let miniOn = false, miniRi = store.get('minir', 3), miniT = 0;
+    const miniEl = $('[data-mini]'), miniC = $('[data-minic]');
+    function setMini(v) { miniOn = v; miniEl.hidden = !v; $('[data-mapb]').setAttribute('aria-pressed', String(v)); if (v) drawMini(true); }
+    $('[data-mapb]').onclick = () => setMini(!miniOn);
+    $$('[data-miniz]').forEach(b => b.onclick = () => { miniRi = clamp(miniRi - +b.dataset.miniz, 0, MINI_R.length - 1); store.set('minir', miniRi); drawMini(true); });
+    function drawMini(force) {
+      if (!miniOn) return; const now = performance.now(); if (!force && now - miniT < 90) return; miniT = now;
+      const dpr = Math.min(2, window.devicePixelRatio || 1), w = miniC.clientWidth, h = miniC.clientHeight; if (!w || !h) return;
+      if (miniC.width !== Math.round(w * dpr)) { miniC.width = Math.round(w * dpr); miniC.height = Math.round(h * dpr); }
+      const g = miniC.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+      const rNm = MINI_R[miniRi], k = Math.min(w, h) / 2 / (rNm * NM), cx = w / 2, cy = h / 2;
+      $('[data-minir]').textContent = rNm + ' NM';
+      const X = x => cx + (x - st.x) * k, Y = z => cy - (z - st.z) * k;
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      // range ring
+      g.strokeStyle = 'rgba(158,216,255,.16)'; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, Math.min(w, h) / 4, 0, 7); g.stroke();
+      // airfields
+      g.font = '600 10px Archivo, system-ui, sans-serif'; g.textAlign = 'center';
+      for (const a of miniAps) {
+        const x = X(a.xz[0]), y = Y(a.xz[1]); if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
+        if (a.t === 'S' && rNm > 25) continue;
+        g.fillStyle = 'rgba(4,11,34,.9)'; g.strokeStyle = 'rgba(158,216,255,.7)'; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, a.t === 'L' ? 4 : 3, 0, 7); g.fill(); g.stroke();
+        if (rNm <= 50 || a.t === 'L') { g.fillStyle = 'rgba(222,233,255,.75)'; g.fillText(a.code, x, y + 14); }
+      }
+      // runways
+      g.strokeStyle = '#DDEBFF'; for (const r of rwys) { g.lineWidth = Math.max(2, r.wid * k); g.beginPath(); g.moveTo(X(r.A[0]), Y(r.A[1])); g.lineTo(X(r.B[0]), Y(r.B[1])); g.stroke(); }
+      // route
+      g.strokeStyle = 'rgba(10,98,255,.55)'; g.lineWidth = 6; g.beginPath(); P.forEach((p, i) => i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1]))); g.stroke();
+      g.strokeStyle = '#9ED8FF'; g.lineWidth = 2; g.stroke();
+      // waypoints
+      const nextW = wpts.find(q => q.s > path.project(st.x, st.z).s + 80);
+      for (const q of wpts) { const [x0, z0] = F.to(q.lat, q.lng), x = X(x0), y = Y(z0); g.fillStyle = q === nextW ? '#FFD166' : '#9ED8FF'; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill(); g.fillStyle = '#fff'; g.fillText(q.code || '', x, y - 10); }
+      // you
+      const hh = st.hdg * D2R; g.save(); g.translate(cx, cy); g.rotate(hh);
+      g.fillStyle = '#fff'; g.strokeStyle = '#06102A'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -10); g.lineTo(7, 8); g.lineTo(0, 4); g.lineTo(-7, 8); g.closePath(); g.stroke(); g.fill(); g.restore();
+      g.fillStyle = 'rgba(222,233,255,.85)'; g.textAlign = 'left'; g.fillText('N', 8, 16);
+    }
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
     function applyView() { const six = (showSix || cockpit()) && !AC.jet; root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
     function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; towerAt = null; flyAt = null; applyView(); }

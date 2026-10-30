@@ -2287,7 +2287,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=3', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=6', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=5', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=35', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=5', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=36', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2330,6 +2330,7 @@
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day', gfx: ui.sim.gfx || simGfx(),
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
+        depEnd: src.depEnd || '', arrEnd: src.arrEnd || '',
         runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), livery: ui.sim.livery || null, radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
         onResult: PRc && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
         onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
@@ -2370,6 +2371,20 @@
     return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, challenge: !!opts.challenge }, 'fly');
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
+  // worldwide route planner: pick airports and runways on a map, then fly or replay the route in the simulator
+  const loadRouteLib = () => window.BoploRoute ? Promise.resolve(window.BoploRoute) : loadScript('/flight-route.js?v=1', () => !!window.BoploRoute).then(() => window.BoploRoute);
+  async function openRoutePlanner() {
+    const btn = $('[data-rpopen]'); if (btn) btn.disabled = true;
+    try {
+      const [R] = await Promise.all([loadRouteLib(), loadAircraftLib().catch(() => { })]);
+      const A = window.BoploAircraft, id = simAircraft({ aircraft: state.profile.aircraft }), t = A?.byId?.(id);
+      await R.open({
+        home: upper(state.profile.airport), country: countryCodeOf(state.profile), jet: t?.kind === 'jet', speedKt: t?.perf?.cruise || 110,
+        onFly: (r, mode) => openSim({ id: 'route-' + r.name, name: r.name, points: r.points, inp: { alt: r.alt, wdir: '', wspd: '' }, depEnd: r.depEnd, arrEnd: r.arrEnd, aircraft: state.profile.aircraft }, mode)
+      });
+    } catch (e) { toast(e.message || 'The map couldn’t open.'); }
+    finally { const b = $('[data-rpopen]'); if (b) b.disabled = false; }
+  }
   function simPage() {
     const list = simmable(), plans = navStore().logs || [];
     const card = (f, i) => `<article class="tile sim-pick">
@@ -2387,6 +2402,11 @@
           <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
           <fieldset><legend>Graphics</legend><div class="segmented">${[['fast', 'Fast'], ['balanced', 'Balanced'], ['detailed', 'Detailed 3D']].map(([v, l]) => `<label><input type="radio" name="gfx" value="${v}" ${(ui.sim.gfx || simGfx()) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
         </form>
+      </section>
+      <section class="tile rp-box" aria-labelledby="rp-h">
+        <div class="rp-box-art" aria-hidden="true"><svg viewBox="0 0 320 150"><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#9ED8FF" stroke-width="2.4" stroke-dasharray="1 0"/><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#0A62FF" stroke-width="9" opacity=".35"/><g fill="#040B22" stroke="#9ED8FF" stroke-width="2"><circle cx="30" cy="118" r="6"/><circle cx="290" cy="52" r="6"/><circle cx="160" cy="44" r="4"/></g><path d="M18 128l26-20M280 62l22-18" stroke="#DDEBFF" stroke-width="4"/></svg></div>
+        <div class="rp-box-t"><h2 class="section-h" id="rp-h">Fly anywhere in the world</h2><p class="hint">Open the world map, tap a departure and an arrival, pick the runways and add waypoints. Every airport on Earth with real runway headings and lengths. The autopilot can follow the route.</p>
+        <div class="rp-box-act"><button type="button" class="btn btn-blue" data-rpopen>${ico('map')}Open the world map</button>${(() => { try { const r = JSON.parse(localStorage.getItem('boplo-route') || 'null'); const a = r?.points?.[0]?.code, b = r?.points?.length > 1 ? r.points[r.points.length - 1].code : ''; return a && b ? `<span class="rp-last">Last route: <b>${esc(a)} → ${esc(b)}</b></span>` : ''; } catch { return ''; } })()}</div></div>
       </section>
       <section class="tile pr-box" aria-labelledby="pr-h">
         <div class="pr-head"><div><h2 class="section-h" id="pr-h">Practise at any airfield</h2><p class="hint">Take-offs, circuits and approaches on real runways anywhere in ${esc(state.profile.country || 'your country')}. You get a debrief against checkride standards.</p></div></div>
@@ -2434,6 +2454,7 @@
       const rr = $('[data-prradio]'); if (rr) rr.onchange = () => { ui.sim.radio = rr.checked; };
       paintFree(); if (!isAdv() && !preview) api('sim/usage').then(r => { if (!r.unlimited) { simFreeLeft = r.left; paintFree(); } }).catch(() => { });
       $$('[data-prk]').forEach(b => b.onclick = () => { const c = upper(inp.value).split(/[\s·]/)[0]; if (!c) { inp.focus(); toast('Pick an airfield first.'); return; } openPractice(c, sel.value, b.dataset.prk); }); }
+    $('[data-rpopen]').onclick = () => openRoutePlanner();
     $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
     $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
     $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));
