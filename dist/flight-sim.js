@@ -791,7 +791,8 @@ window.BoploSim = (() => {
           vec3 pal(float t) { t = clamp(t, 0.0, 1.0); vec3 a = vec3(0.12, 0.17, 0.4), b = vec3(0.55, 0.36, 0.58), c = vec3(1.0, 0.56, 0.36), d = vec3(1.0, 0.86, 0.62);
             return t < 0.35 ? mix(a, b, t / 0.35) : t < 0.7 ? mix(b, c, (t - 0.35) / 0.35) : mix(c, d, (t - 0.7) / 0.3); }
           void main() { vec4 c = texture(colorTexture, v_textureCoordinates); vec3 base = c.rgb;
-            if (u_sky > 0.0) { float dep = czm_readDepth(depthTexture, v_textureCoordinates); if (dep >= 0.9999) { float l = dot(base, vec3(0.3, 0.5, 0.2)); base = mix(base, pal(pow(l, 1.4) * 1.15) * (0.6 + 0.6 * l), u_sky); } }
+            float dep = czm_readDepth(depthTexture, v_textureCoordinates);
+            if (dep >= 0.9999) { base.g = min(base.g, 0.5 * (base.r + base.b) + 0.08); if (u_sky > 0.0) { float l = dot(base, vec3(0.3, 0.5, 0.2)); base = mix(base, pal(pow(l, 1.4) * 1.15) * (0.6 + 0.6 * l), u_sky); } }
             vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
             col = (col - 0.5) * u_con + 0.5; vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
@@ -916,7 +917,7 @@ window.BoploSim = (() => {
     try {
       // reflections: a live environment map of the sky and ground around the aircraft, so the clear-coated paint and glass
       // mirror the real sky (and the sunset) as it flies
-      const envOpts = { enabled: true, maximumPositionEpsilon: 2000, maximumSecondsDifference: 600, brightness: 1.05, saturation: 1, groundAlbedo: .3, groundColor: new C.Color(.3, .32, .27, 1) };
+      const envOpts = { enabled: true, maximumPositionEpsilon: 2000, maximumSecondsDifference: 600, brightness: 1.5, saturation: 1, groundAlbedo: .45, groundColor: new C.Color(.55, .56, .5, 1) };
       try { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, environmentMapOptions: envOpts }); }
       catch { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y }); }
       scene.primitives.add(model);
