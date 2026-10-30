@@ -748,10 +748,11 @@ window.BoploSim = (() => {
     try {
       viewer = new C.CesiumWidget($('[data-map]'), {
         baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !coarse, terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
-        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: coarse ? 1 : GFX === 'detailed' ? 4 : 2, creditContainer: $('[data-credits]'), requestRenderMode: false
+        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: coarse ? 1 : GFX === 'detailed' ? 4 : 2, creditContainer: $('[data-credits]'), requestRenderMode: false, showRenderLoopErrors: false
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
+    scene.rethrowRenderErrors = true; // render errors come back to our loop, which drops the effects and carries on
     scene.screenSpaceCameraController.enableInputs = false;
     scene.postProcessStages.fxaa.enabled = true;
     // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
@@ -1256,7 +1257,9 @@ window.BoploSim = (() => {
       cloudT += dt; if (cloudT > 1) { cloudT = 0; updateClouds(); }
       if (papi.length) { const ey = st.alt + AC.wheelDrop + 1.2; for (const u of papi) { const d = Math.hypot(st.x - u.p.c[0], st.z - u.p.c[1]), ang = Math.atan2(ey - u.p.h, Math.max(1, d)) * R2D; u.prim.color = ang > u.ang ? PW : RED; } }
       if (rabbit.length) { const k = Math.floor((performance.now() / 1000 * 2 % 1) * rabbit.length * 1.6); rabbit.forEach((b, i) => { b.show = i === k; }); }
-      viewer.resize(); viewer.render();
+      // if one of our visual effects fails on this device's GPU, drop the effects and keep flying rather than stopping the render
+      try { viewer.resize(); viewer.render(); }
+      catch (err) { console.warn('render', err); try { if (model) model.customShader = undefined; acShader = null; if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } }
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
