@@ -787,6 +787,8 @@ window.BoploSim = (() => {
       if (model) { if (avg < .99) { model.color = new C.Color(Math.min(1, L[0] * 1.25), Math.min(1, L[1] * 1.25), Math.min(1, L[2] * 1.25), 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; } else model.color = C.Color.WHITE; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
       if (flare) flare.enabled = e > -1;
+      // clouds: dim and warm with the light, near-black at night
+      try { const cc = new C.Color(Math.min(1, L[0] * 1.05), Math.min(1, L[1] * 1.02), Math.min(1, L[2] * 1.05), 1); for (const c of cloudCells) { c.c.brightness = clamp(avg * 1.05, .1, 1.05); c.c.color = cc; } } catch { }
       // runway surfaces are drawn by us, so they take the light directly (the first call comes before they exist)
       try { for (const r of rwStRef()) { const m = r.prim?.appearance?.material; if (m) m.uniforms.color = new C.Color(L[0], L[1], L[2], 1); } } catch { }
       dlg.dataset.tod = e < -6 ? 'night' : e < 10 ? 'golden' : 'day';
