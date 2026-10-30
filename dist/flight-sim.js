@@ -808,7 +808,10 @@ window.BoploSim = (() => {
               // clouds don't write depth, so they'd be painted over too: leave bright, colourless pixels (cloud) alone
               float mx = max(base.r, max(base.g, base.b)), sat = (mx - min(base.r, min(base.g, base.b))) / max(mx, 0.001), lum = dot(base, vec3(0.3, 0.5, 0.2));
               float keep = smoothstep(0.5, 0.75, lum) * (1.0 - smoothstep(0.05, 0.2, sat));
-              base = mix(base, duskSky(v_textureCoordinates) * u_skyb, u_sky * 0.85 * (1.0 - keep)); } }
+              vec3 ds = duskSky(v_textureCoordinates), tint = ds / max(max(ds.r, max(ds.g, ds.b)), 0.001);
+              // open sky is replaced by the gradient; clouds and the bright horizon keep their shape but take its colour
+              vec3 target = mix(ds * u_skyb, base * tint * 1.08 * u_skyb, keep);
+              base = mix(base, target, u_sky * 0.88); } }
             vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
             col = (col - 0.5) * u_con + 0.5; vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
