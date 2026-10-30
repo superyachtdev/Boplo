@@ -778,10 +778,10 @@ window.BoploSim = (() => {
         zen: [.03, .05, .13], mid: [.09, .11, .24], away: [.3, .22, .32], warm: [.55, .3, .25], gold: .3, stars: .35, rl: .35, amb: [.55, .55, .7], night: .7 },
       { e: -1, L: [.6, .5, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, .5], sg: 3, bl: -.25, sk: 1, sb: .95, eb: 2.4,
         zen: [.12, .24, .52], mid: [.34, .42, .68], away: [.82, .62, .66], warm: [1, .58, .28], gold: 1, stars: 0, rl: .8, amb: [.42, .45, .62], night: .15 },
-      { e: 5, L: [.86, .78, .7], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, .5], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2,
+      { e: 5, L: [.9, .74, .56], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, .5], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2,
         zen: [.16, .32, .64], mid: [.45, .58, .82], away: [.86, .74, .72], warm: [1, .74, .46], gold: .8, stars: 0, rl: .7, amb: [.55, .58, .72], night: 0 },
       { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, .5], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5,
-        zen: [.2, .38, .72], mid: [.5, .64, .86], away: [.8, .84, .9], warm: [.95, .9, .84], gold: .5, stars: 0, rl: .3, amb: [.68, .7, .8], night: 0 }
+        zen: [.2, .38, .72], mid: [.5, .64, .86], away: [.8, .84, .9], warm: [.95, .9, .84], gold: .5, stars: 0, rl: .3, amb: [.55, .57, .66], night: 0 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
@@ -820,7 +820,7 @@ window.BoploSim = (() => {
             // stars, fading out towards the horizon haze
             if (u_stars > 0.0) { vec3 q = floor(dir * 520.0); float hs = hash3(q); c += vec3(0.85, 0.9, 1.0) * u_stars * smoothstep(0.9988, 0.9999, hs) * 0.9 * smoothstep(0.03, 0.25, h); }
             // below the horizon (scenery not loaded that far yet): hazy distant land, not sky
-            c = mix(c, mix(vec3(0.3, 0.29, 0.36), hor * 0.6, 0.35), smoothstep(0.0, -0.03, h));
+            c = mix(c, hor * 0.55 + u_mid * 0.15, smoothstep(0.0, -0.03, h));
             return c;
           }
           void main() { vec4 cc = texture(colorTexture, v_textureCoordinates); vec3 base = cc.rgb;
@@ -831,7 +831,7 @@ window.BoploSim = (() => {
               float keep = smoothstep(0.5, 0.75, lum) * (1.0 - smoothstep(0.05, 0.2, sat));
               vec3 ds = duskSky(v_textureCoordinates), tint = ds / max(max(ds.r, max(ds.g, ds.b)), 0.001);
               // open sky is replaced by the gradient; clouds and the bright horizon keep their shape but take its colour
-              vec3 target = mix(ds * u_skyb, base * tint * 1.08 * u_skyb, keep);
+              float dsm = max(ds.r, max(ds.g, ds.b)); vec3 target = mix(ds * u_skyb, base * tint * clamp(dsm * 2.5, 0.03, 1.08) * u_skyb, keep);
               base = mix(base, target, u_sky * 0.88); } }
             vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
@@ -884,7 +884,7 @@ window.BoploSim = (() => {
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
         if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD },
-            u_rl: { type: C.UniformType.FLOAT, value: K.rl }, u_amb: { type: C.UniformType.VEC3, value: C3(K.amb) }, u_sunc: { type: C.UniformType.VEC3, value: C3(K.lc) }, u_night: { type: C.UniformType.FLOAT, value: K.night }, u_ldir: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(toLight) } },
+            u_rl: { type: C.UniformType.FLOAT, value: K.rl }, u_amb: { type: C.UniformType.VEC3, value: C3(K.amb) }, u_sunc: { type: C.UniformType.VEC3, value: C3(K.lc) }, u_night: { type: C.UniformType.FLOAT, value: K.night }, u_ldir: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(toLight) }, u_upW: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(upW) } },
           // the photo scenery has midday light baked in. Relight it from the real light direction using each surface's facet normal:
           // slopes and walls facing a low sun light up warm, those facing away fall into blue shade, so dawn and dusk have real relief.
           // At night, bright colourless built-up areas (roads, roofs, car parks) get scattered sodium and LED lamps.
@@ -893,8 +893,11 @@ window.BoploSim = (() => {
               vec3 p = fsInput.attributes.positionEC; float d = length(p); vec3 base = material.diffuse;
               vec3 n = normalize(cross(dFdx(p), dFdy(p))); if (dot(n, -p) < 0.0) n = -n;
               vec3 ld = normalize(czm_viewRotation * u_ldir);
-              float lam = clamp(dot(n, ld), 0.0, 1.0);
-              vec3 lit = mix(vec3(1.0), u_amb + u_sunc * lam * 1.15, u_rl);
+              // expose for the level ground (the eye adapts to a low sun): flat land reads as fully lit, sun-facing slopes brighter,
+              // slopes facing away fall into the sky's blue shade; once the light source is below the horizon only the shade is left
+              vec3 upE = normalize(czm_viewRotation * u_upW); float flat = dot(upE, ld);
+              float rel = clamp(dot(n, ld) / max(flat, 0.14), 0.0, 1.7) * smoothstep(-0.02, 0.05, flat);
+              vec3 lit = mix(vec3(1.0), u_amb + u_sunc * rel * 0.85, u_rl);
               vec3 col = base * u_light * lit;
               if (u_night > 0.0) {
                 float l = dot(base, vec3(0.3, 0.59, 0.11)), mx = max(base.r, max(base.g, base.b)), sat = (mx - min(base.r, min(base.g, base.b))) / max(mx, 0.001);
