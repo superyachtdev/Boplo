@@ -343,7 +343,8 @@
 .pfd-dk-sep{flex:none;width:1px;height:30px;background:var(--line);margin:0 3px}
 .sim.hud-on .sim-credits{top:auto;bottom:calc(env(safe-area-inset-bottom) + 4px);right:calc(env(safe-area-inset-right) + 10px);left:auto;transform:none;text-align:right;max-width:min(30vw,280px);font-size:9px;opacity:.75}
 .sim.hud-on .sim-tip{top:calc(env(safe-area-inset-top) + 80px);background:rgba(8,14,28,.82);color:#FFE6A8;box-shadow:inset 0 0 0 1px rgba(255,178,63,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-@media (max-width:1320px){.sim.hud-on .sim-tip{top:calc(env(safe-area-inset-top) + 128px)}}
+.sim.hud-on .sim-radio{top:calc(env(safe-area-inset-top) + 70px)}
+@media (max-width:1320px){.sim.hud-on .sim-tip{top:calc(env(safe-area-inset-top) + 128px)}.sim.hud-on .sim-radio{top:calc(env(safe-area-inset-top) + 120px)}}
 .sim.is-replay .pfd-flaps,.sim.is-replay .pfd-thr,.sim.is-replay .pfd-dock{display:none}
 /* autopilot panel, opened from the A/P key in the dock */
 .ap-panel{position:absolute;left:calc(env(safe-area-inset-left) + 74px);bottom:calc(env(safe-area-inset-bottom) + 84px);z-index:14;width:300px;display:grid;gap:6px;padding:12px;border-radius:18px;background:rgba(8,14,28,.86);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 18px 40px rgba(0,0,0,.4);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#F2F7FF;font-family:var(--font,'Archivo',system-ui,sans-serif)}
@@ -394,6 +395,7 @@
   .pfd-tape text{font-size:10.5px}.pfd-box b{font-size:15px}.pfd-box{height:28px}
   .sim.hud-on .sim-tip{top:calc(env(safe-area-inset-top) + 106px);font-size:13px;max-width:calc(100vw - 24px)}
   .sim.hud-on .sim-credits{bottom:auto;top:calc(env(safe-area-inset-top) + 104px);max-width:40vw}
+  .sim.hud-on .sim-radio{top:calc(env(safe-area-inset-top) + 104px)}
 }
 /* phones held sideways, like Infinite Flight */
 @media (max-height:520px){

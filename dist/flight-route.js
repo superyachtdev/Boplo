@@ -113,8 +113,10 @@ window.BoploRoute = (() => {
     map.touchZoomRotate?.disableRotation?.();
     // wait for the chart style (slow connections can take a while); adding layers before it's ready throws
     // (isStyleLoaded() also waits for every tile, so check the style itself)
-    const styleReady = () => !!(map.style && map.style._loaded) || map.isStyleLoaded();
-    for (let i = 0; i < 160 && dlg.isConnected && !styleReady(); i++) await new Promise(r => setTimeout(r, 250));
+    let evReady = false; map.once('style.load', () => { evReady = true; }); map.once('load', () => { evReady = true; });
+    const styleReady = () => evReady || !!(map.style && map.style._loaded) || map.isStyleLoaded();
+    $('[data-rplan]').innerHTML = '<p class="rp-dim">Loading the map…</p>';
+    for (let i = 0; i < 480 && dlg.isConnected && !styleReady(); i++) await new Promise(r => setTimeout(r, 250));
     if (!dlg.isConnected) return;
     if (!styleReady()) { $('[data-rmap]').insertAdjacentHTML('beforeend', '<p class="rp-err">The map didn’t load. Check your connection and open it again.</p>'); return; }
 
