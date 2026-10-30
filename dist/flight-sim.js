@@ -770,11 +770,11 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.1, .12, .22], S: [-.88, -.4, .04], hz: [.03, .04, .08], hd: 9000, g: [.8, .9, 1.15], lf: [0, .01, .03], c: 1.08, sat: .75, v: .55, lc: [.55, .65, 1], li: .25, ibl: [.12, .35], sg: 0, bl: -.2 },
-      { e: -6, L: [.32, .3, .46], S: [-.55, .05, .02], hz: [.22, .2, .34], hd: 12000, g: [.92, .9, 1.08], lf: [.02, 0, .05], c: 1.1, sat: .95, v: .5, lc: [.7, .6, .85], li: .5, ibl: [.3, .6], sg: .5, bl: -.25 },
-      { e: -1, L: [.95, .58, .45], S: [-.12, .3, 0], hz: [1, .55, .38], hd: 15000, g: [1.15, .93, .78], lf: [.03, 0, .04], c: 1.16, sat: 1.22, v: .5, lc: [1, .55, .32], li: 1.4, ibl: [.45, .9], sg: 3, bl: -.18 },
-      { e: 5, L: [1, .8, .62], S: [-.04, .22, -.02], hz: [1, .75, .55], hd: 22000, g: [1.12, .98, .84], lf: [.015, 0, .02], c: 1.13, sat: 1.18, v: .42, lc: [1, .75, .5], li: 1.8, ibl: [.6, 1], sg: 2, bl: -.25 },
-      { e: 18, L: [1, 1, 1], S: [0, .05, 0], hz: [.74, .82, .94], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.08, v: .28, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4 }
+      { e: -14, L: [.1, .12, .22], S: [-.88, -.3, 0], hz: [.03, .04, .08], hz2: [.03, .04, .08], hd: 9000, g: [.82, .9, 1.12], lf: [0, .01, .03], c: 1.08, sat: .8, v: .55, lc: [.55, .65, 1], li: .25, ibl: [.12, .35], sg: 0, bl: -.2 },
+      { e: -6, L: [.3, .29, .42], S: [-.5, 0, 0], hz: [.6, .4, .42], hz2: [.2, .2, .33], hd: 15000, g: [.95, .93, 1.05], lf: [.02, 0, .04], c: 1.1, sat: .95, v: .5, lc: [.75, .6, .8], li: .5, ibl: [.3, .6], sg: .6, bl: -.25 },
+      { e: -1, L: [.6, .47, .44], S: [-.08, 0, 0], hz: [1, .6, .4], hz2: [.42, .4, .55], hd: 22000, g: [1.06, .97, .9], lf: [.02, 0, .03], c: 1.12, sat: 1.05, v: .48, lc: [1, .6, .38], li: 1.5, ibl: [.45, .9], sg: 3, bl: -.2 },
+      { e: 5, L: [.9, .8, .68], S: [-.02, .04, 0], hz: [1, .78, .58], hz2: [.62, .66, .78], hd: 28000, g: [1.06, 1, .92], lf: [.012, 0, .015], c: 1.1, sat: 1.08, v: .4, lc: [1, .78, .55], li: 1.8, ibl: [.6, 1], sg: 2, bl: -.28 },
+      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
@@ -812,9 +812,9 @@ window.BoploSim = (() => {
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
-        if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD } },
-          fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { float d = length(fsInput.attributes.positionEC); float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.85); material.diffuse = mix(material.diffuse * u_light, u_haze, h); }' }); tileset.customShader = tintShader; }
-        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
+        if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD } },
+          fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { vec3 p = fsInput.attributes.positionEC; float d = length(p); float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.8); float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0); material.diffuse = mix(material.diffuse * u_light, mix(u_haze2, u_haze, s), h); }' }); tileset.customShader = tintShader; }
+        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
       if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; }
