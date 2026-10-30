@@ -891,11 +891,15 @@ window.BoploSim = (() => {
           fragmentShaderText: `float hsh(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
             void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
               vec3 p = fsInput.attributes.positionEC; float d = length(p); vec3 base = material.diffuse;
-              vec3 n = normalize(cross(dFdx(p), dFdy(p))); if (dot(n, -p) < 0.0) n = -n;
-              vec3 ld = normalize(czm_viewRotation * u_ldir);
+              vec3 ld = normalize(czm_viewRotation * u_ldir), upE = normalize(czm_viewRotation * u_upW);
+              // the facet normal from screen-space derivatives. Thin or edge-on triangles give a zero-length (NaN) normal, which
+              // painted black streaks across the scenery: fall back to "up" there, and calm the normal in the distance where it's noisy
+              vec3 cr = cross(dFdx(p), dFdy(p)); float cl = length(cr);
+              vec3 n = cl > 1e-12 ? cr / cl : upE; if (dot(n, -p) < 0.0) n = -n;
+              n = normalize(mix(n, upE, 0.25 + 0.6 * smoothstep(2500.0, 20000.0, d)));
               // expose for the level ground (the eye adapts to a low sun): flat land reads as fully lit, sun-facing slopes brighter,
               // slopes facing away fall into the sky's blue shade; once the light source is below the horizon only the shade is left
-              vec3 upE = normalize(czm_viewRotation * u_upW); float lvl = dot(upE, ld);
+              float lvl = dot(upE, ld);
               float rel = clamp(dot(n, ld) / max(lvl, 0.14), 0.0, 1.7) * smoothstep(-0.02, 0.05, lvl);
               vec3 lit = mix(vec3(1.0), u_amb + u_sunc * rel * 0.85, u_rl);
               vec3 col = base * u_light * lit;
@@ -910,7 +914,9 @@ window.BoploSim = (() => {
               }
               float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.6) * smoothstep(1500.0, 9000.0, d);
               float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0);
-              material.diffuse = mix(col, mix(u_haze2, u_haze, s), h);
+              vec3 outc = mix(col, mix(u_haze2, u_haze, s), h);
+              if (any(isnan(outc)) || any(isinf(outc))) outc = base * u_light;
+              material.diffuse = outc;
             }` }); tileset.customShader = tintShader; }
         else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_rl', K.rl); tintShader.setUniform('u_amb', C3(K.amb)); tintShader.setUniform('u_sunc', C3(K.lc)); tintShader.setUniform('u_night', K.night); tintShader.setUniform('u_ldir', toLight); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
@@ -1274,10 +1280,21 @@ window.BoploSim = (() => {
       camPitchLag += ((st.att ?? st.pitch) - camPitchLag) * Math.min(1, dt * 3);
       camD += (depBase - camD) * Math.min(1, dt * 3);
       const dep = clamp(camD - camPitchLag * .55 + (st.ground ? 2 : 0), 2, 60);
-      const ch = (camH + orb.yaw) * D2R, f = [Math.sin(ch), Math.cos(ch)], ex = -f[0] * B * orb.zoom, ez = -f[1] * B * orb.zoom;
+      const ch = (camH + orb.yaw) * D2R, f = [Math.sin(ch), Math.cos(ch)];
+      let ex = -f[0] * B * orb.zoom, ez = -f[1] * B * orb.zoom;
       let ey = Hc * (orb.zoom > 1 ? orb.zoom : 1) + AC.wheelDrop + Math.tan(orb.pitch * D2R) * B * orb.zoom;
-      const gEye = elevAt(st.x + ex, st.z + ez); if (gEye != null) ey = Math.max(ey, gEye - st.alt + 3);
-      const camName = CAMS[camI][0];
+      // keep the outside cameras out of the scenery: if a hillside, building or trees sit on the sight line back from the aircraft,
+      // pull the camera in in front of them; then keep it a few metres above the ground under it and tilt down to keep the aircraft framed
+      let camLiftDeg = 0;
+      if (!cockpit() && camName0() !== 'Wing') {
+        const ty = AC.wheelDrop * .5; let k = camKt;
+        if (++camN % 5 === 0) { k = 1; for (let i = 1; i <= 8; i++) { const fr = i / 8, g = elevAt(st.x + ex * fr, st.z + ez * fr); if (g != null && g + .5 + 2 * fr > st.alt + ty + (ey - ty) * fr) { k = Math.max(.22, (i - 1.3) / 8); break; } } camKt = k; }
+        camK += (k - camK) * Math.min(1, dt * (k < camK ? 10 : 1.2)); ex *= camK; ez *= camK; ey = ty + (ey - ty) * camK;
+        const gEye = elevAt(st.x + ex, st.z + ez), need = gEye != null ? gEye - st.alt + 3.5 : -1e9;
+        camLift = Math.max(need - ey, camLift - dt * 6, 0); // rise at once, settle back slowly (no jitter over rough ground)
+        if (camLift > 0) { ey += camLift; camLiftDeg = Math.atan2(camLift, Math.max(4, Math.hypot(ex, ez))) * R2D; }
+      }
+      const camName = camName0();
       if (cockpit() || camName === 'Wing') {
         // attitude-locked cameras: the pilot's eye in the left seat, or on the left wing looking forward along the fuselage
         const e = camName === 'Wing' ? [AC.tips.left[0] * 1.05, AC.tips.left[1] + .9, AC.tips.left[2] + 1.6] : (AC.eye || [.25, .4, .4]), F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
@@ -1294,7 +1311,7 @@ window.BoploSim = (() => {
       } else if (camName === 'Flyby') {
         // a camera parked ahead on the flight path, just off to one side: the aircraft flies past it, then it jumps ahead again
         const ahead = clamp(st.gs * 9, 250, 1600), passed = flyAt && ((st.x - flyAt[0]) * Math.sin(st.trk * D2R) + (st.z - flyAt[1]) * Math.cos(st.trk * D2R)) > ahead * .45;
-        if (!flyAt || passed || Math.hypot(st.x - flyAt[0], st.z - flyAt[1]) > ahead * 2.5) { const tk = st.trk * D2R, off = AC.type.span * 1.6 + 12, c0 = [st.x + Math.sin(tk) * ahead + Math.cos(tk) * off, st.z + Math.cos(tk) * ahead - Math.sin(tk) * off]; flyAt = [c0[0], c0[1], Math.max((elevAt(c0[0], c0[1]) ?? st.gnd) + 2, st.alt - (st.agl > 30 ? 6 : 0) + AC.wheelDrop * .5)]; }
+        if (!flyAt || passed || Math.hypot(st.x - flyAt[0], st.z - flyAt[1]) > ahead * 2.5) { const tk = st.trk * D2R, off = AC.type.span * 1.6 + 12, c0 = [st.x + Math.sin(tk) * ahead + Math.cos(tk) * off, st.z + Math.cos(tk) * ahead - Math.sin(tk) * off]; flyAt = [c0[0], c0[1], Math.max((elevAt(c0[0], c0[1]) ?? st.gnd) + 5, st.alt - (st.agl > 30 ? 6 : 0) + AC.wheelDrop * .5)]; }
         const dx = st.x - flyAt[0], dz = st.z - flyAt[1], dy = st.alt + AC.wheelDrop - flyAt[2], dh = Math.max(1, Math.hypot(dx, dz));
         const fov = clamp(2 * Math.atan(AC.type.span * 1.5 / Math.hypot(dh, dy) / orb.zoom), .12, 1.05);
         if (Math.abs(camera.frustum.fov - fov) > 1e-4) { camera.frustum.fov = fov; camera.frustum.near = 1; }
@@ -1313,7 +1330,7 @@ window.BoploSim = (() => {
       } else {
         if (camName === 'Orbit' && !paused) orb.yaw = (orb.yaw + dt * 9) % 360;
         if (camera.frustum.fov !== C.Math.toRadians(66)) { camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5; }
-        camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-dep), roll: 0 } });
+        camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-clamp(dep + camLiftDeg, -30, 85)), roll: 0 } });
       }
       placeAircraft();
       { const want = shadowsOK && st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
@@ -1737,7 +1754,7 @@ window.BoploSim = (() => {
     const score = { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: st.alt, dist: 0, n: 0 };
     let lastFlown = 0, lastX = st.x, lastZ = st.z;
 
-    let camH = st.hdg, camD = 8.5, camPitchLag = 0;
+    let camH = st.hdg, camD = 8.5, camPitchLag = 0, camK = 1, camKt = 1, camN = 0, camLift = 0; const camName0 = () => CAMS[camI][0];
 
     /* ---- HUD ---- */
     let apT = 0;
