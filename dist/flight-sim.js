@@ -1621,7 +1621,7 @@ window.BoploSim = (() => {
       // selected vertical speed: flown towards the selected altitude, or held on its own
       if (!replay && AP.vs != null) { const v = AP.vs * FT / 60; if (AP.alt != null) { t.vsUp = t.vsDn = Math.max(.5, Math.abs(v)); } else { t.vs = v; t.alt = undefined; } }
       // on the approach the autopilot adds flap as it gets closer, but never takes away flap you already have
-      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < (AC.jet ? 9 : 5)) t.phase = 'flare'; }
+      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < (AC.jet ? 9 : 5) && (rwAt(st.x, st.z) || remain < TDZ + AIM + 250)) t.phase = 'flare'; } // (not over trees and roofs short of the runway)
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
       if (auto) autoPlan(t, remain);

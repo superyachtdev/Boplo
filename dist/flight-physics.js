@@ -245,7 +245,7 @@
     ap.th = clamp(ap.th + e * .9 * dt, -10, 15);
     let thc = clamp(ap.th + e * 1.6, -12, 16);
     // speed protection: never let the airspeed bleed towards the stall
-    const vmin = (t.phase === 'flare' ? p.vso * 1.05 : (s.ias / KT < 0 ? 0 : (c.flaps ? p.vso : p.vs) * 1.25));
+    const vmin = (t.phase === 'flare' ? p.vso * 1.05 : (s.ias / KT < 0 ? 0 : (c.flaps ? p.vso : p.vs) * (p.jet ? 1.12 : 1.25))); // (a jet's approach speed is only about 1.23 × its stall speed)
     if (ias < vmin) { thc = Math.min(thc, s.pitch - (vmin - ias) * .6); ap.th = Math.min(ap.th, thc); }
     if (t.phase === 'flare') thc = Math.max(thc, p.tail ? 6 : 4);
     c.elevator = clamp((thc - s.pitch) * .085 - s.w[1] * R2D * .022, -1, 1);
