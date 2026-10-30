@@ -966,12 +966,12 @@ window.BoploSim = (() => {
           vec3 N = normalize(fsInput.attributes.normalEC), V = normalize(-fsInput.attributes.positionEC);
           if (dot(N, V) < 0.0) N = -N;
           vec3 R = reflect(-V, N), Rw = normalize(czm_inverseViewRotation * R);
-          float h = dot(Rw, u_up), smooth = clamp(1.0 - material.roughness, 0.0, 1.0); smooth *= smooth;
+          float h = dot(Rw, u_up), gl2 = clamp(1.0 - material.roughness, 0.0, 1.0); gl2 *= gl2;
           vec3 env = h > 0.0 ? mix(u_hor, u_top, smoothstep(0.0, 0.5, h)) : mix(u_hor * 0.55, u_gnd, smoothstep(0.0, 0.08, -h));
-          float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0), k = mix(0.07, 1.0, fres) * smooth * u_refl;
+          float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0), k = mix(0.07, 1.0, fres) * gl2 * u_refl;
           float glint = pow(max(dot(R, czm_sunDirectionEC), 0.0), 600.0) * 6.0 + pow(max(dot(R, czm_sunDirectionEC), 0.0), 40.0) * 0.25;
           material.diffuse *= 1.0 - k * 0.6;
-          material.emissive += env * k + u_sunc * glint * smooth * u_refl;
+          material.emissive += env * k + u_sunc * glint * gl2 * u_refl;
         }` });
       model.customShader = acShader;
     } catch (e) { console.warn('aircraft shader', e); acShader = null; } }
