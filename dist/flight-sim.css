@@ -385,7 +385,7 @@
   .pfd-spd{left:calc(env(safe-area-inset-left) + 6px);width:52px}
   .pfd-alt{left:auto;right:calc(env(safe-area-inset-right) + 70px);width:58px}
   .sim.hud-on .sim-tip{top:calc(env(safe-area-inset-top) + 108px);font-size:13px;max-width:calc(100vw - 24px)}
-  .sim.hud-on .sim-credits{bottom:auto;top:calc(env(safe-area-inset-top) + 106px);right:auto;left:calc(env(safe-area-inset-left) + 10px);text-align:left;max-width:40vw}
+  .sim.hud-on .sim-credits{top:auto;bottom:calc(env(safe-area-inset-bottom) + 196px);right:auto;left:calc(env(safe-area-inset-left) + 10px);text-align:left;max-width:46vw}
   .sim.hud-on .sim-radio{top:calc(env(safe-area-inset-top) + 106px)}
 }
 /* phones held sideways */
