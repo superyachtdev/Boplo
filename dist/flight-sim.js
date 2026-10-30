@@ -1616,10 +1616,12 @@ window.BoploSim = (() => {
       if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + 120); }
       if (!replay && AP.alt != null) ta = AP.alt * FT + geoN;
       t.alt = ta;
+      // on a managed descent, fly the path's own descent rate plus a correction, so it sits on the glidepath instead of lagging above it
+      if ((replay || auto) && approach && !st.ground) { const slope = (prof(pr.s + 60) - prof(pr.s)) / 60; t.vs = clamp(slope * st.gs + (ta - st.alt) * .15, -9, 3); t.alt = undefined; }
       // selected vertical speed: flown towards the selected altitude, or held on its own
       if (!replay && AP.vs != null) { const v = AP.vs * FT / 60; if (AP.alt != null) { t.vsUp = t.vsDn = Math.max(.5, Math.abs(v)); } else { t.vs = v; t.alt = undefined; } }
       // on the approach the autopilot adds flap as it gets closer, but never takes away flap you already have
-      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < 5) t.phase = 'flare'; }
+      if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < (AC.jet ? 9 : 5)) t.phase = 'flare'; }
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
       if (auto) autoPlan(t, remain);
