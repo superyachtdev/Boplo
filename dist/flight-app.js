@@ -2372,7 +2372,7 @@
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   // worldwide route planner: pick airports and runways on a map, then fly or replay the route in the simulator
-  const loadRouteLib = () => window.BoploRoute ? Promise.resolve(window.BoploRoute) : loadScript('/flight-route.js?v=4', () => !!window.BoploRoute).then(() => window.BoploRoute);
+  const loadRouteLib = () => window.BoploRoute ? Promise.resolve(window.BoploRoute) : loadScript('/flight-route.js?v=5', () => !!window.BoploRoute).then(() => window.BoploRoute);
   async function openRoutePlanner() {
     const btn = $('[data-rpopen]'); if (btn) btn.disabled = true;
     try {

@@ -298,7 +298,7 @@ window.BoploRoute = (() => {
       paintData(); paintRoute(); paintPlan(); save();
       if (fit) { const pts = routePts(); if (pts.length > 1) { const b = new ML.LngLatBounds([pts[0].lng, pts[0].lat], [pts[0].lng, pts[0].lat]); pts.forEach(p => b.extend([p.lng, p.lat])); map.fitBounds(b, { padding: padFor(), maxZoom: 10, duration: 500 }); } else if (pts[0]) map.easeTo({ center: [pts[0].lng, pts[0].lat], zoom: Math.max(map.getZoom(), 10), duration: 500 }); }
     }
-    const padFor = () => innerWidth > 820 ? { top: 80, bottom: 60, left: 60, right: 440 } : { top: 80, bottom: Math.round(innerHeight * .5), left: 40, right: 40 };
+    const padFor = () => innerWidth > 820 ? { top: 80, bottom: 60, left: 60, right: 440 } : { top: 80, bottom: Math.round(innerHeight * .62), left: 40, right: 40 };
 
     // ---------- map clicks ----------
     map.on('mouseenter', 'rp-ap', () => map.getCanvas().style.cursor = 'pointer');
