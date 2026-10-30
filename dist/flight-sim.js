@@ -771,11 +771,11 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.3, .4], sg: 0, bl: -.25, sk: 0, sb: .1, eb: .9 },
-      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.6, .7], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 1.6 },
-      { e: -1, L: [.52, .47, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, 1], sg: 3, bl: -.25, sk: 1, sb: .9, eb: 2.6 },
-      { e: 5, L: [.8, .74, .68], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, 1], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2 },
-      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5 }
+      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.3, .25], sg: 0, bl: -.25, sk: 0, sb: .1, eb: .9 },
+      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.6, .4], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 1.6 },
+      { e: -1, L: [.52, .47, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, .55], sg: 3, bl: -.25, sk: 1, sb: .9, eb: 2.6 },
+      { e: 5, L: [.8, .74, .68], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, .5], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2 },
+      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, .5], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
@@ -841,6 +841,11 @@ window.BoploSim = (() => {
       // sunlight on the aircraft and our own models: warm and low at sunset, blue and faint at night
       try { scene.light.color = new C.Color(K.lc[0], K.lc[1], K.lc[2], 1); scene.light.intensity = K.li; } catch { }
       if (model) { try { model.color = C.Color.WHITE; if (model.imageBasedLighting) model.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(K.ibl[0], K.ibl[1]); const em = model.environmentMapManager; if (em) { em.brightness = K.eb; em.groundColor = new C.Color(lerp(.25, .55, (e + 6) / 20), lerp(.25, .56, (e + 6) / 20), lerp(.32, .5, (e + 6) / 20), 1); } } catch { } }
+      if (acShader) { try {
+        const night = clamp((-e - 2) / 8, 0, 1), dusk = clamp(1 - Math.abs(e - 1) / 9, 0, 1);
+        const top = mix(mix([.33, .52, .88], [.22, .3, .58], dusk), [.02, .03, .06], night), hor = mix(mix([.86, .9, .96], [1, .64, .42], dusk), [.05, .06, .1], night), gnd = mix(mix([.16, .17, .14], [.12, .1, .11], dusk), [.015, .015, .02], night);
+        acShader.setUniform('u_top', C3(top)); acShader.setUniform('u_hor', C3(hor)); acShader.setUniform('u_gnd', C3(gnd)); acShader.setUniform('u_sunc', C3(K.lc.map(v => v * (e > -1 ? 1 : 0))));
+        acShader.setUniform('u_refl', lerp(.45, 1, (e + 8) / 10)); } catch { } }
       if (scene.shadowMap) scene.shadowMap.darkness = lerp(.2, .55, (e + 6) / 8) - (e > 12 ? .15 : 0);
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
@@ -948,6 +953,28 @@ window.BoploSim = (() => {
       scene.primitives.add(model);
       model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); gearNode = model.getNode('gear'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
+    // aircraft reflections: a sharp sky/horizon/ground reflection with Fresnel falloff on the smooth surfaces (paint, glass),
+    // and a hard sun glint on the clear coat. This is the airliner look: bright sky line along the top of the fuselage,
+    // darker ground reflected underneath, a highlight that slides along as the aircraft turns
+    let acShader = null;
+    if (model) { try {
+      const V3 = (x, y, z) => new C.Cartesian3(x, y, z);
+      acShader = new C.CustomShader({ uniforms: {
+          u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
+          u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 } },
+        fragmentShaderText: `void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+          vec3 N = normalize(fsInput.attributes.normalEC), V = normalize(-fsInput.attributes.positionEC);
+          if (dot(N, V) < 0.0) N = -N;
+          vec3 R = reflect(-V, N), Rw = normalize(czm_inverseViewRotation * R);
+          float h = dot(Rw, u_up), smooth = clamp(1.0 - material.roughness, 0.0, 1.0); smooth *= smooth;
+          vec3 env = h > 0.0 ? mix(u_hor, u_top, smoothstep(0.0, 0.5, h)) : mix(u_hor * 0.55, u_gnd, smoothstep(0.0, 0.08, -h));
+          float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0), k = mix(0.07, 1.0, fres) * smooth * u_refl;
+          float glint = pow(max(dot(R, czm_sunDirectionEC), 0.0), 600.0) * 6.0 + pow(max(dot(R, czm_sunDirectionEC), 0.0), 40.0) * 0.25;
+          material.diffuse *= 1.0 - k * 0.6;
+          material.emissive += env * k + u_sunc * glint * smooth * u_refl;
+        }` });
+      model.customShader = acShader;
+    } catch (e) { console.warn('aircraft shader', e); acShader = null; } }
     applyTime(sky.hour);
     const lights = tagged(scene.primitives.add(new C.PointPrimitiveCollection()));
     const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
@@ -1110,12 +1137,14 @@ window.BoploSim = (() => {
         .forEach(({ a, xz }) => labels.add({ ...labelStyle, text: a.code, position: LLH(xz[0], xz[1], a.elev * FT + geoN + 45), fillColor: C.Color.fromCssColorString('#CFE8FF'), font: '600 13px Archivo, system-ui, sans-serif' }));
     });
 
+    let upN = 0;
     function placeAircraft() {
       if (!model) return;
       const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop);
       const sx = F.sx(st.z), th = Math.abs(sx - 1) < 1e-4 ? st.hdg : Math.atan2(Math.sin(st.hdg * D2R) * sx, Math.cos(st.hdg * D2R)) * R2D;
       const hpr = new C.HeadingPitchRoll(C.Math.toRadians(th - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
       C.Transforms.headingPitchRollToFixedFrame(pos, hpr, C.Ellipsoid.WGS84, undefined, model.modelMatrix);
+      if (acShader && ++upN % 30 === 1) { try { acShader.setUniform('u_up', C.Ellipsoid.WGS84.geodeticSurfaceNormal(pos, new C.Cartesian3())); } catch { } }
       model.show = !st.crashed && !cockpit(); lights.show = !cockpit();
       // nav lights: model frame after axis conversion is x forward, y left, z up
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
