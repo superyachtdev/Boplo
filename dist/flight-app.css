@@ -1399,10 +1399,10 @@ dialog.rp::backdrop{background:#020611}
 dialog.rp .maplibregl-ctrl-top-right{top:4px}
 @media (max-width:820px){
   dialog.rp{display:block}
-  .rp-map{position:absolute;inset:0}
+  dialog.rp .rp-map,dialog.rp .rp-map.maplibregl-map{position:absolute;inset:0;height:auto}
   .rp-search{left:12px;right:60px;top:calc(env(safe-area-inset-top) + 12px);width:auto}
   dialog.rp .maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top) + 4px)}
-  .rp-panel{position:absolute;left:0;right:0;bottom:0;max-height:58vh;border-radius:22px 22px 0 0;box-shadow:0 -14px 40px rgba(0,0,0,.4);transition:transform .25s ease}
+  .rp-panel{position:absolute;z-index:5;left:0;right:0;bottom:0;max-height:58vh;border-radius:22px 22px 0 0;box-shadow:0 -14px 40px rgba(0,0,0,.4);transition:transform .25s ease}
   .rp-panel.min{transform:translateY(calc(100% - 132px))}
   .rp-grab{display:grid;place-items:center;height:22px;width:100%;border:0;background:none;cursor:pointer;padding:0}
   .rp-grab span{width:40px;height:5px;border-radius:3px;background:rgba(5,11,31,.2)}
