@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=15'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=16'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -439,34 +439,50 @@ window.BoploSim = (() => {
 
   /* ---------------- glass flight display: tapes, compass, side controls and info bar (in the style of mobile flight sims) ---------------- */
   function pfdHTML(jet) {
-    const sp = [], al = [], rose = [];
-    for (let v = 0; v <= 450; v += 5) { const y = -v * 4; sp.push(`<line x1="${v % 10 ? 50 : 44}" x2="58" y1="${y}" y2="${y}"/>${v % 20 === 0 ? `<text x="38" y="${y + 4}">${v}</text>` : ''}`); }
+    const sp = [], al = [], rose = [], lad = [], htp = [];
+    for (let v = 0; v <= 450; v += 5) { const y = -v * 4; sp.push(`<line x1="${v % 10 ? 50 : 42}" x2="58" y1="${y}" y2="${y}"/>${v % 20 === 0 ? `<text x="36" y="${y + 4}">${v}</text>` : ''}`); }
     for (let a = -1000; a <= 45000; a += 100) { const y = -a * .4; al.push(`<line x1="0" x2="${a % 500 ? 7 : 14}" y1="${y}" y2="${y}"/>${a % 500 === 0 ? `<text x="20" y="${y + 4}">${a.toLocaleString('en-GB')}</text>` : ''}`); }
     for (let d = 0; d < 360; d += 5) { const big = d % 10 === 0, lab = d % 30 === 0 ? ({ 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[d] || String(d / 10)) : ''; rose.push(`<g transform="rotate(${d})"><line x1="0" x2="0" y1="-78" y2="${big ? -69 : -73}"/>${lab ? `<text x="0" y="-56">${lab}</text>` : ''}</g>`); }
-    return `<div class="pfd" data-pfd aria-hidden="true">
-      <div class="pfd-tape pfd-spd"><svg viewBox="0 -180 64 360"><defs><clipPath id="pfdcs"><rect x="0" y="-180" width="64" height="360"/></clipPath></defs><g clip-path="url(#pfdcs)"><g data-spdt>${sp.join('')}</g></g></svg><div class="pfd-box"><b data-pspd>0</b></div><small class="pfd-cap">KT IAS</small><small class="pfd-sub" data-pgs>GS 0</small></div>
-      <div class="pfd-tape pfd-alt"><svg viewBox="0 -180 72 360"><defs><clipPath id="pfdca"><rect x="0" y="-180" width="72" height="360"/></clipPath></defs><g clip-path="url(#pfdca)"><g data-altt>${al.join('')}</g><rect data-gndb x="0" y="200" width="72" height="400" class="pfd-gnd"/></g></svg><div class="pfd-box"><b data-palt>0</b></div><small class="pfd-cap">FT MSL</small><small class="pfd-sub" data-pagl>AGL 0</small><div class="pfd-vsi"><i data-pvsi></i><small data-pvs>0</small></div></div>
+    // HUD pitch ladder: 6 units a degree; the horizon is a long broken line, climb rungs solid, dive rungs dashed
+    const K = 6;
+    for (let p = -90; p <= 90; p += 5) {
+      if (!p) continue; const y = -p * K, w = p % 10 ? 22 : 46, g = 26, tip = p > 0 ? 7 : -7;
+      lad.push(`<g class="${p < 0 ? 'dn' : ''}"><path d="M${-g - w} ${y + tip}V${y}H${-g}M${g} ${y}H${g + w}V${y + tip}"/>${p % 10 ? '' : `<text x="${-g - w - 6}" y="${y + 4}" text-anchor="end">${Math.abs(p)}</text><text x="${g + w + 6}" y="${y + 4}">${Math.abs(p)}</text>`}</g>`);
+    }
+    // heading tape across the top of the HUD: 4 units a degree, drawn 0–720 so it can scroll past north
+    for (let d = 0; d <= 720; d += 5) { const x = d * 4, n = d % 360, big = d % 10 === 0, lab = d % 30 === 0 ? ({ 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[n] || String(n / 10).padStart(2, '0')) : ''; htp.push(`<line x1="${x}" x2="${x}" y1="0" y2="${big ? 9 : 5}"/>${lab ? `<text x="${x}" y="22">${lab}</text>` : ''}`); }
+    const bankT = [-60, -45, -30, -20, -10, 10, 20, 30, 45, 60].map(b => `<line x1="0" x2="0" y1="-118" y2="${Math.abs(b) % 30 ? -112 : -108}" transform="rotate(${b})"/>`).join('');
+    return `<div class="pfd" data-pfd>
+      <div class="ibar" data-ibar role="group" aria-label="Flight data. Tap a box to change what it shows."></div>
+      <div class="hud" aria-hidden="true"><svg viewBox="-210 -165 420 330">
+        <defs><clipPath id="hudclip"><rect x="-190" y="-122" width="380" height="252" rx="16"/></clipPath><clipPath id="htclip"><rect x="-120" y="-162" width="240" height="34"/></clipPath></defs>
+        <g clip-path="url(#hudclip)"><g data-hroll><g data-hpitch><path class="hz" d="M-600 0H-34M34 0H600"/><g class="lad">${lad.join('')}</g></g></g></g>
+        <g class="bank">${bankT}<path d="M0 -122l-5 -8h10z" class="bz"/></g>
+        <g data-hbank><path d="M0 -105l-6 9h12z" class="bp"/></g>
+        <g class="wl"><path d="M-62 0H-26L-14 12L0 0L14 12L26 0H62"/><circle r="1.6"/></g>
+        <g data-fpv class="fpv"><circle r="7"/><path d="M-19 0H-7M7 0H19M0 -7V-15"/></g>
+        <g clip-path="url(#htclip)"><g data-htape transform="translate(0 -158)">${htp.join('')}<path data-hbug class="hbug" d="M0 0l-7 0v-6h14v6z"/><path data-htrk class="htrk" d="M0 4l4 6-4 6-4-6z"/></g></g>
+        <path d="M0 -127l-5 7h10z" class="lub"/>
+        <text data-hwarn class="hwarn" x="0" y="86" text-anchor="middle"></text>
+      </svg></div>
+      <div class="pfd-tape pfd-spd"><svg viewBox="0 -180 64 360"><defs><clipPath id="pfdcs"><rect x="0" y="-180" width="64" height="360"/></clipPath></defs><g clip-path="url(#pfdcs)"><g data-spdt><rect data-sband class="sband" x="58" width="6" y="0" height="0"/><rect data-aband class="aband" x="58" width="6" y="0" height="0"/><rect data-oband class="oband" x="58" width="6" y="-1800" height="0"/>${sp.join('')}<path data-sbug class="sbug" d="M58 0l6 -6v12z"/></g><line data-strend class="trend" x1="61" x2="61" y1="0" y2="0"/></g></svg><div class="pfd-box"><b data-pspd>0</b></div><small class="pfd-cap" data-pspdl>IAS</small><small class="pfd-sub" data-pgs>GS 0</small></div>
+      <div class="pfd-tape pfd-alt"><svg viewBox="0 -180 72 360"><defs><clipPath id="pfdca"><rect x="0" y="-180" width="72" height="360"/></clipPath></defs><g clip-path="url(#pfdca)"><g data-altt>${al.join('')}<path data-abug class="abug" d="M0 0l-0 -8h6v16h-6z"/></g><rect data-gndb x="0" y="200" width="72" height="400" class="pfd-gnd"/></g></svg><div class="pfd-box"><b data-palt>0</b></div><small class="pfd-cap">ALT</small><small class="pfd-sub" data-pagl>AGL 0</small><div class="pfd-vsi"><i data-pvsi></i><small data-pvs>0</small></div></div>
       <div class="pfd-rose"><svg viewBox="-82 -82 164 164"><circle r="80" class="pfd-rose-bg"/><g data-rose>${rose.join('')}<path data-rbug d="M0 -80l-5 -0l0 -7h10l0 7z" class="pfd-bug"/><path data-rcrs d="M0 -50L-4 -42H4Z M0 50L-3 44H3Z" class="pfd-crs"/></g><path d="M0 -84l-6 -9h12z" class="pfd-lubber"/><path d="M0 -22L-8 10L0 5L8 10Z" class="pfd-plane"/></svg><b data-phdg>000°</b></div>
       <div class="pfd-flaps">
-        <div class="pfd-fl"><span>Flaps</span><button type="button" data-pf="flapup" aria-label="Flaps up">▲</button><b data-pfflaps>UP</b><button type="button" data-pf="flapdn" aria-label="Flaps down">▼</button></div>
-        <div class="pfd-fl"><span>Trim</span><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button><b data-pftrim>0%</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button></div>
+        <div class="pfd-lever" data-flever><span>Flaps</span><div class="pfd-lv-track" data-flvtrack></div><b data-pfflaps>UP</b></div>
+        <div class="pfd-fl"><span>Trim</span><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button><div class="pfd-trimbar"><i data-pftrimi></i></div><b data-pftrim>0</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button></div>
       </div>
-      <div class="pfd-dock">
-        ${jet ? '<button type="button" class="pfd-dk" data-pf="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v7M8 10h8M7 14a3 3 0 1 0 0 .01M17 14a3 3 0 1 0 0 .01M12 10v3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b data-pfgear>Down</b><span>Gear</span></button><button type="button" class="pfd-dk" data-pf="spoiler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15l9-3 9 3M6 13.5l2.5-5M15.5 8.5l2.5 5"/></svg><b data-pfsp>In</b><span>Spoilers</span></button>' : ''}
+      <div class="pfd-dock" role="toolbar" aria-label="Aircraft controls">
+        ${jet ? '<button type="button" class="pfd-dk" data-pf="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v7M8 10h8M12 10v3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b data-pfgear>Down</b><span>Gear</span></button><button type="button" class="pfd-dk" data-pf="spoiler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15l9-3 9 3M6 13.5l2.5-5M15.5 8.5l2.5 5"/></svg><b data-pfsp>In</b><span>Spoilers</span></button><button type="button" class="pfd-dk" data-pf="rev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg><b data-pfrev>Off</b><span>Reverse</span></button>' : ''}
         <button type="button" class="pfd-dk" data-pf="brake"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M4 8a9 9 0 0 1 3-3.5M20 8a9 9 0 0 0-3-3.5"/></svg><b>Hold</b><span>Brakes</span></button>
         <button type="button" class="pfd-dk" data-pf="park"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/></svg><b data-pfpark>Off</b><span>Park</span></button>
-        <i class="pfd-dk-sep"></i>
         <button type="button" class="pfd-dk" data-pf="lights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg><b data-pflt>Off</b><span>Lights</span></button>
-        <button type="button" class="pfd-dk" data-pf="ap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 6.8H21l-5.4 4 2 6.7L12 16.6 6.4 20.5l2-6.7L3 9.8h6.6z"/></svg><b data-pfap>Off</b><span>Autopilot</span></button>
+        <i class="pfd-dk-sep"></i>
+        <button type="button" class="pfd-dk pfd-ap" data-pf="appanel" aria-expanded="false"><b class="ap-t">A/P</b><span data-pfap>Off</span></button>
         <button type="button" class="pfd-dk" data-pf="gates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="6" height="12" rx="1"/><rect x="14" y="6" width="6" height="12" rx="1"/></svg><b data-pfgt>Off</b><span>Gates</span></button>
-        <button type="button" class="pfd-dk" data-pf="cam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b data-pfcam>Chase</b><span>Camera</span></button>
         ${jet ? '' : '<button type="button" class="pfd-dk" data-pf="panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b>Gauges</b><span>Panel</span></button>'}
       </div>
-      <div class="pfd-thr" data-pfthr><span data-pfthrl>${jet ? 'N1' : 'PWR'}</span><div class="pfd-thr-track"><i data-pfthrf></i><b data-pfthrk></b></div><small data-pfthrv>0%</small></div>
-      <div class="pfd-bar">
-        <div><span>Airspeed</span><b data-pb="ias">0 kt</b></div><div><span>Ground speed</span><b data-pb="gs">0 kt</b></div><div><span>Altitude MSL</span><b data-pb="alt">0 ft</b></div><div><span>Altitude AGL</span><b data-pb="agl">0 ft</b></div>
-        <div><span>Heading</span><b data-pb="hdg">000°</b></div><div><span>Vertical speed</span><b data-pb="vs">0 fpm</b></div><div><span>${jet ? 'N1' : 'Engine'}</span><b data-pb="eng">0</b></div><div><span>Next</span><b data-pb="next">—</b></div><div><span>Time to next</span><b data-pb="ete">—</b></div>
-      </div>
+      <div class="pfd-thr" data-pfthr><span data-pfthrl>${jet ? 'THR' : 'PWR'}</span><div class="pfd-thr-track" title="Throttle: drag, or R and F"><i data-pfthrf></i><em data-pfthrn></em><b data-pfthrk></b></div><small data-pfthrv>0%</small></div>
     </div>`;
   }
 
@@ -533,11 +549,14 @@ window.BoploSim = (() => {
       </div>
       ${pfdHTML(!!o.jet)}
       <canvas class="sim-six" data-six aria-hidden="true"></canvas>
-      <div class="sim-apbar" data-apbar hidden>
-        <button type="button" data-apm="nav" aria-pressed="true">NAV</button>
-        <div class="sim-apv"><button type="button" data-apm="hdg" aria-pressed="false">HDG</button><button type="button" data-apd="hdg" data-d="-5" aria-label="Heading minus 5">−</button><b data-apv="hdg">000°</b><button type="button" data-apd="hdg" data-d="5" aria-label="Heading plus 5">+</button></div>
-        <div class="sim-apv"><button type="button" data-apm="alt" aria-pressed="false">ALT</button><button type="button" data-apd="alt" data-d="-100" aria-label="Altitude minus 100 feet">−</button><b data-apv="alt">0 ft</b><button type="button" data-apd="alt" data-d="100" aria-label="Altitude plus 100 feet">+</button></div>
-        <div class="sim-apv"><button type="button" data-apm="spd" aria-pressed="false">SPD</button><button type="button" data-apd="spd" data-d="-5" aria-label="Speed minus 5 knots">−</button><b data-apv="spd">0 kt</b><button type="button" data-apd="spd" data-d="5" aria-label="Speed plus 5 knots">+</button></div>
+      <div class="ap-panel" data-apbar hidden role="dialog" aria-label="Autopilot">
+        <div class="ap-head"><b>Autopilot</b><button type="button" class="ap-master" data-apmaster aria-pressed="false"><i></i><span data-apms>Off</span></button><button type="button" class="ap-x" data-apclose aria-label="Close autopilot panel">×</button></div>
+        <div class="ap-row ap-nav"><button type="button" class="ap-tog" data-apm="nav" aria-pressed="true">NAV</button><small>Follow the route, climb and descend on its profile</small></div>
+        <div class="ap-row"><button type="button" class="ap-tog" data-apm="hdg" aria-pressed="false">HDG</button><button type="button" class="ap-st" data-apd="hdg" data-d="-5" aria-label="HDG down">−</button><b data-apv="hdg">—</b><button type="button" class="ap-st" data-apd="hdg" data-d="5" aria-label="HDG up">+</button></div>
+        <div class="ap-row"><button type="button" class="ap-tog" data-apm="alt" aria-pressed="false">ALT</button><button type="button" class="ap-st" data-apd="alt" data-d="-500" aria-label="ALT down">−</button><b data-apv="alt">—</b><button type="button" class="ap-st" data-apd="alt" data-d="500" aria-label="ALT up">+</button></div>
+        <div class="ap-row"><button type="button" class="ap-tog" data-apm="vs" aria-pressed="false">V/S</button><button type="button" class="ap-st" data-apd="vs" data-d="-100" aria-label="V/S down">−</button><b data-apv="vs">—</b><button type="button" class="ap-st" data-apd="vs" data-d="100" aria-label="V/S up">+</button></div>
+        <div class="ap-row"><button type="button" class="ap-tog" data-apm="spd" aria-pressed="false">SPD</button><button type="button" class="ap-st" data-apd="spd" data-d="-5" aria-label="SPD down">−</button><b data-apv="spd">—</b><button type="button" class="ap-st" data-apd="spd" data-d="5" aria-label="SPD up">+</button></div>
+        <small class="ap-note">Each mode holds what you set. Turn a mode off to hand that axis back to NAV. Moving the controls firmly disconnects the autopilot.</small>
       </div>
       <div class="sim-replay" data-replaybar hidden>
         <button type="button" class="sim-b" data-play aria-label="Play or pause"><svg viewBox="0 0 24 24"><path data-pp2 d="M8 5v14M16 5v14"/></svg></button>
@@ -1202,7 +1221,7 @@ window.BoploSim = (() => {
     fc.autoRudder = store.get('autorudder', true);
     let showSix = store.get('six2', false); // the glass display is the default; the round gauges are one tap away
     // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
-    const AP = { nav: true, hdg: null, alt: null, spd: null };
+    const AP = { nav: true, hdg: null, alt: null, spd: null, vs: null }; let apPanel = false;
     const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Flyby', 0, 0, 0], ['Tower', 0, 0, 0], ['Orbit', 1.25, 1.3, 9], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
     let flyAt = null;
     const orb = { yaw: 0, pitch: 0, zoom: 1 }; let towerAt = null;
@@ -1233,6 +1252,7 @@ window.BoploSim = (() => {
       if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
       if (k === 'k') { openSet(); return; }
       if (k === 'o' && !e.repeat) { setMini(!miniOn); return; }
+      if (k === 'f2' && AC.jet && !replay && !e.repeat) { e.preventDefault(); fc.reverse = !fc.reverse; tipNow = fc.reverse ? 'Reversers armed' : 'Reversers stowed'; tipUntil = performance.now() + 1600; return; }
       if (k === 'y' && !replay) { CS.mouse = !CS.mouse; saveCS(); syncSet(); tipNow = CS.mouse ? 'Mouse yoke on: move the mouse to fly' : 'Mouse yoke off'; tipUntil = performance.now() + 1800; return; }
       if (k === 'escape' && !$('[data-set]').hidden) { $('[data-set]').hidden = true; e.stopImmediatePropagation(); return; }
       if (k === 'j') { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); return; }
@@ -1260,7 +1280,7 @@ window.BoploSim = (() => {
       const a = b.dataset.pf;
       if (a === 'brake') { on(b, 'pointerdown', () => { touchBrake = true; }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) on(b, ev, () => { touchBrake = false; }); return; }
       b.onclick = () => ({ gear: gearToggle, spoiler: spoilerToggle, trimup: () => trimStep(.04), trimdn: () => trimStep(-.04), flapup: () => flapStep(-1), flapdn: () => flapStep(1),
-        park: () => { if (!replay) fc.parking = !fc.parking; }, ap: () => { if (!replay) setAP(!apOn); }, lights: () => { landingLights = !landingLights; },
+        park: () => { if (!replay) fc.parking = !fc.parking; }, ap: () => { if (!replay) setAP(!apOn); }, appanel: () => { apPanel = !apPanel; apUI(); }, rev: () => { if (!replay) { fc.reverse = !fc.reverse; tipNow = fc.reverse ? 'Reversers armed: they deploy on the ground with the thrust levers at idle, then add power' : 'Reversers stowed'; tipUntil = performance.now() + 2600; } }, lights: () => { landingLights = !landingLights; },
         gates: () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); }, cam: cycleCam, panel: () => setSix(true) })[a]?.();
     });
     { const tr = $('[data-pfthr] .pfd-thr-track'); if (tr) { let drag = false; const set = e => { const r = tr.getBoundingClientRect(); thrTarget = clamp(1 - (e.clientY - r.top) / r.height, 0, 1); };
@@ -1310,6 +1330,7 @@ window.BoploSim = (() => {
       if (stickV) { r = stickV.roll; p = stickV.pitch; }
       if (tilt) { if (Math.abs(tilt.roll) > .06) r = clamp(tilt.roll, -1, 1); if (Math.abs(tilt.pitch) > .06) p = clamp(tilt.pitch, -1, 1); }
       if (rudV != null) y = rudV;
+      else if (stickV && fs.ground) y = stickV.roll; // on the ground the stick steers the nosewheel too, as there's no rudder slider on a phone
       if (invert) p = -p;
       if (apOn && !replay && (Math.abs(r) > .35 || Math.abs(p) > .35)) { setAP(false); tipNow = 'Autopilot off: you have control'; tipUntil = performance.now() + 2500; }
       // keyboard input ramps for smoothness; analogue inputs pass straight through
@@ -1318,7 +1339,7 @@ window.BoploSim = (() => {
       const hold = (cur, tgt, rr) => !CS.centre && tgt === 0 ? cur : ramp(cur, tgt, rr);
       const analog = stickV || pad || tilt || (CS.mouse && mouseV);
       const expo = v => { const a = Math.abs(v), e = CS.expo; return Math.sign(v) * ((1 - e) * a + e * a * a * a); };
-      ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? expo(y) : ramp(ctl.yaw, y, 3);
+      ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad || (stickV && fs.ground) ? expo(y) : ramp(ctl.yaw, y, 3);
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       // auto-rudder on the runway: steer for a point on the centreline ahead (like a pilot looking down the runway),
       // so the take-off and landing rolls stay straight; your own rudder input always takes priority
@@ -1372,7 +1393,7 @@ window.BoploSim = (() => {
       const pr = path.project(st.x, st.z), vk = st.v / KT, remain = L - pr.s;
       const look = clamp(st.gs * 7, 180, 900), [tx, tz] = path.at(pr.s + look);
       const routeTrk = Math.atan2(tx - st.x, tz - st.z) * R2D;
-      const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.hdg == null && AP.alt == null));
+      const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.hdg == null && AP.alt == null && AP.vs == null));
       const t = { phase: st.ground ? (st.landedOnce ? 'rollout' : 'takeoff') : 'air', trk: routeTrk, bankMax: st.agl < 60 && approach ? 6 : 25, approach };
       if (st.ground) { const [ax, az] = path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
       if (!replay && AP.hdg != null && !st.ground) { t.trk = AP.hdg; t.useHdg = true; }
@@ -1382,6 +1403,8 @@ window.BoploSim = (() => {
       if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + 120); }
       if (!replay && AP.alt != null) ta = AP.alt * FT + geoN;
       t.alt = ta;
+      // selected vertical speed: flown towards the selected altitude, or held on its own
+      if (!replay && AP.vs != null) { const v = AP.vs * FT / 60; if (AP.alt != null) { t.vsUp = t.vsDn = Math.max(.5, Math.abs(v)); } else { t.vs = v; t.alt = undefined; } }
       // on the approach the autopilot adds flap as it gets closer, but never takes away flap you already have
       if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < 5) t.phase = 'flare'; }
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
@@ -1451,32 +1474,111 @@ window.BoploSim = (() => {
     let warnText = '', tipText = '', tipNow = '', tipUntil = 0;
     const tipEl = document.createElement('div'); tipEl.className = 'sim-tip'; tipEl.setAttribute('role', 'status'); $('[data-warn]').after(tipEl);
     const PE = { spdt: $('[data-spdt]'), altt: $('[data-altt]'), gnd: $('[data-gndb]'), spd: $('[data-pspd]'), alt: $('[data-palt]'), gs: $('[data-pgs]'), agl: $('[data-pagl]'), vsi: $('[data-pvsi]'), vs: $('[data-pvs]'), rose: $('[data-rose]'), rbug: $('[data-rbug]'), rcrs: $('[data-rcrs]'), hdg: $('[data-phdg]'),
-      gear: $('[data-pfgear]'), sp: $('[data-pfsp]'), trim: $('[data-pftrim]'), flaps: $('[data-pfflaps]'), park: $('[data-pfpark]'), ap: $('[data-pfap]'), lt: $('[data-pflt]'), gt: $('[data-pfgt]'), thf: $('[data-pfthrf]'), thk: $('[data-pfthrk]'), thv: $('[data-pfthrv]'), bar: Object.fromEntries($$('[data-pb]').map(e => [e.dataset.pb, e])) };
-    let pfdN = 0;
+      gear: $('[data-pfgear]'), sp: $('[data-pfsp]'), rev: $('[data-pfrev]'), trim: $('[data-pftrim]'), trimi: $('[data-pftrimi]'), flaps: $('[data-pfflaps]'), park: $('[data-pfpark]'), ap: $('[data-pfap]'), lt: $('[data-pflt]'), gt: $('[data-pfgt]'), thf: $('[data-pfthrf]'), thn: $('[data-pfthrn]'), thk: $('[data-pfthrk]'), thv: $('[data-pfthrv]'),
+      roll: $('[data-hroll]'), pitch: $('[data-hpitch]'), bank: $('[data-hbank]'), fpv: $('[data-fpv]'), htape: $('[data-htape]'), hbug: $('[data-hbug]'), htrk: $('[data-htrk]'), hwarn: $('[data-hwarn]'),
+      sband: $('[data-sband]'), aband: $('[data-aband]'), oband: $('[data-oband]'), sbug: $('[data-sbug]'), strend: $('[data-strend]'), abug: $('[data-abug]'), ibar: $('[data-ibar]'), flv: $('[data-flvtrack]') };
+    let pfdN = 0, iasPrev = null, trendKt = 0;
+    // ---- info bar (top): tap a box to cycle what it shows, like Infinite Flight; the choice is remembered per screen size
+    const ISA_A = h => 340.29 * Math.sqrt(Math.max(216.65, 288.15 - .0065 * h) / 288.15);
+    const IB = {
+      ias: ['IAS', () => `${Math.round(st.ground && st.v / KT < 5 ? 0 : st.v / KT)} kt`],
+      gs: ['GS', () => `${Math.round(st.gs / KT)} kt`],
+      tas: ['TAS', () => `${Math.round((fs.tas ?? st.v) / KT)} kt`],
+      mach: ['Mach', () => `M ${((fs.tas ?? st.v) / ISA_A(st.alt - geoN)).toFixed(2).replace(/^0/, '')}`],
+      alt: ['ALT MSL', () => `${(Math.round((st.alt - geoN) / FT / 10) * 10).toLocaleString('en-GB')} ft`],
+      agl: ['AGL', () => `${(Math.round(Math.max(0, st.agl / FT) / 10) * 10).toLocaleString('en-GB')} ft`],
+      vs: ['V/S', () => { const f = Math.round(st.vs / FT * 60 / 50) * 50; return `${f > 0 ? '+' : f < 0 ? '−' : ''}${Math.abs(f).toLocaleString('en-GB')} fpm`; }],
+      hdg: ['HDG', () => `${pad3(st.hdg)}°`],
+      trk: ['TRK', () => `${pad3(st.trk)}°`],
+      wind: ['Wind', () => O.wind?.spd ? `${pad3(O.wind.dir)}° / ${Math.round(O.wind.spd)} kt` : 'Calm'],
+      next: ['Next', () => `${H.wp.textContent} ${(H.wpd.textContent.split('·')[1] || '').trim()}`],
+      ete: ['ETE next', () => (H.wpd.textContent.split('·')[2] || '—').trim()],
+      dest: ['To dest', () => { const pr = path.project(st.x, st.z); return `${Math.max(0, (L - pr.s) / NM).toFixed((L - pr.s) / NM < 10 ? 1 : 0)} NM`; }],
+      eta: ['ETE dest', () => { const pr = path.project(st.x, st.z); return st.gs > 10 ? mmss((L - pr.s) / st.gs) : '—'; }],
+      eng: [AC.jet ? 'N1' : 'RPM', () => AC.jet ? `${Math.round(fs.n1 || 0)}%` : `${fs.rpm || 0}`],
+      flaps: ['Flaps', () => FM.notches > 1 ? FM.flapLabel() : '—'],
+      g: ['Load', () => `${(fs.g ?? 1).toFixed(1)} g`],
+      aoa: ['AoA', () => `${((fs.alpha || 0) * R2D).toFixed(1)}°`]
+    };
+    const IB_KEYS = Object.keys(IB).filter(k => AC.jet || k !== 'mach');
+    let ibN = 0, ibSel = [], ibCells = [];
+    function buildIbar() {
+      const w = root.clientWidth, n = w < 560 || root.clientHeight < 520 ? 4 : w < 980 ? 6 : 8; if (n === ibN) return; ibN = n;
+      const def = { 4: ['gs', 'vs', 'next', 'dest'], 6: ['gs', 'alt', 'vs', 'hdg', 'next', 'dest'], 8: ['ias', 'gs', 'alt', 'vs', 'hdg', 'next', 'ete', 'dest'] }[n];
+      ibSel = store.get('ibar' + n, def).filter(k => IB[k] && IB_KEYS.includes(k)); while (ibSel.length < n) ibSel.push(def.find(k => !ibSel.includes(k)) || 'gs');
+      PE.ibar.innerHTML = ibSel.map((k, i) => `<button type="button" class="ib" data-ibi="${i}" aria-label="${esc(IB[k][0])}, tap to change"><span>${esc(IB[k][0])}</span><b>—</b></button>`).join('');
+      ibCells = [...PE.ibar.querySelectorAll('.ib')].map(b => ({ b, l: b.firstChild, v: b.lastChild }));
+      ibCells.forEach((c, i) => c.b.onclick = () => {
+        const cur = IB_KEYS.indexOf(ibSel[i]); let nx = cur;
+        for (let j = 1; j <= IB_KEYS.length; j++) { const k = IB_KEYS[(cur + j) % IB_KEYS.length]; if (!ibSel.includes(k)) { nx = IB_KEYS.indexOf(k); break; } }
+        ibSel[i] = IB_KEYS[nx]; store.set('ibar' + ibN, ibSel); c.l.textContent = IB[ibSel[i]][0]; c.b.setAttribute('aria-label', `${IB[ibSel[i]][0]}, tap to change`); c.v.textContent = IB[ibSel[i]][1]();
+      });
+    }
+    // flap lever on the right edge: one stop per notch, tap a stop to move there
+    if (PE.flv) {
+      const n = FM.notches; PE.flv.innerHTML = Array.from({ length: n }, (_, i) => `<button type="button" data-fln="${i}" style="top:${n > 1 ? i / (n - 1) * 100 : 0}%" aria-label="Flaps ${esc((FM.p.notch[i] || {}).label || i)}"><span>${esc((FM.p.notch[i] || {}).label || '')}</span></button>`).join('') + '<b data-flvk></b>';
+      PE.flvk = $('[data-flvk]');
+      $$('[data-fln]').forEach(b => b.onclick = () => { const d = +b.dataset.fln - fc.flaps; if (d) flapStep(d); });
+      if (n < 2) $('[data-flever]').classList.add('none');
+    }
+    const hudK = 6;
     function pfd(vk, pr) {
       const ias = st.ground && vk < 5 ? 0 : vk, altFt = (st.alt - geoN) / FT, aglFt = Math.max(0, st.agl / FT), fpm = st.vs / FT * 60;
+      // HUD: pitch ladder, bank, flight path marker, heading tape
+      const b = st.bank, pt = st.att ?? st.pitch;
+      PE.roll.setAttribute('transform', `rotate(${-b})`); PE.pitch.setAttribute('transform', `translate(0 ${pt * hudK})`); PE.bank.setAttribute('transform', `rotate(${-b})`);
+      if (st.gs > 8 * KT || !st.ground) {
+        const gam = Math.atan2(st.vs, Math.max(st.gs, 1)) * R2D, drift = clamp(wrap180(st.trk - st.hdg), -25, 25);
+        const dx = drift * hudK, dy = (pt - gam) * hudK, th = -b * D2R, x = clamp(dx * Math.cos(th) - dy * Math.sin(th), -160, 160), y = clamp(dx * Math.sin(th) + dy * Math.cos(th), -100, 110);
+        PE.fpv.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`); PE.fpv.style.opacity = 1;
+      } else PE.fpv.style.opacity = .35;
+      const near = (a, ref) => a + Math.round((ref - a) / 360) * 360, h = st.hdg < 180 ? st.hdg + 360 : st.hdg;
+      PE.htape.setAttribute('transform', `translate(${(-h * 4).toFixed(1)} -158)`);
+      PE.htrk.setAttribute('transform', `translate(${(near(st.trk, h) * 4).toFixed(1)} 0)`);
+      const bug = apOn && AP.hdg != null ? AP.hdg : null; PE.hbug.style.display = bug == null ? 'none' : ''; if (bug != null) PE.hbug.setAttribute('transform', `translate(${(near(bug, h) * 4).toFixed(1)} 0)`);
+      // speed tape with the stall band, trend arrow and selected speed
       PE.spdt.setAttribute('transform', `translate(0 ${ias * 4})`); PE.spd.textContent = Math.round(ias);
-      PE.altt.setAttribute('transform', `translate(0 ${altFt * .4})`); PE.alt.textContent = Math.round(altFt / 10) * 10;
+      { const now = performance.now(), dtp = iasPrev ? (now - iasPrev.t) / 1000 : 0; if (dtp > .01 && dtp < .5 && !paused) trendKt += ((ias - iasPrev.v) / dtp * 10 - trendKt) * .15; iasPrev = { v: ias, t: now }; }
+      PE.strend.setAttribute('y2', clamp(-trendKt * 4, -160, 160).toFixed(1));
+      PE.altt.setAttribute('transform', `translate(0 ${altFt * .4})`); PE.alt.textContent = (Math.round(altFt / 10) * 10).toLocaleString('en-GB');
       PE.gnd.setAttribute('y', (altFt - (st.alt - st.agl - geoN) / FT) * .4 + 0);
       PE.vsi.style.height = `${Math.min(50, Math.abs(fpm) / 40)}%`; PE.vsi.classList.toggle('dn', fpm < 0); PE.vs.textContent = `${fpm >= 0 ? '+' : '−'}${Math.abs(Math.round(fpm / 50) * 50)}`;
       PE.rose.setAttribute('transform', `rotate(${-st.hdg})`); PE.hdg.textContent = pad3(st.hdg) + '°';
-      const bug = apOn && AP.hdg != null ? AP.hdg : null; PE.rbug.style.display = bug == null ? 'none' : ''; if (bug != null) PE.rbug.setAttribute('transform', `rotate(${bug})`);
-      const [cx2, cz2] = path.at(pr.s + 400), crs = norm360(Math.atan2(cx2 - st.x, cz2 - st.z) * R2D); PE.rcrs.setAttribute('transform', `rotate(${crs})`);
-      const eng = AC.jet ? (fs.n1 || 0) : fs.rpm, thr = st.thr;
-      PE.thf.style.height = `${Math.round(thrTarget * 100)}%`; PE.thk.style.bottom = `${Math.round(thrTarget * 100)}%`; PE.thv.textContent = AC.jet ? `${Math.round(fs.n1 || 0)}%` : `${Math.round(thr * 100)}%`;
+      PE.rbug.style.display = bug == null ? 'none' : ''; if (bug != null) PE.rbug.setAttribute('transform', `rotate(${bug})`);
+      const eng = AC.jet ? (fs.n1 || 0) : (fs.power ?? st.thr) * 100;
+      PE.thf.style.height = `${Math.round(thrTarget * 100)}%`; PE.thk.style.bottom = `${Math.round(thrTarget * 100)}%`; PE.thn.style.height = `${clamp(AC.jet ? (eng - 20) / 80 * 100 : eng, 0, 100)}%`;
+      PE.thv.textContent = fc.reverse && fs.ground ? 'REV' : AC.jet ? `${Math.round(fs.n1 || 0)}%` : `${Math.round(thrTarget * 100)}%`;
+      if (PE.flvk) { const n = FM.notches; PE.flvk.style.top = `${n > 1 ? fc.flaps / (n - 1) * 100 : 0}%`; }
+      // warnings, most urgent first, on the HUD
+      const vsCur = (() => { const n = FM.notches, f = n > 1 ? fc.flaps / (n - 1) : 0, vso = FM.p.vso || PF.vs * .85; return PF.vs + (vso - PF.vs) * f; })();
+      const vfe = fc.flaps > 0 && FM.p.vfe ? FM.p.vfe : null, vlim = vfe ?? (FM.p.vne ? FM.p.vne * .97 : PF.vmax * 1.12);
+      let w = '';
+      if (!st.ground && !st.crashed) {
+        if (fs.stallWarn) w = 'STALL';
+        else if (st.agl < 300 && fpm < -1800 - st.agl * 3) w = 'PULL UP';
+        else if (ias > vlim) w = vfe ? 'FLAP OVERSPEED' : 'OVERSPEED';
+        else if (AC.jet && (fs.gearPos ?? 1) < .95 && st.agl < 250 && fpm < -200) w = 'GEAR';
+        else if (Math.abs(st.bank) > 50) w = 'BANK ANGLE';
+      }
+      if (PE.hwarn.textContent !== w) { PE.hwarn.textContent = w; PE.hwarn.classList.toggle('red', w === 'STALL' || w === 'PULL UP'); }
       if (++pfdN % 6) return; // the rest changes slowly: refresh a few times a second
-      PE.gs.textContent = `GS ${Math.round(st.gs / KT)}`; PE.agl.textContent = `AGL ${Math.round(aglFt / 10) * 10}`;
+      PE.sband.setAttribute('y', (-vsCur * 4).toFixed(1)); PE.sband.setAttribute('height', (vsCur * 4).toFixed(1));
+      PE.aband.setAttribute('y', (-vsCur * 1.13 * 4).toFixed(1)); PE.aband.setAttribute('height', (vsCur * .13 * 4).toFixed(1));
+      PE.oband.setAttribute('y', (-1800).toFixed(1)); PE.oband.setAttribute('height', Math.max(0, 1800 - vlim * 4).toFixed(1));
+      const sb = apOn && AP.spd != null ? AP.spd : null; PE.sbug.style.display = sb == null ? 'none' : ''; if (sb != null) PE.sbug.setAttribute('transform', `translate(0 ${-sb * 4})`);
+      const ab = apOn && AP.alt != null ? AP.alt : null; PE.abug.style.display = ab == null ? 'none' : ''; if (ab != null) PE.abug.setAttribute('transform', `translate(0 ${-ab * .4})`);
+      PE.gs.textContent = `GS ${Math.round(st.gs / KT)}`; PE.agl.textContent = aglFt < 2500 ? `RA ${Math.round(aglFt / 10) * 10}` : `AGL ${(Math.round(aglFt / 100) * 100).toLocaleString('en-GB')}`;
       if (PE.gear) { const g = fs.gearPos ?? 1; PE.gear.textContent = g >= .99 ? 'Down' : g <= .01 ? 'Up' : 'Moving'; PE.gear.parentElement.classList.toggle('on', g >= .99); PE.gear.parentElement.classList.toggle('warn', g > .01 && g < .99); }
-      if (PE.sp) { PE.sp.textContent = (fs.spoilerPos || 0) > .5 ? 'Out' : 'In'; PE.sp.parentElement.classList.toggle('on', (fs.spoilerPos || 0) > .5); }
-      PE.trim.textContent = Math.abs(fc.trim) < .04 ? '0' : `${fc.trim > 0 ? '▲' : '▼'} ${Math.round(Math.abs(fc.trim) * 100)}%`;
+      if (PE.sp) { PE.sp.textContent = (fs.spoilerPos || 0) > .5 ? 'Out' : fc.spoiler ? 'Armed' : 'In'; PE.sp.parentElement.classList.toggle('on', (fs.spoilerPos || 0) > .5 || !!fc.spoiler); }
+      if (PE.rev) { PE.rev.textContent = fs.revPos > .5 ? 'Deployed' : fc.reverse ? 'Armed' : 'Off'; PE.rev.parentElement.classList.toggle('on', !!fc.reverse); PE.rev.parentElement.classList.toggle('warn', fs.revPos > .5); }
+      PE.trim.textContent = Math.abs(fc.trim) < .04 ? '0' : `${fc.trim > 0 ? '+' : '−'}${Math.round(Math.abs(fc.trim) * 100)}`; if (PE.trimi) PE.trimi.style.bottom = `${50 + fc.trim * 46}%`;
       PE.flaps.textContent = FM.notches > 1 ? FM.flapLabel() : '—';
       PE.park.textContent = fc.parking ? 'Set' : 'Off'; PE.park.parentElement.classList.toggle('on', fc.parking);
       PE.ap.textContent = apOn ? 'On' : 'Off'; PE.ap.parentElement.classList.toggle('on', apOn);
       PE.lt.textContent = landingLights ? 'On' : 'Off'; PE.lt.parentElement.classList.toggle('on', landingLights);
       PE.gt.textContent = showGates ? 'On' : 'Off'; PE.gt.parentElement.classList.toggle('on', showGates);
-      const B = PE.bar; B.ias.textContent = `${Math.round(ias)} kt`; B.gs.textContent = `${Math.round(st.gs / KT)} kt`; B.alt.textContent = `${Math.round(altFt / 10) * 10} ft`; B.agl.textContent = `${Math.round(aglFt / 10) * 10} ft`;
-      B.hdg.textContent = pad3(st.hdg) + '°'; B.vs.textContent = `${Math.round(fpm / 50) * 50} fpm`; B.eng.textContent = AC.jet ? `${Math.round(eng)}%` : `${eng} rpm`;
-      B.next.textContent = `${H.wp.textContent} ${(H.wpd.textContent.split('·')[1] || '').trim()}`; B.ete.textContent = (H.wpd.textContent.split('·')[2] || '—').trim();
+      buildIbar(); ibCells.forEach((c, i) => { const t = IB[ibSel[i]][1](); if (c.v.textContent !== t) c.v.textContent = t; });
+      if (apPanel && pfdN % 12 === 0) apUI();
     }
     function hud() {
       const vk = st.v / KT, pr = path.project(st.x, st.z);
@@ -1534,20 +1636,37 @@ window.BoploSim = (() => {
 
     /* ---- controls ---- */
     function apUI() {
-      const bar = $('[data-apbar]'); bar.hidden = !apOn || replay;
-      $$('[data-apm]').forEach(b => { const m = b.dataset.apm; b.setAttribute('aria-pressed', String(m === 'nav' ? AP.hdg == null && AP.alt == null : AP[m] != null)); });
-      const v = m => AP[m] ?? (m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT));
-      $('[data-apv="hdg"]').textContent = pad3(v('hdg')) + '°'; $('[data-apv="alt"]').textContent = v('alt').toLocaleString('en-GB') + ' ft'; $('[data-apv="spd"]').textContent = v('spd') + ' kt';
+      const bar = $('[data-apbar]'); bar.hidden = !apPanel || replay;
+      $('[data-pf="appanel"]')?.setAttribute('aria-expanded', String(apPanel && !replay));
+      $$('[data-apm]').forEach(b => { const m = b.dataset.apm; b.setAttribute('aria-pressed', String(apOn && (m === 'nav' ? AP.hdg == null && AP.alt == null && AP.vs == null : AP[m] != null))); });
+      const ms = $('[data-apmaster]'); ms.setAttribute('aria-pressed', String(apOn)); $('[data-apms]').textContent = apOn ? 'Engaged' : 'Off';
+      const cur = m => m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
+      const v = m => AP[m] ?? cur(m);
+      $('[data-apv="hdg"]').textContent = pad3(v('hdg')) + '°'; $('[data-apv="alt"]').textContent = v('alt').toLocaleString('en-GB') + ' ft';
+      $('[data-apv="spd"]').textContent = v('spd') + ' kt'; { const x = v('vs'); $('[data-apv="vs"]').textContent = `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toLocaleString('en-GB')} fpm`; }
+      $$('[data-apv]').forEach(e => e.classList.toggle('sel', AP[e.dataset.apv] != null));
     }
     function setAP(v) { apOn = v; if (v) { FM.ap = null; } $('[data-ap]').setAttribute('aria-pressed', String(v)); $('[data-ap]').classList.toggle('on', v); apUI(); }
     $$('[data-apm]').forEach(b => b.onclick = () => {
       const m = b.dataset.apm;
-      if (m === 'nav') { AP.hdg = AP.alt = null; AP.nav = true; }
+      if (m === 'nav') { AP.hdg = AP.alt = AP.vs = null; AP.nav = true; }
       else if (AP[m] != null) AP[m] = null;
-      else AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT);
+      else AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
       if (!apOn) setAP(true); FM.ap = null; apUI();
     });
-    $$('[data-apd]').forEach(b => b.onclick = () => { const m = b.dataset.apd, dlt = +b.dataset.d; if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : Math.round(st.v / KT); AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : Math.max(0, AP[m] + dlt); if (!apOn) setAP(true); apUI(); });
+    // − / + step the value; hold to keep stepping
+    $$('[data-apd]').forEach(b => {
+      const stepOnce = () => { const m = b.dataset.apd; let dlt = +b.dataset.d; if (m === 'alt' && !AC.jet) dlt = Math.sign(dlt) * 100;
+        if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
+        AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : m === 'vs' ? clamp(AP[m] + dlt, AC.jet ? -6000 : -2000, AC.jet ? 6000 : 2000) : Math.max(0, AP[m] + dlt);
+        if (!apOn) setAP(true); FM.ap = null; apUI(); };
+      let rep = 0, hold = 0; const stop = () => { clearTimeout(hold); clearInterval(rep); };
+      b.onpointerdown = e => { e.preventDefault(); stepOnce(); hold = setTimeout(() => { rep = setInterval(stepOnce, 90); }, 380); };
+      b.onpointerup = b.onpointerleave = b.onpointercancel = stop; cleanups.push(stop);
+      b.onclick = e => { if (e.detail === 0) stepOnce(); }; // keyboard
+    });
+    $('[data-apmaster]').onclick = () => { if (!replay) setAP(!apOn); };
+    $('[data-apclose]').onclick = () => { apPanel = false; apUI(); };
     function setSix(v) { showSix = v; store.set('six2', v); applyView(); }
     /* ---- in-flight map: north up, your route, runways, waypoints and airfields around you ---- */
     const MINI_R = [1, 2, 5, 10, 25, 50, 100];

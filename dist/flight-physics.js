@@ -3,6 +3,10 @@
    not at a speed), induced and parasite drag, propeller thrust that falls with speed, pitch/roll/yaw dynamics with
    weathervane and dihedral stability, adverse yaw and prop effects, flaps in the type's real notches, elevator trim,
    and a ground model with nosewheel/tailwheel steering, brakes and rolling friction.
+   Also: ground effect (less induced drag and a little more lift within a wingspan of the ground), airspeed from the
+   air mass rather than the ground (so wind shows up on the airspeed), jet thrust that lapses with altitude and Mach,
+   spool-up that is slow from idle, idle thrust, thrust reversers, compressibility drag rise above the critical Mach,
+   propeller torque, and tyres with a friction limit, so a crosswind or a fast turn can make them skid.
    It is tuned to feel right and to match book stall, climb and top speeds, not certified data: a practice toy, not an FSTD.
    World axes: x east, y up, z north (metres). Body axes: F nose, U top, R right wing. */
 (function (root) {
@@ -16,6 +20,8 @@
   const len = a => Math.hypot(a[0], a[1], a[2]);
   const norm = a => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
   const rho = h => 1.225 * Math.pow(Math.max(.2, 1 - 2.25577e-5 * Math.max(-500, h)), 4.2559);
+  // speed of sound in the standard atmosphere (troposphere, then the isothermal layer above 11 km)
+  const sound = h => 340.29 * Math.sqrt(Math.max(216.65, 288.15 - .0065 * Math.max(-500, h)) / 288.15);
 
   // Aircraft data: mass (kg, typical training weight), wing area (m²), engine (hp), flap notches (deg, label),
   // speeds in knots: vs (clean stall), vso (full-flap stall), vfe, vno, vne, vr, appr, cruise, vmax, wheelbase (m), gear type.
@@ -40,10 +46,11 @@
     const maxDeg = d.flaps[d.flaps.length - 1][0] || 1;
     const notch = d.flaps.map(([deg, label]) => { const f = deg / maxDeg; const dCLmax = (CLmaxF - CLmax) * Math.pow(f, .8); return { deg, label, dCLmax, dCL0: dCLmax * .85, dCD: .055 * Math.pow(deg / 40, 1.6) }; });
     const a0 = -2.2 * D2R, aStall = a0 + CLmax / CLa;
-    // propeller: thrust = η·P / sqrt(V² + V0²), static thrust about 14 N per hp
+    // propeller: thrust = η·P / sqrt(V² + V0²), static thrust about 19 N per hp
     const eta = .8, V0 = eta * HP / 19;
-    // jets: thrust (not power) that falls off a little with speed; `pwr` arrives as throttle × HP so the same code path works
-    const thrustAt = d.jet ? (V, pwr) => pwr / HP * d.T0 * (1 - .42 * clamp(V / 150, 0, 1)) : (V, pwr) => eta * pwr / Math.sqrt(V * V + V0 * V0);
+    // jets: thrust (not power) falling with Mach (high-bypass fans lose a fifth of their thrust by 150 kt) and with air density;
+    // `pwr` arrives as throttle × HP × density factor for props, so for jets the density lapse is applied in step()
+    const thrustAt = d.jet ? (V, pwr, M = V / 340.3) => pwr / HP * d.T0 * Math.max(.3, 1 - .9 * M + .6 * M * M) : (V, pwr) => eta * pwr / Math.sqrt(V * V + V0 * V0);
     // parasite drag from the top speed at full power
     const vmax = P.vmax * KT, CLv = W / qs(P.vmax), CD0 = d.CD0 || Math.max(.018, thrustAt(vmax, d.hp * HP) / qs(P.vmax) - k * CLv * CLv);
     return { ...d, ...P, id, W, span, AR, k, CLa, CLmax, a0, aStall, notch, eta, V0, CD0, thrustAt, hp: d.jet ? 1 : d.hp, agility: d.agility || 1, spool: d.spool || .7, Vref: P.cruise * KT, tail: !!tail };
@@ -58,9 +65,9 @@
       const h = hdg * D2R, th = pitch * D2R;
       s.F = norm([Math.sin(h) * Math.cos(th), Math.sin(th), Math.cos(h) * Math.cos(th)]); s.R = [Math.cos(h), 0, -Math.sin(h)]; s.U = norm(cross(s.F, s.R));
       s.x = x; s.z = z; s.alt = alt; s.v = scale(s.F, airborne ? speed : 0); s.w = [0, 0, 0]; s.ground = !airborne; s.power = airborne ? .65 : 0; s.rpm = airborne ? 2300 : 0;
-      s.gearPos = 1; s.n1 = airborne ? 70 : 0; s.spoilerPos = 0; s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
+      s.gearPos = 1; s.revPos = 0; s.n1 = airborne ? 70 : 0; s.spoilerPos = 0; s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
       if (p.tail && !airborne) tilt(opts.groundAtt || 11);
-      Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, gear: 1, spoiler: 0, parking: !airborne && !!opts.parkingAtStart });
+      Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, gear: 1, spoiler: 0, reverse: false, parking: !airborne && !!opts.parkingAtStart });
       c.throttle = airborne ? .65 : 0; c.flaps = 0; c.trim = airborne ? trimFor(speed) : .15;
       derive();
     }
@@ -81,22 +88,38 @@
       if (s.crashed) return;
       s.t += dt;
       const gh = ground(s.x, s.z), surf = surface(s.x, s.z), sig = rho(s.alt) / 1.225;
-      const va = add(s.v, wind, -1), V = Math.max(.01, len(va)), vh = va.map(x => x / V);
+      const va = add(s.v, wind, -1), V = Math.max(.01, len(va)), vh = va.map(x => x / V), M = V / sound(s.alt);
+      s.va = va;
       const u = dot(va, s.F), wu = dot(va, s.U), vr = dot(va, s.R);
       const alpha = Math.atan2(-wu, Math.max(.5, u)), beta = Math.asin(clamp(vr / V, -1, 1));
       const n = p.notch[c.flaps] || p.notch[0], qbar = .5 * rho(s.alt) * V * V;
-      const { CL, stalled, aS } = CLof(alpha, n);
+      const cl0 = CLof(alpha, n), stalled = cl0.stalled, aS = cl0.aS;
+      // ground effect: within a wingspan of the ground the wingtip vortices are squashed, so induced drag falls and lift rises a little
+      const hb = (Math.max(0, s.alt - gh) + (p.jet ? 4 : 1.3)) / p.span, ge = (16 * hb) ** 2 / (1 + (16 * hb) ** 2);
+      const CL = cl0.CL * (stalled ? 1 : 1 + .09 * (1 - ge));
       // jets: retractable gear (drag while down or moving) and spoilers (drag up, lift down); ground spoilers deploy at idle after touchdown
       if (p.retract) s.gearPos = clamp(s.gearPos + Math.sign((c.gear ? 1 : 0) - s.gearPos) * dt / 7, 0, 1); else s.gearPos = 1;
       const spCmd = p.jet ? Math.max(c.spoiler, s.ground && c.throttle < .08 && V > 25 ? 1 : 0) : 0;
       s.spoilerPos += (spCmd - s.spoilerPos) * Math.min(1, dt * 3);
       const CLs = CL * (1 - .45 * s.spoilerPos);
-      const CD = p.CD0 + n.dCD + p.k * CL * CL + (stalled ? .12 : 0) + Math.abs(beta) * .25 + (p.retract ? .016 * s.gearPos : 0) + .05 * s.spoilerPos;
-      // engine: power lags the throttle; carb heat costs a little power
+      // compressibility: drag rises steeply past the critical Mach (Lock's fourth-power rule)
+      const Mcr = p.mcrit || .76, CDc = p.jet && M > Mcr ? 20 * (M - Mcr) ** 4 : 0;
+      const CD = p.CD0 + n.dCD + p.k * ge * cl0.CL * cl0.CL + (stalled ? .12 : 0) + Math.abs(beta) * .25 + (p.retract ? .016 * s.gearPos : 0) + .05 * s.spoilerPos + CDc;
+      // engine: power lags the throttle; carb heat costs a little power. A jet spools up slowly from idle and faster near the top,
+      // and winds down quicker than it winds up
       const pwrCmd = clamp(c.throttle, 0, 1) * (c.carbHeat ? .92 : 1);
-      s.power += (pwrCmd - s.power) * Math.min(1, dt / p.spool);
-      const pwr = s.power * p.hp * HP * Math.pow(sig, 1.1);
-      const T = p.thrustAt(V, pwr) + (s.power < .05 && !p.jet ? -p.W * .006 * clamp(V / p.Vref, 0, 1.5) : 0);
+      const tau = p.jet ? (pwrCmd > s.power ? p.spool * (1.35 - .9 * s.power) : p.spool * .45) : p.spool;
+      s.power += (pwrCmd - s.power) * Math.min(1, dt / Math.max(.1, tau));
+      // thrust reversers: armed with the switch, they deploy on the ground (weight on wheels) and stow in the air
+      { const want = p.jet && c.reverse && s.ground ? 1 : 0; s.revPos = clamp(s.revPos + clamp(want - s.revPos, -dt / 1.6, dt / 1.6), 0, 1); }
+      let T;
+      if (p.jet) {
+        const Tf = p.thrustAt(V, s.power * HP, M) * Math.pow(sig, .85), Tidle = p.T0 * .035 * Math.pow(sig, .85) * Math.max(0, 1 - M * 2.5);
+        T = (Tf + Tidle) * (1 - 1.35 * s.revPos); // reversers out: the fan's air is turned forwards, about a third of the thrust, backwards
+      } else {
+        const pwr = s.power * p.hp * HP * Math.pow(sig, 1.1);
+        T = p.thrustAt(V, pwr) + (s.power < .05 ? -p.W * .006 * clamp(V / p.Vref, 0, 1.5) : 0);
+      }
       if (p.jet) { s.n1 = s.crashed ? 0 : 21 + 79 * Math.sqrt(s.power); s.rpm = Math.round(s.n1 * 30); }
       else s.rpm = s.crashed ? 0 : Math.round(clamp(650 + 1650 * Math.sqrt(s.power) + V * 6 * (1 - s.power * .6), 0, 2750));
       // forces
@@ -113,7 +136,8 @@
       if (c.autoRudder && !s.ground) rudder = clamp(rudder + beta * 5 + c.aileron * .25 * clamp(CL, 0, 1.6) / 1.6, -1, 1);
       s.rud = rudder;
       if (stalled && !s.ground) { s.stallT += dt; if (!s.wingDrop) s.wingDrop = (Math.random() < .5 ? -1 : 1); } else { s.stallT = 0; s.wingDrop = 0; }
-      let pd = 4.6 * ag * c.aileron * qprop - 4.2 * ag * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0);
+      let pd = 4.6 * ag * c.aileron * qprop - 4.2 * ag * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0)
+        - (p.jet ? 0 : .22 * s.power * clamp(1 - V / p.Vref, 0, 1)); // engine torque rolls a propeller aircraft left at high power and low speed
       // yaw: rudder, weathervane stability, adverse yaw, prop effects (left-turning at high power and low speed)
       let rd = (1.5 * ag * rudder) * qprop + 6.5 * beta * qn - .5 * c.aileron * clamp(CL, 0, 1.6) * qn - 3.2 * s.w[2] * Math.max(.25, vn) - (p.jet ? 0 : .35 * s.power * clamp(1 - V / p.Vref, 0, 1));
       // ---- ground ----
@@ -121,11 +145,14 @@
       if (onGround) {
         const fwdH = norm([s.F[0], 0, s.F[2]]), sideH = [fwdH[2], 0, -fwdH[0]], vg = [s.v[0], 0, s.v[2]], vf = dot(vg, fwdH), vl = dot(vg, sideH);
         const Lv = Math.max(0, L * Ldir[1]), N = Math.max(0, p.W - Lv - T * s.F[1]);
-        const mu = (surf === 'grass' ? .06 : surf === 'dirt' ? .05 : .025) + (c.parking ? .55 : c.brake * .5);
+        const muMax = surf === 'grass' ? .4 : surf === 'dirt' ? .45 : .62; // what the tyres can grip (anti-skid brakes stop just short of it)
+        const mu = (surf === 'grass' ? .08 : surf === 'dirt' ? .06 : .03) + Math.min(muMax - .05, c.parking ? .55 : c.brake * (p.jet ? .42 : .52));
         const fr = Math.min(Math.abs(vf) * p.m / dt * .9, mu * N) * Math.sign(vf);
         Fw = add(Fw, fwdH, -fr);
-        // tyres stop sideways motion
-        Fw = add(Fw, sideH, -vl * p.m * Math.min(1 / dt, 8));
+        // tyres stop sideways motion, up to the friction they have left after braking; past that they skid
+        const side = -vl * p.m * Math.min(1 / dt, 8), sideMax = Math.max(0, Math.sqrt(Math.max(0, (muMax * N) ** 2 - fr * fr))) * 1.1;
+        s.skid = Math.abs(side) > sideMax && Math.abs(vl) > .6;
+        Fw = add(Fw, sideH, clamp(side, -sideMax, sideMax));
         // steering: nosewheel (or tailwheel while the tail is down), stronger at low speed
         const tailDown = p.tail && pitchDeg() > (opts.groundAtt || 11) * .6;
         const steer = (p.tail && !tailDown ? 0 : rudder * (p.tail ? 18 : 28) * D2R * (1 - clamp(Math.abs(vf) / 35, 0, .75)));
@@ -175,7 +202,8 @@
     const pitchDeg = () => Math.asin(clamp(s.F[1], -1, 1)) * R2D;
     function derive() {
       s.pitch = pitchDeg(); s.bank = Math.atan2(-s.R[1], s.U[1]) * R2D; s.hdg = (Math.atan2(s.F[0], s.F[2]) * R2D + 360) % 360;
-      const va = s.v, V = len(va); s.tas = V; s.ias = V * Math.sqrt(rho(s.alt) / 1.225); s.vs = s.v[1];
+      // airspeed comes from the air mass, not the ground: a headwind shows on the airspeed but not the ground speed
+      const va = s.va || s.v, V = len(va); s.tas = V; s.ias = V * Math.sqrt(rho(s.alt) / 1.225); s.mach = V / sound(s.alt); s.vs = s.v[1];
       s.gs = Math.hypot(s.v[0], s.v[2]); s.trk = s.gs > 1 ? (Math.atan2(s.v[0], s.v[2]) * R2D + 360) % 360 : s.hdg;
       s.turn = s.w[2] * Math.cos(s.bank * D2R) * R2D + s.w[1] * Math.sin(s.bank * D2R) * R2D; // deg/s
       s.slip = (s.beta || 0) * R2D;
@@ -245,6 +273,6 @@
     return (lo + hi) / 2;
   }
 
-  const api = { create, params, DATA, KT, pilot, wrap180, approachPower };
+  const api = { create, params, DATA, KT, pilot, wrap180, approachPower, rho, sound };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BoploPhysics = api;
 })(typeof window !== 'undefined' ? window : globalThis);
