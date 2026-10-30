@@ -752,7 +752,7 @@ window.BoploSim = (() => {
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
-    scene.rethrowRenderErrors = true; // render errors come back to our loop, which drops the effects and carries on
+    let fxOff = false; scene.rethrowRenderErrors = true; // render errors come back to our loop, which drops the effects and carries on
     scene.screenSpaceCameraController.enableInputs = false;
     scene.postProcessStages.fxaa.enabled = true;
     // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
@@ -883,7 +883,7 @@ window.BoploSim = (() => {
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
-        if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD },
+        if (fxOff) { } else if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD },
             u_rl: { type: C.UniformType.FLOAT, value: K.rl }, u_amb: { type: C.UniformType.VEC3, value: C3(K.amb) }, u_sunc: { type: C.UniformType.VEC3, value: C3(K.lc) }, u_night: { type: C.UniformType.FLOAT, value: K.night }, u_ldir: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(toLight) }, u_upW: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(upW) } },
           // the photo scenery has midday light baked in. Relight it from the real light direction using each surface's facet normal:
           // slopes and walls facing a low sun light up warm, those facing away fall into blue shade, so dawn and dusk have real relief.
@@ -930,7 +930,8 @@ window.BoploSim = (() => {
     }
     if (scene.shadowMap) { scene.shadowMap.size = GFX === 'detailed' ? 2048 : 1024; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = GFX === 'detailed'; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
-    let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
+    function dropFx() { fxOff = true; try { if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } try { if (model) model.customShader = undefined; acShader = null; } catch { } }
+    let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch (err) { console.warn('render', err); dropFx(); } requestAnimationFrame(pump); })();
     const LLH = (x, z, h) => { const [lng, lat] = F.ll(x, z); return C.Cartesian3.fromDegrees(lng, lat, h); };
     const carto = (x, z) => { const [lng, lat] = F.ll(x, z); return C.Cartographic.fromDegrees(lng, lat); };
     // look at the departure while scenery loads
@@ -1019,7 +1020,7 @@ window.BoploSim = (() => {
     // and a hard sun glint on the clear coat. This is the airliner look: bright sky line along the top of the fuselage,
     // darker ground reflected underneath, a highlight that slides along as the aircraft turns
     let acShader = null;
-    if (model) { try {
+    if (model && !fxOff) { try {
       const V3 = (x, y, z) => new C.Cartesian3(x, y, z);
       acShader = new C.CustomShader({ uniforms: {
           u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
@@ -1322,7 +1323,7 @@ window.BoploSim = (() => {
       if (rabbit.length) { const k = Math.floor((performance.now() / 1000 * 2 % 1) * rabbit.length * 1.6); rabbit.forEach((b, i) => { b.show = i === k; }); }
       // if one of our visual effects fails on this device's GPU, drop the effects and keep flying rather than stopping the render
       try { viewer.resize(); viewer.render(); }
-      catch (err) { console.warn('render', err); try { if (model) model.customShader = undefined; acShader = null; if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } }
+      catch (err) { console.warn('render', err); dropFx(); }
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
