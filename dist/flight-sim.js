@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=21'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=22'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -499,6 +499,7 @@ window.BoploSim = (() => {
           <button type="button" class="sim-b" data-ap aria-pressed="false" title="Autopilot (P)"><span>AP</span></button>
           <button type="button" class="sim-b" data-mapb aria-pressed="false" aria-label="Map" title="Map (O)"><svg viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></svg></button>
           <button type="button" class="sim-b" data-gates aria-pressed="false" title="Route gates (G)"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="1.5"/><rect x="9" y="9.5" width="6" height="5" rx="1"/></svg></button>
+          <button type="button" class="sim-b" data-todb aria-label="Time of day" aria-expanded="false" title="Time of day"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg></button>
           <button type="button" class="sim-b" data-setb aria-label="Control settings" title="Controls (K)"><svg viewBox="0 0 24 24"><path d="M5 7h9M18 7h1M5 17h3M12 17h7"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
           <button type="button" class="sim-b" data-mute aria-label="Sound" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9.5h4L13 5v14l-5-4.5H4z"/><path data-wave d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
           <button type="button" class="sim-b" data-pause aria-label="Pause" title="Pause (Space)"><svg viewBox="0 0 24 24"><path data-pp d="M8 5v14M16 5v14"/></svg></button>
@@ -506,6 +507,13 @@ window.BoploSim = (() => {
         </div>
       </header>
       <div class="sim-warn" data-warn role="status" aria-live="assertive"></div>
+      <div class="sim-tod" data-tod hidden role="dialog" aria-label="Time of day">
+        <div class="sim-tod-h"><div><span>Time of day</span><b data-todv>10:36</b></div><button type="button" class="sim-tod-x" data-todx aria-label="Close">×</button></div>
+        <input type="range" min="0" max="1439" step="1" value="636" data-todr aria-label="Time of day, local solar time">
+        <div class="sim-tod-scale" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+        <div class="sim-tod-p">${[['sunrise', 'Sunrise'], ['morning', 'Morning'], ['noon', 'Noon'], ['golden', 'Golden hour'], ['sunset', 'Sunset'], ['dusk', 'Dusk'], ['night', 'Night']].map(([k, l]) => `<button type="button" data-todp="${k}">${l}</button>`).join('')}</div>
+        <small>Local solar time where you took off. The sun, sky, light and shadows follow it.</small>
+      </div>
       <div class="sim-nmap" data-mini hidden role="region" aria-label="Map of your route"><canvas data-minic></canvas><button type="button" class="sim-nmap-x" data-minix aria-label="Hide the map">×</button><div class="sim-nmap-z"><button type="button" data-miniz="-1" aria-label="Zoom out">−</button><b data-minir>10 NM</b><button type="button" data-miniz="1" aria-label="Zoom in">+</button></div></div>
       <div class="sim-radio" data-radio hidden role="region" aria-label="Radio" aria-live="polite">
         <div class="sr-top"><span class="sr-k" data-rk>Radio · your call</span><button type="button" class="sr-x" data-rskip aria-label="Skip this call">Skip</button></div>
@@ -750,20 +758,41 @@ window.BoploSim = (() => {
     if (!coarse && GFX === 'detailed') { try { scene.highDynamicRange = true; } catch { } }
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
-    // a fixed mid-morning sun at the departure airfield, for good shadows and colour
-    // time of day: local solar time for a target sun elevation, from the date and latitude
+    // ---- time of day: the sun, sky, light on the scenery and fog all follow one clock you can move during the flight ----
+    // local solar time at the departure airfield; the presets on the sim page set the starting hour
     const TOD = O.time || 'day';
-    { const d = new Date(), N = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5), dec = 23.44 * Math.sin(2 * Math.PI * (284 + N) / 365) * D2R, lat = startLL[1] * D2R;
-      const hourFor = elev => { const c = (Math.sin(elev * D2R) - Math.sin(lat) * Math.sin(dec)) / (Math.cos(lat) * Math.cos(dec)); return 12 + Math.acos(clamp(c, -1, 1)) * R2D / 15; };
-      const solar = TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6;
-      d.setUTCHours(0, 0, 0, 0); viewer.clock.currentTime = C.JulianDate.fromDate(new Date(d.getTime() + (solar - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false; }
-    // the sky to match: a dark, starry sky at night and a warmer, lower-contrast one at golden hour
-    try { const sa = scene.skyAtmosphere; if (sa && TOD === 'night') { sa.brightnessShift = -.86; sa.saturationShift = -.35; sa.hueShift = .04; scene.backgroundColor = C.Color.fromCssColorString('#04060d'); if (C.SkyBox.createEarthSkyBox) scene.skyBox = C.SkyBox.createEarthSkyBox(); }
-      else if (sa && TOD === 'golden') { sa.brightnessShift = -.18; sa.saturationShift = .18; sa.hueShift = -.035; } } catch (e) { console.warn('sky', e); }
-    dlg.dataset.tod = TOD;
-    const LIGHT = TOD === 'night' ? [.13, .15, .24] : TOD === 'golden' ? [1, .8, .62] : [1, 1, 1];
-    // a soft sun glare, as a camera sees it
-    if (!coarse && GFX === 'detailed' && TOD !== 'night') { try { const lf = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(lf.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(lf); } catch (e) { console.warn('flare', e); } }
+    const SUN = (() => { const d = new Date(), N = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5); return { day0: (d.setUTCHours(0, 0, 0, 0), d.getTime()), dec: 23.44 * Math.sin(2 * Math.PI * (284 + N) / 365) * D2R, lat: startLL[1] * D2R }; })();
+    const sunElev = h => Math.asin(Math.sin(SUN.lat) * Math.sin(SUN.dec) + Math.cos(SUN.lat) * Math.cos(SUN.dec) * Math.cos((h - 12) * 15 * D2R)) * R2D;
+    // the hour (morning or evening) when the sun is at a given elevation
+    const hourFor = (elev, pm = true) => { const c = (Math.sin(elev * D2R) - Math.sin(SUN.lat) * Math.sin(SUN.dec)) / (Math.cos(SUN.lat) * Math.cos(SUN.dec)); const a = Math.acos(clamp(c, -1, 1)) * R2D / 15; return pm ? 12 + a : 12 - a; };
+    const lerp = (a, b, t) => a + (b - a) * clamp(t, 0, 1), lerp3 = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+    // light and sky colour by sun elevation: noon, golden hour, sunset glow, civil dusk, night
+    const KEYS = [[-12, [.12, .14, .24], [-.86, -.35, .04]], [-6, [.4, .36, .5], [-.62, -.05, .03]], [0, [1, .66, .5], [-.3, .28, -.05]], [6, [1, .84, .68], [-.12, .2, -.035]], [20, [1, 1, 1], [0, 0, 0]]];
+    const lightAt = e => { if (e <= KEYS[0][0]) return { L: KEYS[0][1], S: KEYS[0][2] }; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i][0]) { const [e0, l0, s0] = KEYS[i - 1], [e1, l1, s1] = KEYS[i], t = (e - e0) / (e1 - e0); return { L: lerp3(l0, l1, t), S: lerp3(s0, s1, t) }; } return { L: KEYS[4][1], S: KEYS[4][2] }; };
+    const sky = { hour: TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6, elev: 45, L: [1, 1, 1], dark: false, dim: false };
+    let LIGHT = [1, 1, 1], starBox = null, flare = null, tintShader = null, rwStRef = () => [];
+    if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
+    function applyTime(h) {
+      sky.hour = ((h % 24) + 24) % 24; const e = sunElev(sky.hour); sky.elev = e;
+      viewer.clock.currentTime = C.JulianDate.fromDate(new Date(SUN.day0 + (sky.hour - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false;
+      const { L, S } = lightAt(e); LIGHT = L; sky.L = L; sky.dark = e < -7; sky.dim = e < 4;
+      try { const sa = scene.skyAtmosphere; if (sa) { sa.brightnessShift = S[0]; sa.saturationShift = S[1]; sa.hueShift = S[2]; } } catch { }
+      // stars once the sky is dark enough
+      try { if (sky.dark && !starBox && C.SkyBox.createEarthSkyBox) starBox = C.SkyBox.createEarthSkyBox(); if (starBox) { scene.skyBox = starBox; starBox.show = e < -5; } } catch { }
+      scene.backgroundColor = C.Color.fromCssColorString(e < -8 ? '#04060d' : e < -3 ? '#0d1530' : '#5E93D8');
+      // the photo scenery has the sun baked in, so it's tinted; plain imagery gets real lighting
+      const avg = (L[0] + L[1] + L[2]) / 3;
+      try { if (tileset && (tintShader || avg < .995)) { if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: new C.Cartesian3(...L) } }, fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { material.diffuse *= u_light; }' }); tileset.customShader = tintShader; } else tintShader.setUniform('u_light', new C.Cartesian3(...L)); } } catch (e2) { console.warn('tint', e2); }
+      if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
+      if (model) { if (avg < .99) { model.color = new C.Color(Math.min(1, L[0] * 1.25), Math.min(1, L[1] * 1.25), Math.min(1, L[2] * 1.25), 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; } else model.color = C.Color.WHITE; }
+      scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
+      if (flare) flare.enabled = e > -1;
+      // runway surfaces are drawn by us, so they take the light directly (the first call comes before they exist)
+      try { for (const r of rwStRef()) { const m = r.prim?.appearance?.material; if (m) m.uniforms.color = new C.Color(L[0], L[1], L[2], 1); } } catch { }
+      dlg.dataset.tod = e < -6 ? 'night' : e < 10 ? 'golden' : 'day';
+      const tl = $('[data-todv]'); if (tl) tl.textContent = `${String(Math.floor(sky.hour)).padStart(2, '0')}:${String(Math.floor(sky.hour % 1 * 60)).padStart(2, '0')}`;
+      const tr = $('[data-todr]'); if (tr && document.activeElement !== tr) tr.value = Math.round(sky.hour * 60);
+    }
     if (scene.shadowMap) { scene.shadowMap.size = GFX === 'detailed' ? 2048 : 1024; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = GFX === 'detailed'; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch { } requestAnimationFrame(pump); })();
@@ -794,14 +823,10 @@ window.BoploSim = (() => {
     }
     root.classList.toggle('is-google', scenery === 'google');
     // light level: tint the photo scenery (it has its own baked lighting) and the imagery for dusk and night
-    if (TOD !== 'day') {
-      try { if (tileset) tileset.customShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: new C.Cartesian3(...LIGHT) } }, fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { material.diffuse *= u_light; }' }); } catch (e) { console.warn('tint', e); }
-      if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = (LIGHT[0] + LIGHT[1] + LIGHT[2]) / 3; L0.hue = TOD === 'night' ? .02 : 0; } scene.globe.enableLighting = true; }
-    }
     // visibility and cloud from the weather (METAR or a preset)
     const WX = O.weather || {};
     const visM = clamp(WX.visM || 30000, 800, 60000);
-    scene.fog.density = clamp(2.4 / visM, 5e-5, 2.2e-3); scene.fog.minimumBrightness = TOD === 'night' ? .05 : .3;
+    scene.fog.density = clamp(2.4 / visM, 5e-5, 2.2e-3);
     // objects the ground sampler must ignore. Points, lines and labels are picked as their own items, not as their
     // collection, so each one is tagged with UI and the tag is excluded too.
     const UI = 'boplo-sim-ui', exclude = [UI];
@@ -849,12 +874,12 @@ window.BoploSim = (() => {
     try {
       model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
       scene.primitives.add(model);
-      if (TOD !== 'day') { model.color = new C.Color(LIGHT[0] * 1.3, LIGHT[1] * 1.3, LIGHT[2] * 1.3, 1); model.colorBlendMode = C.ColorBlendMode.HIGHLIGHT; }
       model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); gearNode = model.getNode('gear'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
+    applyTime(sky.hour);
     const lights = tagged(scene.primitives.add(new C.PointPrimitiveCollection()));
     const navL = lights.add({ color: C.Color.fromCssColorString('#ff3344'), pixelSize: 5 }), navR = lights.add({ color: C.Color.fromCssColorString('#33ff77'), pixelSize: 5 }), strobe = lights.add({ color: C.Color.WHITE, pixelSize: 9, show: false });
-    const beacon = lights.add({ color: C.Color.fromCssColorString('#ff2a1f'), pixelSize: 7, show: false }), landL = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false }), landR = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false });
+    const beacon = lights.add({ color: C.Color.fromCssColorString('#ff2a1f'), pixelSize: 7, show: false }), landL = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false }), taxiL = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 8, show: false }), landR = lights.add({ color: C.Color.fromCssColorString('#fff6dc'), pixelSize: 11, show: false });
     let landingLights = O.mode === 'replay';
     const lines = tagged(scene.primitives.add(new C.PolylineCollection()));
     const flownLine = lines.add({ positions: [], width: 2.5, material: C.Material.fromType('Color', { color: new C.Color(1, .82, .29, .65) }) });
@@ -894,6 +919,7 @@ window.BoploSim = (() => {
     const last = landPt, sameEnd = !arrE && Math.hypot(last[0] - P[0][0], last[1] - P[0][1]) < 1500;
     // runway surfaces: sample the ground along each runway (centre and both sides) so our runway sits on the scenery
     const rwSt = rwys.map(rw => { const n = Math.max(2, Math.ceil(rw.len / 80) + 1), f = unit(rw.A, rw.B), l = leftOf(f), pts = []; for (let i = 0; i < n; i++) { const c = add(rw.A, f, rw.len * i / (n - 1)); pts.push(c, add(c, l, rw.wid * .35), add(c, l, -rw.wid * .35)); } return { rw, n, f, l, pts, h: [] }; });
+    rwStRef = () => rwSt;
     let [h0, h1] = await mostDetailed([P[0], sameEnd ? P[0] : last]);
     const rwPts = rwSt.flatMap(r => r.pts), hs = [null, null, ...(rwPts.length ? await mostDetailed(rwPts) : [])];
     if (!alive) return { close: destroy };
@@ -1024,7 +1050,14 @@ window.BoploSim = (() => {
       navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
       // beacon on the fin, landing lights in the wing leading edge
       if (AC.beacon || AC.surfaces?.rud) { const r = AC.surfaces?.rud; beacon.position = at(AC.beacon || [0, r.pivot[1] + (r.axis[1] * 1.3), r.pivot[2] + .2]); beacon.show = (st.t % 1.1) < .14 && fs.rpm > 0; }
-      landL.show = landR.show = landingLights; if (landingLights) { landL.position = at([AC.tips.left[0] * .42, AC.tips.left[1] - .05, AC.tips.left[2] + .6]); landR.position = at([AC.tips.right[0] * .42, AC.tips.right[1] - .05, AC.tips.right[2] + .6]); }
+      // landing lights: in the wing roots on airliners (from the model), in the wing leading edge on trainers; a taxi light on the nose gear.
+      // They're small in daylight and bloom at dusk and night
+      landL.show = landR.show = landingLights; taxiL.show = landingLights && !!AC.taxi && (fs.gearPos ?? 1) > .9;
+      if (landingLights) {
+        const Lp = AC.land || [AC.tips.left[0] * .42, AC.tips.left[1] - .25, AC.tips.left[2] + .9], px = sky.dark ? 13 : sky.dim ? 10 : 6;
+        landL.position = at([Math.abs(Lp[0]), Lp[1], Lp[2]]); landR.position = at([-Math.abs(Lp[0]), Lp[1], Lp[2]]); landL.pixelSize = landR.pixelSize = px;
+        if (taxiL.show) { taxiL.position = at(AC.taxi); taxiL.pixelSize = px * .75; }
+      }
       // control surfaces follow the controls (TE-down is a negative rotation about each hinge axis)
       const n = FM.p.notch[fc.flaps] || FM.p.notch[0], rud = fs.rud ?? fc.rudder;
       const want = { flap: -n.deg, ailL: -fc.aileron * 18, ailR: fc.aileron * 18, elev: fc.elevator * (AC.surfaces?.elev?.max || 22), rud: rud * 25, spoil: (fs.spoilerPos || 0) * 42 };
@@ -1701,6 +1734,15 @@ window.BoploSim = (() => {
     const miniEl = $('[data-mini]'), miniC = $('[data-minic]');
     function setMini(v, save = true) { miniOn = v; miniEl.hidden = !v; $('[data-mapb]').setAttribute('aria-pressed', String(v)); if (save) store.set('minion', v); if (v) drawMini(true); }
     $('[data-mapb]').onclick = () => setMini(!miniOn);
+    // time of day popover
+    { const pop = $('[data-tod]'), btn = $('[data-todb]'), rng = $('[data-todr]');
+      const show = v => { pop.hidden = !v; btn.setAttribute('aria-expanded', String(v)); btn.setAttribute('aria-pressed', String(v)); if (v) applyTime(sky.hour); };
+      btn.onclick = () => show(pop.hidden); $('[data-todx]').onclick = () => show(false);
+      rng.oninput = () => applyTime(rng.value / 60);
+      const P = { sunrise: () => hourFor(1, false), morning: () => Math.min(9.5, hourFor(30, false)), noon: () => 12, golden: () => hourFor(7, true), sunset: () => hourFor(.3, true), dusk: () => hourFor(-4.5, true), night: () => hourFor(-18, true) };
+      // presets glide there (the short way round the clock) so the light change plays out
+      let anim = 0; $$('[data-todp]').forEach(b => b.onclick = () => { let to = P[b.dataset.todp](); if (!Number.isFinite(to)) to = 0; const from = sky.hour; let d = ((to - from) % 24 + 36) % 24 - 12; const t0 = performance.now(); cancelAnimationFrame(anim);
+        const tick = now => { if (!alive) return; const k = Math.min(1, (now - t0) / 1400), e = k < .5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2; applyTime(from + d * e); if (k < 1) anim = requestAnimationFrame(tick); }; anim = requestAnimationFrame(tick); }); }
     $('[data-minix]').onclick = () => setMini(false);
     // shown by default on bigger screens (bottom left, like Infinite Flight's map); hidden on phones until you open it
     if (!replay) requestAnimationFrame(() => setMini(store.get('minion', !coarse), false));

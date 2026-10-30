@@ -119,6 +119,8 @@
   function buildModel(J, LV, liveryId) {
     const g = J.geo, lid = LIVERIES[liveryId] ? liveryId : J.livery;
     const AC = { glb: null, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -g.yMin, groundAtt: 0, jet: true, surfaces: {}, eye: g.eye,
+      // landing lights in the wing roots just ahead of the main gear, taxi light on the nose gear leg
+      land: [g.dia / 2 + .5, -g.dia * .36, g.mainZ + 3], taxi: [0, g.yMin + 1.25, g.noseZ + .15],
       beacon: [0, g.hgt / 2 + .1, g.mainZ + 1.5], tips: { left: g.tip, right: [-g.tip[0], g.tip[1], g.tip[2]], tail: [0, g.hgt * .1, g.tailZ + .4] },
       perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len, credit: 'Jet models from FlightGear (GPL v2), converted and repainted by Boplo' };
     AC.load = async () => { if (!AC.glb) { const g = await assemble(J, lid); AC.glb = g; AC.surfaces = Object.fromEntries(g.surfaces.map(sf => [sf.node, { ...sf, max: sf.kind === 'elev' ? 22 : sf.kind === 'rud' ? 25 : 20 }])); } return AC; };
@@ -311,7 +313,7 @@
     const out = writeGLB(parts);
     const eyeS = at(J.nose * .8), eye = [J.dia * .14, eyeS.cy + eyeS.h * .2, eyeS.z - .4];
     const fix = v => { let { a, b } = v; const flip = v.kind === 'rud' ? b[1] < a[1] : b[0] < a[0]; if (flip) [a, b] = [b, a]; const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...d); return { ...v, pivot: a, axis: d.map(x => x / l) }; };
-    return { glb: out, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -wheelY, groundAtt: 0, eye, jet: true, engines: engPos, surfaces: Object.fromEntries(Object.entries(surfaces).map(([k, v]) => [k, fix(v)])), tips: { left: [tipOut, tipY, tipZ], right: [-tipOut, tipY, tipZ], tail: [0, stabTop ? finRootY + TL.finH + .3 : at(.995).cy, at(.995).z] }, perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len };
+    const lx = semi * .2; return { glb: out, S: J.span / 3.24, hub: [0, 0, 0], wheelDrop: -wheelY, groundAtt: 0, eye, jet: true, engines: engPos, land: [lx, yAt(lx) - .2, leZ(lx) + .05], taxi: [0, wheelY + G.r * 2 + .6, noseZ + .15], surfaces: Object.fromEntries(Object.entries(surfaces).map(([k, v]) => [k, fix(v)])), tips: { left: [tipOut, tipY, tipZ], right: [-tipOut, tipY, tipZ], tail: [0, stabTop ? finRootY + TL.finH + .3 : at(.995).cy, at(.995).z] }, perf: J.perf, type: { ...J, gear: { type: 'tri' } }, livery: LV, length: J.len };
   }
 
   // side silhouette for the aircraft picker
