@@ -723,12 +723,12 @@ window.BoploSim = (() => {
         else out.push(P[0]);
         out.push(...mid);
         if (arrE) {
-          const f = arrE.dir, Ta = add(arrE.T, f, Math.max(arrE.disp, 0)), FA = add(Ta, f, -5500), last = out[out.length - 1];
+          const f = arrE.dir, Ta = add(arrE.T, f, Math.max(arrE.disp, 0)), FIN = O.jet ? 9000 : 5500, FA = add(Ta, f, -FIN), last = out[out.length - 1];
           const inc = unit(last, FA), turn = Math.acos(clamp(inc[0] * f[0] + inc[1] * f[1], -1, 1)) * R2D;
           // already established on the extended centreline (a practice final): fly straight in
           const back = (Ta[0] - last[0]) * f[0] + (Ta[1] - last[1]) * f[1], lat = Math.abs((last[0] - Ta[0]) * f[1] - (last[1] - Ta[1]) * f[0]);
           if (back > 1200 && back < 6500 && lat < 400) { out.push(Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0); }
-          else { if (turn > 65) { const l = leftOf(f), side = Math.sign((last[0] - Ta[0]) * l[0] + (last[1] - Ta[1]) * l[1]) || 1; out.push(add(add(Ta, f, -2500), l, side * 3200), add(add(Ta, f, -7000), l, side * 1500)); }
+          else { if (turn > 65) { const l = leftOf(f), side = Math.sign((last[0] - Ta[0]) * l[0] + (last[1] - Ta[1]) * l[1]) || 1; out.push(add(add(Ta, f, -FIN * .45), l, side * 3200), add(add(Ta, f, -FIN * 1.27), l, side * 1500)); }
           out.push(FA, Ta, add(arrE.far, f, -60)); rollEnd = arrE.rw.len - 60 - Math.max(arrE.disp, 0); }
         } else out.push(P[P.length - 1]);
         P = out.filter((p, i, a) => !i || dist2(p, a[i - 1]) > 15);
@@ -1608,7 +1608,7 @@ window.BoploSim = (() => {
       autoNow = auto;
       const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.lnav && AP.vnav));
       const t = { phase: st.ground ? (st.landedOnce ? 'rollout' : 'takeoff') : 'air', trk: routeTrk, bankMax: st.agl < 60 && approach ? 6 : 25, approach };
-      if (st.ground) { const [ax, az] = path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
+      if (st.ground) { const [ax, az] = st.landedOnce && arrE && remain < 600 ? add(arrE.far, arrE.dir, 2500) : path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
       if (!replay && AP.hdg != null && !st.ground) { t.trk = AP.hdg; t.useHdg = true; }
       // vertical: route profile, or the selected altitude
       let ta = prof(pr.s + Math.max(st.v, 20) * 5);
@@ -1629,7 +1629,7 @@ window.BoploSim = (() => {
       else if (!replay) t.flaps = undefined;
       flareNow = t.phase === 'flare';
       if (!replay && !auto && approach && !st.ground && st.agl < 200 * FT && remain < 2500) { setAP(false); tipNow = 'Autopilot disconnected at 200 ft. You have control: land the aircraft'; tipUntil = performance.now() + 4000; return; }
-      const trim0 = fc.trim, park0 = fc.parking;
+      const trim0 = fc.trim, park0 = auto && st.ground && !st.landedOnce ? false : fc.parking; // flying it all: it releases the parking brake to go
       BoploPhysics.pilot(FM, t, dt);
       // hand back every axis the autopilot isn't flying
       if (!replay) {
@@ -1655,11 +1655,12 @@ window.BoploSim = (() => {
       const far = jet ? 30000 : 12000, slow = jet ? 16000 : 7000, gearAt = jet ? 9500 : 4000;
       if (st.landedOnce) return;
       // after take-off: gear up once climbing away (unless the runway is already close)
-      if (AC.jet && fc.gear && !t.approach && remain > gearAt * 1.5 && st.agl > 30 && st.vs > 1 && st.airT < 180) { fc.gear = 0; say('Autopilot: positive climb, gear up'); return; }
+      if (AC.jet && fc.gear && !t.approach && remain > gearAt * 1.5 && st.agl > 30 && st.vs > 1 && st.airT < 180) { fc.gear = 0; t.flaps = fc.flaps; say('Autopilot: positive climb, gear up'); return; }
       if (remain > far) {
         // flaps up as the speed builds
         t.flaps = st.agl > 250 || ias > (P0.vfe || 999) * .9 ? 0 : fc.flaps;
         if (st.agl > 250 && fc.flaps) say('Autopilot: flaps up, climbing to cruise');
+        else if (st.agl > 250 && Math.abs(st.vs) < 2) say('Autopilot: cruising. It will descend and slow down for the approach by itself');
         return;
       }
       // descent and approach: slow in steps, flaps as each speed allows, gear down before the final approach fix
@@ -1680,6 +1681,8 @@ window.BoploSim = (() => {
       else say(`Autopilot: descending, slowing to ${Math.round(spd)} kt`);
     }
     function autoAfter() {
+      // after touchdown: autobrake and reverse thrust down to taxi speed
+      if (st.ground && st.landedOnce) { const ias = st.v / KT; fc.brake = ias > 15 ? .85 : .5; fc.throttle = AC.jet && fs.revPos > .5 && ias > 60 ? .75 : 0; thrTarget = 0; }
       // stopped on the runway: park it and hand back
       if (st.ground && st.landedOnce && st.v / KT < 3 && !autoStopped) { autoStopped = true; fc.reverse = false; fc.spoiler = 0; fc.parking = true; fc.throttle = 0; thrTarget = 0; setAP(false); tipNow = 'Landed and stopped. Parking brake set, autopilot off'; tipUntil = performance.now() + 5000; }
     }
