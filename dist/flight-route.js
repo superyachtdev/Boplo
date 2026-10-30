@@ -111,8 +111,10 @@ window.BoploRoute = (() => {
     map.addControl(new ML.AttributionControl({ compact: true, customAttribution: 'Airports: <a href="https://ourairports.com" target="_blank" rel="noopener">OurAirports</a>' }), 'bottom-left');
     map.addControl(new ML.NavigationControl({ showCompass: false }), 'top-right');
     map.touchZoomRotate?.disableRotation?.();
-    await new Promise(res => { if (map.isStyleLoaded()) return res(); map.once('load', res); setTimeout(res, 10000); });
+    // wait for the chart style (slow connections can take a while); adding layers before it's ready throws
+    for (let i = 0; i < 160 && dlg.isConnected && !map.isStyleLoaded(); i++) await new Promise(r => setTimeout(r, 250));
     if (!dlg.isConnected) return;
+    if (!map.isStyleLoaded()) { $('[data-rmap]').insertAdjacentHTML('beforeend', '<p class="rp-err">The map didn’t load. Check your connection and open it again.</p>'); return; }
 
     // sources and layers
     map.addSource('rp-aps', { type: 'geojson', data: fc([]) });
