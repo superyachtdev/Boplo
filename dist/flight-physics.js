@@ -234,7 +234,9 @@
     const desBank = clamp(err * 1.3, -bmax, bmax);
     c.aileron = clamp((desBank - s.bank) * .06 - s.w[0] * R2D * .012, -1, 1);
     // vertical: vertical speed from the altitude error, pitch from the vertical speed error
-    let desVS = t.vs != null ? t.vs : clamp(((t.alt ?? s.alt) - s.alt) * .12, -(t.vsDn ?? 4), t.vsUp ?? 3.5);
+    // climb and descent rates the type can actually manage: an airliner climbs at 2,000–3,000 fpm, a trainer at 500–700
+    const up = t.vsUp ?? (p.jet ? 12.7 : 3.6), dn = t.vsDn ?? (p.jet ? 11 : 4.5);
+    let desVS = t.vs != null ? t.vs : clamp(((t.alt ?? s.alt) - s.alt) * (p.jet ? .09 : .12), -dn, up);
     if (t.phase === 'flare') desVS = -Math.max(.45, s.agl * .3);
     // initial climb: keep climbing away from the runway at full power before following the profile
     const initial = t.phase === 'air' && !t.approach && s.airT < 25 && s.agl < 60;

@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=19'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=20'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -472,12 +472,11 @@ window.BoploSim = (() => {
         <div class="pfd-lever" data-flever><span>Flaps</span><div class="pfd-lv-track" data-flvtrack></div><b data-pfflaps>UP</b></div>
         <div class="pfd-fl"><span>Trim</span><button type="button" data-pf="trimup" aria-label="Trim nose up">▲</button><div class="pfd-trimbar"><i data-pftrimi></i></div><b data-pftrim>0</b><button type="button" data-pf="trimdn" aria-label="Trim nose down">▼</button></div>
       </div>
-      <div class="pfd-dock" role="toolbar" aria-label="Aircraft controls">
+      <div class="pfd-btns" role="toolbar" aria-label="Aircraft controls" aria-orientation="vertical">
         ${jet ? '<button type="button" class="pfd-dk" data-pf="gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v7M8 10h8M12 10v3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b data-pfgear>Down</b><span>Gear</span></button><button type="button" class="pfd-dk" data-pf="spoiler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15l9-3 9 3M6 13.5l2.5-5M15.5 8.5l2.5 5"/></svg><b data-pfsp>In</b><span>Spoilers</span></button><button type="button" class="pfd-dk" data-pf="rev"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M9 8l-4 4 4 4M15 8l4 4-4 4"/></svg><b data-pfrev>Off</b><span>Reverse</span></button>' : ''}
         <button type="button" class="pfd-dk" data-pf="brake"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M4 8a9 9 0 0 1 3-3.5M20 8a9 9 0 0 0-3-3.5"/></svg><b>Hold</b><span>Brakes</span></button>
         <button type="button" class="pfd-dk" data-pf="park"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/></svg><b data-pfpark>Off</b><span>Park</span></button>
         <button type="button" class="pfd-dk" data-pf="lights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg><b data-pflt>Off</b><span>Lights</span></button>
-        <i class="pfd-dk-sep"></i>
         <button type="button" class="pfd-dk pfd-ap" data-pf="appanel" aria-expanded="false"><b class="ap-t">A/P</b><span data-pfap>Off</span></button>
         <button type="button" class="pfd-dk" data-pf="gates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="6" height="12" rx="1"/><rect x="14" y="6" width="6" height="12" rx="1"/></svg><b data-pfgt>Off</b><span>Gates</span></button>
         ${jet ? '' : '<button type="button" class="pfd-dk" data-pf="panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b>Gauges</b><span>Panel</span></button>'}
@@ -507,7 +506,7 @@ window.BoploSim = (() => {
         </div>
       </header>
       <div class="sim-warn" data-warn role="status" aria-live="assertive"></div>
-      <div class="sim-mini" data-mini hidden role="img" aria-label="Map of your route"><canvas data-minic></canvas><div class="sim-mini-z"><button type="button" data-miniz="-1" aria-label="Zoom out">−</button><b data-minir>10 NM</b><button type="button" data-miniz="1" aria-label="Zoom in">+</button></div></div>
+      <div class="sim-nmap" data-mini hidden role="region" aria-label="Map of your route"><canvas data-minic></canvas><button type="button" class="sim-nmap-x" data-minix aria-label="Hide the map">×</button><div class="sim-nmap-z"><button type="button" data-miniz="-1" aria-label="Zoom out">−</button><b data-minir>10 NM</b><button type="button" data-miniz="1" aria-label="Zoom in">+</button></div></div>
       <div class="sim-radio" data-radio hidden role="region" aria-label="Radio" aria-live="polite">
         <div class="sr-top"><span class="sr-k" data-rk>Radio · your call</span><button type="button" class="sr-x" data-rskip aria-label="Skip this call">Skip</button></div>
         <b data-rtitle></b><small data-rhint></small>
@@ -551,12 +550,13 @@ window.BoploSim = (() => {
       <canvas class="sim-six" data-six aria-hidden="true"></canvas>
       <div class="ap-panel" data-apbar hidden role="dialog" aria-label="Autopilot">
         <div class="ap-head"><b>Autopilot</b><button type="button" class="ap-master" data-apmaster aria-pressed="false"><i></i><span data-apms>Off</span></button><button type="button" class="ap-x" data-apclose aria-label="Close autopilot panel">×</button></div>
-        <div class="ap-row ap-nav"><button type="button" class="ap-tog" data-apm="nav" aria-pressed="true">NAV</button><small>Follow the route, climb and descend on its profile</small></div>
+        <div class="ap-row ap-nav"><button type="button" class="ap-tog" data-apm="lnav" aria-pressed="false">LNAV</button><small>Steer along the route</small></div>
+        <div class="ap-row ap-nav"><button type="button" class="ap-tog" data-apm="vnav" aria-pressed="false">VNAV</button><small>Climb and descend on the route’s profile</small></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="hdg" aria-pressed="false">HDG</button><button type="button" class="ap-st" data-apd="hdg" data-d="-5" aria-label="HDG down">−</button><b data-apv="hdg">—</b><button type="button" class="ap-st" data-apd="hdg" data-d="5" aria-label="HDG up">+</button></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="alt" aria-pressed="false">ALT</button><button type="button" class="ap-st" data-apd="alt" data-d="-500" aria-label="ALT down">−</button><b data-apv="alt">—</b><button type="button" class="ap-st" data-apd="alt" data-d="500" aria-label="ALT up">+</button></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="vs" aria-pressed="false">V/S</button><button type="button" class="ap-st" data-apd="vs" data-d="-100" aria-label="V/S down">−</button><b data-apv="vs">—</b><button type="button" class="ap-st" data-apd="vs" data-d="100" aria-label="V/S up">+</button></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="spd" aria-pressed="false">SPD</button><button type="button" class="ap-st" data-apd="spd" data-d="-5" aria-label="SPD down">−</button><b data-apv="spd">—</b><button type="button" class="ap-st" data-apd="spd" data-d="5" aria-label="SPD up">+</button></div>
-        <small class="ap-note">Each mode holds what you set. Turn a mode off to hand that axis back to NAV. Moving the controls firmly disconnects the autopilot.</small>
+        <small class="ap-note">Each mode flies one thing. Anything without a mode is yours: LNAV on its own steers while you fly the pitch and power. A firm stick input takes that axis back.</small>
       </div>
       <div class="sim-replay" data-replaybar hidden>
         <button type="button" class="sim-b" data-play aria-label="Play or pause"><svg viewBox="0 0 24 24"><path data-pp2 d="M8 5v14M16 5v14"/></svg></button>
@@ -1126,7 +1126,7 @@ window.BoploSim = (() => {
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
-    const AIM = arrE ? Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3) : 0, ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = arrE ? Math.max(120, rollEnd - AIM) : Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : 500 * FT / NM, DG = PRF ? Math.tan(3 * D2R) : circuit ? 0.06 : 330 * FT / NM;
+    const AIM = arrE ? Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3) : 0, ROLL = circuit ? 420 : 500, LROLL = 380, TDZ = arrE ? Math.max(120, rollEnd - AIM) : Math.min(circuit ? 520 : 650, L * .12), CG = circuit ? 0.09 : (AC.jet ? 700 : 500) * FT / NM, DG = PRF ? Math.tan(3 * D2R) : circuit ? 0.06 : 330 * FT / NM;
     const groundStart = O.start !== 'air', landEnd = O.land !== false;
     const prof = s => { const up = groundStart ? g0 + Math.max(0, s - ROLL) * CG : cruise, dn = landEnd ? g1 + Math.max(0, L - TDZ - s) * DG : cruise; return Math.min(cruise, up, dn); };
 
@@ -1221,7 +1221,10 @@ window.BoploSim = (() => {
     fc.autoRudder = store.get('autorudder', true);
     let showSix = store.get('six2', false); // the glass display is the default; the round gauges are one tap away
     // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
-    const AP = { nav: true, hdg: null, alt: null, spd: null, vs: null }; let apPanel = false;
+    // autopilot modes work on separate axes, as in Infinite Flight: lateral (LNAV follows the route, or HDG), vertical
+    // (VNAV follows the route profile, or ALT with an optional V/S rate, or V/S alone) and speed (SPD). Axes without a mode stay yours.
+    const AP = { lnav: false, vnav: false, hdg: null, alt: null, spd: null, vs: null }; let apPanel = false;
+    const apLat = () => replay || (apOn && (AP.lnav || AP.hdg != null)), apVert = () => replay || (apOn && (AP.vnav || AP.alt != null || AP.vs != null)), apSpd = () => replay || (apOn && AP.spd != null);
     const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Flyby', 0, 0, 0], ['Tower', 0, 0, 0], ['Orbit', 1.25, 1.3, 9], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
     let flyAt = null;
     const orb = { yaw: 0, pitch: 0, zoom: 1 }; let towerAt = null;
@@ -1332,7 +1335,11 @@ window.BoploSim = (() => {
       if (rudV != null) y = rudV;
       else if (stickV && fs.ground) y = stickV.roll; // on the ground the stick steers the nosewheel too, as there's no rudder slider on a phone
       if (invert) p = -p;
-      if (apOn && !replay && (Math.abs(r) > .35 || Math.abs(p) > .35)) { setAP(false); tipNow = 'Autopilot off: you have control'; tipUntil = performance.now() + 2500; }
+      // a firm input on an axis the autopilot is flying takes that axis back (the other modes stay on)
+      if (apOn && !replay) {
+        if (Math.abs(r) > .45 && apLat()) { AP.lnav = false; AP.hdg = null; tipNow = 'Lateral autopilot off: you have the roll'; tipUntil = performance.now() + 2200; apAfter(); }
+        if (Math.abs(p) > .45 && apVert()) { AP.vnav = false; AP.alt = AP.vs = null; tipNow = 'Vertical autopilot off: you have the pitch'; tipUntil = performance.now() + 2200; apAfter(); }
+      }
       // keyboard input ramps for smoothness; analogue inputs pass straight through
       const ramp = (cur, tgt, rr = 4) => cur + clamp(tgt - cur, -dt * rr * CS.keyRate, dt * rr * CS.keyRate);
       // keys that don't spring back hold their deflection (like trimming the yoke by hand)
@@ -1340,10 +1347,11 @@ window.BoploSim = (() => {
       const analog = stickV || pad || tilt || (CS.mouse && mouseV);
       const expo = v => { const a = Math.abs(v), e = CS.expo; return Math.sign(v) * ((1 - e) * a + e * a * a * a); };
       ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad || (stickV && fs.ground) ? expo(y) : ramp(ctl.yaw, y, 3);
+      ctl.brake = brake;
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       // auto-rudder on the runway: steer for a point on the centreline ahead (like a pilot looking down the runway),
       // so the take-off and landing rolls stay straight; your own rudder input always takes priority
-      if (!apOn && !replay && fc.autoRudder && fs.ground && Math.abs(ctl.yaw) < .05 && fs.gs > 1.5) {
+      if ((!apOn || !apLat()) && !replay && fc.autoRudder && fs.ground && Math.abs(ctl.yaw) < .05 && fs.gs > 1.5) {
         const r = rwSt.find(q => { const dx = fs.x - q.rw.A[0], dz = fs.z - q.rw.A[1], u = dx * q.f[0] + dz * q.f[1], w = dx * q.l[0] + dz * q.l[1]; return u > -10 && u < q.rw.len + 10 && Math.abs(w) < q.rw.wid / 2 + 8; });
         if (r) {
           const sgn = Math.cos((fs.hdg - Math.atan2(r.f[0], r.f[1]) * R2D) * D2R) >= 0 ? 1 : -1, dir = [r.f[0] * sgn, r.f[1] * sgn];
@@ -1393,7 +1401,7 @@ window.BoploSim = (() => {
       const pr = path.project(st.x, st.z), vk = st.v / KT, remain = L - pr.s;
       const look = clamp(st.gs * 7, 180, 900), [tx, tz] = path.at(pr.s + look);
       const routeTrk = Math.atan2(tx - st.x, tz - st.z) * R2D;
-      const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.hdg == null && AP.alt == null && AP.vs == null));
+      const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.lnav && AP.vnav));
       const t = { phase: st.ground ? (st.landedOnce ? 'rollout' : 'takeoff') : 'air', trk: routeTrk, bankMax: st.agl < 60 && approach ? 6 : 25, approach };
       if (st.ground) { const [ax, az] = path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
       if (!replay && AP.hdg != null && !st.ground) { t.trk = AP.hdg; t.useHdg = true; }
@@ -1410,11 +1418,19 @@ window.BoploSim = (() => {
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
       // like a real autopilot, it leaves the flaps to you; and once you pick your own modes, the throttle is yours unless SPD is on
-      if (!replay) { t.flaps = undefined; if (AP.spd == null && (AP.hdg != null || AP.alt != null || AP.vs != null)) { t.thr = thrTarget; t.spd = undefined; } }
+      if (!replay) t.flaps = undefined; // like a real autopilot, it leaves the flaps to you
       flareNow = t.phase === 'flare';
       if (!replay && approach && !st.ground && st.agl < 200 * FT && remain < 2500) { setAP(false); tipNow = 'Autopilot disconnected at 200 ft. You have control: land the aircraft'; tipUntil = performance.now() + 4000; return; }
+      const trim0 = fc.trim, park0 = fc.parking;
       BoploPhysics.pilot(FM, t, dt);
-      thrTarget = fc.throttle;
+      // hand back every axis the autopilot isn't flying
+      if (!replay) {
+        if (!apLat()) { fc.aileron = ctl.roll; fc.rudder = ctl.yaw; }
+        if (!apVert()) { fc.elevator = ctl.pitch; fc.trim = trim0; }
+        if (!apSpd()) fc.throttle = thrTarget;
+        fc.brake = apSpd() ? Math.max(fc.brake, ctl.brake || 0) : (ctl.brake || 0); fc.parking = park0;
+      }
+      if (apSpd()) thrTarget = fc.throttle;
     }
 
     // Photo tiles load coarse first, and a coarse tile can be tens of metres off. Once the detailed tiles around a runway
@@ -1506,14 +1522,14 @@ window.BoploSim = (() => {
     let ibN = 0, ibSel = [], ibCells = [];
     function buildIbar() {
       const w = root.clientWidth, n = w < 560 || root.clientHeight < 520 ? 4 : w < 980 ? 6 : 8; if (n === ibN) return; ibN = n;
-      const def = { 4: ['gs', 'vs', 'next', 'dest'], 6: ['gs', 'alt', 'vs', 'hdg', 'next', 'dest'], 8: ['ias', 'gs', 'alt', 'vs', 'hdg', 'next', 'ete', 'dest'] }[n];
-      ibSel = store.get('ibar' + n, def).filter(k => IB[k] && IB_KEYS.includes(k)); while (ibSel.length < n) ibSel.push(def.find(k => !ibSel.includes(k)) || 'gs');
+      const def = { 4: ['ias', 'alt', 'vs', 'next'], 6: ['ias', 'gs', 'alt', 'vs', 'hdg', 'next'], 8: ['ias', 'gs', 'alt', 'vs', 'hdg', 'next', 'ete', 'dest'] }[n];
+      ibSel = store.get('ibar2-' + n, def).filter(k => IB[k] && IB_KEYS.includes(k)); while (ibSel.length < n) ibSel.push(def.find(k => !ibSel.includes(k)) || 'gs');
       PE.ibar.innerHTML = ibSel.map((k, i) => `<button type="button" class="ib" data-ibi="${i}" aria-label="${esc(IB[k][0])}, tap to change"><span>${esc(IB[k][0])}</span><b>—</b></button>`).join('');
       ibCells = [...PE.ibar.querySelectorAll('.ib')].map(b => ({ b, l: b.firstChild, v: b.lastChild }));
       ibCells.forEach((c, i) => c.b.onclick = () => {
         const cur = IB_KEYS.indexOf(ibSel[i]); let nx = cur;
         for (let j = 1; j <= IB_KEYS.length; j++) { const k = IB_KEYS[(cur + j) % IB_KEYS.length]; if (!ibSel.includes(k)) { nx = IB_KEYS.indexOf(k); break; } }
-        ibSel[i] = IB_KEYS[nx]; store.set('ibar' + ibN, ibSel); c.l.textContent = IB[ibSel[i]][0]; c.b.setAttribute('aria-label', `${IB[ibSel[i]][0]}, tap to change`); c.v.textContent = IB[ibSel[i]][1]();
+        ibSel[i] = IB_KEYS[nx]; store.set('ibar2-' + ibN, ibSel); c.l.textContent = IB[ibSel[i]][0]; c.b.setAttribute('aria-label', `${IB[ibSel[i]][0]}, tap to change`); c.v.textContent = IB[ibSel[i]][1]();
       });
     }
     // flap lever on the right edge: one stop per notch, tap a stop to move there
@@ -1617,7 +1633,7 @@ window.BoploSim = (() => {
       if (showSix || cockpit()) {
         const [cx2, cz2] = path.at(pr.s + 400), crs = norm360(Math.atan2(cx2 - st.x, cz2 - st.z) * R2D);
         drawSixPack(H.six, { ias: st.v / KT, pitch: st.pitch, bank: st.bank, altFt: (st.alt - geoN) / FT, vsFpm: st.vs / FT * 60, hdg: st.hdg, turn: fs.turn || 0, slip: fs.slip || 0,
-          bug: AP.hdg != null && apOn ? AP.hdg : null, crs: replay || AP.nav ? crs : null, dev: (pr.side > 0 ? 1 : -1) * pr.d / NM / (circuit ? .5 : 2),
+          bug: AP.hdg != null && apOn ? AP.hdg : null, crs: replay || AP.lnav ? crs : null, dev: (pr.side > 0 ? 1 : -1) * pr.d / NM / (circuit ? .5 : 2),
           vs: FM.p.vs, vso: FM.p.vso || FM.p.vs, vfe: FM.p.vfe, vno: FM.p.vno, vne: FM.p.vne, qnh: INHG ? '29.92' : '1013', rpm: fs.rpm, thr: fs.power, flaps: FM.notches > 1 ? FM.flapLabel() : '—', trim: fc.trim,
           park: fc.parking, brake: fc.brake > .05, carb: fc.carbHeat, autoRud: fc.autoRudder, stall: st.stall, ap: apOn });
       }
@@ -1640,28 +1656,37 @@ window.BoploSim = (() => {
     function apUI() {
       const bar = $('[data-apbar]'); bar.hidden = !apPanel || replay;
       $('[data-pf="appanel"]')?.setAttribute('aria-expanded', String(apPanel && !replay));
-      $$('[data-apm]').forEach(b => { const m = b.dataset.apm; b.setAttribute('aria-pressed', String(apOn && (m === 'nav' ? AP.hdg == null && AP.alt == null && AP.vs == null : AP[m] != null))); });
-      const ms = $('[data-apmaster]'); ms.setAttribute('aria-pressed', String(apOn)); $('[data-apms]').textContent = apOn ? 'Engaged' : 'Off';
-      const cur = m => m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
-      const v = m => AP[m] ?? cur(m);
+      const on = m => m === 'lnav' || m === 'vnav' ? AP[m] : AP[m] != null;
+      $$('[data-apm]').forEach(b => b.setAttribute('aria-pressed', String(apOn && on(b.dataset.apm))));
+      const ms = $('[data-apmaster]'); ms.setAttribute('aria-pressed', String(apOn)); $('[data-apms]').textContent = apOn ? 'On' : 'Off';
+      const v = m => AP[m] ?? apCur(m);
       $('[data-apv="hdg"]').textContent = pad3(v('hdg')) + '°'; $('[data-apv="alt"]').textContent = v('alt').toLocaleString('en-GB') + ' ft';
       $('[data-apv="spd"]').textContent = v('spd') + ' kt'; { const x = v('vs'); $('[data-apv="vs"]').textContent = `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toLocaleString('en-GB')} fpm`; }
-      $$('[data-apv]').forEach(e => e.classList.toggle('sel', AP[e.dataset.apv] != null));
+      $$('[data-apv]').forEach(e => e.classList.toggle('sel', apOn && AP[e.dataset.apv] != null));
     }
-    function setAP(v) { apOn = v; if (v) { FM.ap = null; } $('[data-ap]').setAttribute('aria-pressed', String(v)); $('[data-ap]').classList.toggle('on', v); apUI(); }
+    const apCur = m => m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
+    // after a mode change: the autopilot is on while any mode is
+    function apAfter() { const any = AP.lnav || AP.vnav || AP.hdg != null || AP.alt != null || AP.vs != null || AP.spd != null; if (any !== apOn) setAP(any, true); else { FM.ap = null; apUI(); } }
+    function setAP(v, keep) {
+      apOn = v;
+      if (v && !keep && !replay && !(AP.lnav || AP.vnav || AP.hdg != null || AP.alt != null || AP.vs != null || AP.spd != null)) { AP.lnav = true; AP.vnav = true; AP.spd = st.ground ? Math.round(PF.cruise * .9) : apCur('spd'); }
+      if (!v && !keep) { AP.lnav = AP.vnav = false; AP.hdg = AP.alt = AP.vs = AP.spd = null; }
+      if (v) FM.ap = null;
+      $('[data-ap]').setAttribute('aria-pressed', String(v)); $('[data-ap]').classList.toggle('on', v); apUI();
+    }
     $$('[data-apm]').forEach(b => b.onclick = () => {
-      const m = b.dataset.apm;
-      if (m === 'nav') { AP.hdg = AP.alt = AP.vs = null; AP.nav = true; }
-      else if (AP[m] != null) AP[m] = null;
-      else AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
-      if (!apOn) setAP(true); FM.ap = null; apUI();
+      if (replay) return; const m = b.dataset.apm;
+      if (m === 'lnav' || m === 'vnav') { AP[m] = !(apOn && AP[m]); if (AP[m]) { if (m === 'lnav') AP.hdg = null; else AP.alt = AP.vs = null; } }
+      else if (apOn && AP[m] != null) AP[m] = null;
+      else { AP[m] = apCur(m); if (m === 'hdg') AP.lnav = false; if (m === 'alt' || m === 'vs') AP.vnav = false; }
+      if (!apOn) { apOn = true; FM.ap = null; for (const k of ['lnav', 'vnav']) if (k !== m && !AP[k]) AP[k] = false; } apAfter();
     });
     // − / + step the value; hold to keep stepping
     $$('[data-apd]').forEach(b => {
-      const stepOnce = () => { const m = b.dataset.apd; let dlt = +b.dataset.d; if (m === 'alt' && !AC.jet) dlt = Math.sign(dlt) * 100;
-        if (AP[m] == null) AP[m] = m === 'hdg' ? Math.round(st.hdg) : m === 'alt' ? Math.round((st.alt - geoN) / FT / 100) * 100 : m === 'vs' ? Math.round(st.vs / FT * 60 / 100) * 100 : Math.round(st.v / KT);
-        AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.3), PF.vmax) : m === 'vs' ? clamp(AP[m] + dlt, AC.jet ? -6000 : -2000, AC.jet ? 6000 : 2000) : Math.max(0, AP[m] + dlt);
-        if (!apOn) setAP(true); FM.ap = null; apUI(); };
+      const stepOnce = () => { if (replay) return; const m = b.dataset.apd; let dlt = +b.dataset.d; if (m === 'alt' && !AC.jet) dlt = Math.sign(dlt) * 100;
+        if (AP[m] == null) { AP[m] = apCur(m); if (m === 'hdg') AP.lnav = false; if (m === 'alt' || m === 'vs') AP.vnav = false; }
+        AP[m] = m === 'hdg' ? norm360(AP[m] + dlt) : m === 'spd' ? clamp(AP[m] + dlt, Math.round(PF.vs * 1.2), Math.round(PF.vmax)) : m === 'vs' ? clamp(AP[m] + dlt, AC.jet ? -6000 : -2000, AC.jet ? 6000 : 2000) : Math.max(0, AP[m] + dlt);
+        if (!apOn) { apOn = true; FM.ap = null; } apAfter(); };
       let rep = 0, hold = 0; const stop = () => { clearTimeout(hold); clearInterval(rep); };
       b.onpointerdown = e => { e.preventDefault(); stepOnce(); hold = setTimeout(() => { rep = setInterval(stepOnce, 90); }, 380); };
       b.onpointerup = b.onpointerleave = b.onpointercancel = stop; cleanups.push(stop);
@@ -1674,8 +1699,11 @@ window.BoploSim = (() => {
     const MINI_R = [1, 2, 5, 10, 25, 50, 100];
     let miniOn = false, miniRi = store.get('minir', 3), miniT = 0;
     const miniEl = $('[data-mini]'), miniC = $('[data-minic]');
-    function setMini(v) { miniOn = v; miniEl.hidden = !v; $('[data-mapb]').setAttribute('aria-pressed', String(v)); if (v) drawMini(true); }
+    function setMini(v, save = true) { miniOn = v; miniEl.hidden = !v; $('[data-mapb]').setAttribute('aria-pressed', String(v)); if (save) store.set('minion', v); if (v) drawMini(true); }
     $('[data-mapb]').onclick = () => setMini(!miniOn);
+    $('[data-minix]').onclick = () => setMini(false);
+    // shown by default on bigger screens (bottom left, like Infinite Flight's map); hidden on phones until you open it
+    if (!replay) requestAnimationFrame(() => setMini(store.get('minion', !coarse), false));
     $$('[data-miniz]').forEach(b => b.onclick = () => { miniRi = clamp(miniRi - +b.dataset.miniz, 0, MINI_R.length - 1); store.set('minir', miniRi); drawMini(true); });
     function drawMini(force) {
       if (!miniOn) return; const now = performance.now(); if (!force && now - miniT < 90) return; miniT = now;
