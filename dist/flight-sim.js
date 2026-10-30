@@ -1074,7 +1074,7 @@ window.BoploSim = (() => {
     // wait for the scenery at the start, then read the ground height there (most detailed)
     const mostDetailed = async pts => {
       try {
-        if (tileset) { const r = await Promise.race([scene.sampleHeightMostDetailed(pts.map(p => carto(...p)), exclude), new Promise(res => setTimeout(() => res(null), 15000))]); return r ? r.map(c => Number.isFinite(c?.height) ? c.height : null) : pts.map(() => null); }
+        if (tileset) { const r = await Promise.race([scene.sampleHeightMostDetailed(pts.map(p => carto(...p)), exclude), new Promise(res => setTimeout(() => res(null), 15000))]); return r ? r.map(c => Number.isFinite(c?.height) && c.height > -500 && c.height < 9000 ? c.height : null) : pts.map(() => null); } // (a bad sample can come back kilometres underground)
         for (let i = 0; i < 60; i++) { const v = pts.map(p => { const [lng, lat] = F.ll(...p); return scene.terrainProvider.sampleAt(lng, lat); }); if (v.every(x => x != null)) return v; await new Promise(r => setTimeout(r, 200)); }
         return pts.map(() => null);
       } catch { return pts.map(() => null); }
