@@ -796,10 +796,12 @@ window.BoploSim = (() => {
             float h = dot(dir, up), s = max(dot(dir, sun), 0.0);
             vec3 sunH = normalize(sun - up * dot(sun, up)), dirH = normalize(dir - up * h);
             float toward = pow(max(dot(dirH, sunH), 0.0), 1.5);
-            vec3 zen = vec3(0.13, 0.22, 0.48), mid = vec3(0.42, 0.42, 0.66), away = vec3(0.86, 0.6, 0.66), warm = vec3(1.0, 0.56, 0.26), gold = vec3(1.0, 0.86, 0.58);
+            vec3 zen = vec3(0.12, 0.24, 0.52), mid = vec3(0.34, 0.42, 0.68), away = vec3(0.82, 0.62, 0.66), warm = vec3(1.0, 0.58, 0.28), gold = vec3(1.0, 0.86, 0.58);
             vec3 hor = mix(away, warm, toward);
-            vec3 c = mix(hor, mid, smoothstep(0.0, 0.16, h)); c = mix(c, zen, smoothstep(0.12, 0.6, h));
+            vec3 c = mix(hor, mid, smoothstep(0.0, 0.1, h)); c = mix(c, zen, smoothstep(0.07, 0.38, h));
             c += gold * (pow(s, 48.0) * 1.2 + pow(s, 8.0) * 0.35) * (1.0 - smoothstep(0.0, 0.35, h));
+            // below the horizon (scenery not loaded that far yet): hazy distant land, not sky
+            c = mix(c, mix(vec3(0.3, 0.29, 0.36), hor * 0.6, 0.35), smoothstep(0.0, -0.03, h));
             return c;
           }
           void main() { vec4 cc = texture(colorTexture, v_textureCoordinates); vec3 base = cc.rgb;

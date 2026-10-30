@@ -71,7 +71,7 @@
   // merge each part into one mesh with smooth normals, and write a glTF binary
   function writeGLB(parts) {
     const merge = list => { const pos = [], col = [], idx = []; for (const m of list) { const o = pos.length / 3; for (const v of m.pos) pos.push(v); for (const v of m.col) col.push(v); for (const i of m.idx) idx.push(i + o); } const nor = new Float32Array(pos.length); for (let i = 0; i < idx.length; i += 3) { const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3; const u = [pos[b] - pos[a], pos[b + 1] - pos[a + 1], pos[b + 2] - pos[a + 2]], v = [pos[c] - pos[a], pos[c + 1] - pos[a + 1], pos[c + 2] - pos[a + 2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; for (const k of [a, b, c]) { nor[k] += n[0]; nor[k + 1] += n[1]; nor[k + 2] += n[2]; } } for (let i = 0; i < nor.length; i += 3) { const l = Math.hypot(nor[i], nor[i + 1], nor[i + 2]) || 1; nor[i] /= l; nor[i + 1] /= l; nor[i + 2] /= l; } return { pos: new Float32Array(pos), nor, col: new Float32Array(col), idx: new Uint32Array(idx) }; };
-    const mat = (rough, metal, extra = {}) => ({ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: metal, roughnessFactor: rough }, doubleSided: true, ...extra });
+    const mat = (rough, metal, extra = {}) => ({ pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: metal, roughnessFactor: rough }, doubleSided: true, ...(metal < .1 && rough < .4 ? { extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .06 } } } : {}), ...extra });
     const MATS = { paint: mat(.26, .04), metal: mat(.3, .85), matte: mat(.7, .15), glass: mat(.06, .3), gear: mat(.55, .4), ailL: mat(.28, .04), ailR: mat(.28, .04), flapL: mat(.28, .04), flapR: mat(.28, .04), elev: mat(.28, .04), rud: mat(.28, .04) };
     const prims = Object.keys(parts).filter(k => parts[k].length).map(k => ({ name: k, geo: merge(parts[k]), mat: MATS[k] }));
     const chunks = [], views = [], accessors = []; let off = 0;
@@ -83,7 +83,7 @@
       const aP = acc(addView(pos, 34962), 'VEC3', 5126, pos.length / 3, { min, max }), aN = acc(addView(nor, 34962), 'VEC3', 5126, nor.length / 3), aC = acc(addView(col, 34962), 'VEC4', 5126, col.length / 4), aI = acc(addView(idx, 34963), 'SCALAR', 5125, idx.length);
       return { name: p.name, primitives: [{ attributes: { POSITION: aP, NORMAL: aN, COLOR_0: aC }, indices: aI, material: pi }] };
     });
-    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, scene: 0, scenes: [{ nodes: prims.map((_, i) => i) }], nodes: prims.map((p, i) => ({ mesh: i, name: p.name })), meshes, materials: prims.map(p => ({ name: p.name, ...p.mat })), accessors, bufferViews: views, buffers: [{ byteLength: off }] };
+    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, extensionsUsed: ['KHR_materials_clearcoat'], scene: 0, scenes: [{ nodes: prims.map((_, i) => i) }], nodes: prims.map((p, i) => ({ mesh: i, name: p.name })), meshes, materials: prims.map(p => ({ name: p.name, ...p.mat })), accessors, bufferViews: views, buffers: [{ byteLength: off }] };
     let jsonBytes = new TextEncoder().encode(JSON.stringify(json)); const jpad = (4 - jsonBytes.length % 4) % 4;
     if (jpad) { const t = new Uint8Array(jsonBytes.length + jpad); t.set(jsonBytes); t.fill(32, jsonBytes.length); jsonBytes = t; }
     const total = 12 + 8 + jsonBytes.length + 8 + off, out = new Uint8Array(total), dv = new DataView(out.buffer);
