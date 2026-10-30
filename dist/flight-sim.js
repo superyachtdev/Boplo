@@ -771,11 +771,11 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.1, .12, .22], S: [-.88, -.3, 0], hz: [.03, .04, .08], hz2: [.03, .04, .08], hd: 9000, g: [.82, .9, 1.12], lf: [0, .01, .03], c: 1.08, sat: .8, v: .55, lc: [.55, .65, 1], li: .25, ibl: [.12, .35], sg: 0, bl: -.2, sk: 0 },
-      { e: -6, L: [.3, .29, .42], S: [-.5, 0, 0], hz: [.6, .4, .42], hz2: [.2, .2, .33], hd: 15000, g: [.95, .93, 1.05], lf: [.02, 0, .04], c: 1.1, sat: .95, v: .5, lc: [.75, .6, .8], li: .5, ibl: [.3, .6], sg: .6, bl: -.25, sk: .5 },
-      { e: -1, L: [.6, .47, .44], S: [-.08, 0, 0], hz: [1, .6, .4], hz2: [.42, .4, .55], hd: 22000, g: [1.06, .97, .9], lf: [.02, 0, .03], c: 1.12, sat: 1.05, v: .48, lc: [1, .6, .38], li: 1.5, ibl: [.45, .9], sg: 3, bl: -.2, sk: .8 },
-      { e: 5, L: [.9, .8, .68], S: [-.02, .04, 0], hz: [1, .78, .58], hz2: [.62, .66, .78], hd: 28000, g: [1.06, 1, .92], lf: [.012, 0, .015], c: 1.1, sat: 1.08, v: .4, lc: [1, .78, .55], li: 1.8, ibl: [.6, 1], sg: 2, bl: -.28, sk: .4 },
-      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4, sk: 0 }
+      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.6, .6], sg: 0, bl: -.25, sk: 0, sb: .1, eb: 3 },
+      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.8, .8], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 3 },
+      { e: -1, L: [.62, .56, .55], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, 1], sg: 3, bl: -.25, sk: 1, sb: .9, eb: 2.6 },
+      { e: 5, L: [.88, .82, .74], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, 1], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2 },
+      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
@@ -784,19 +784,35 @@ window.BoploSim = (() => {
     if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
     // colour grade over the whole frame: warm gain and lifted shadows at sunset, filmic contrast, a soft vignette
     try {
-      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0 },
+      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0, u_skyb: 1 },
         // the open sky (nothing in the depth buffer) is recoloured at dawn and dusk: Cesium's scattering goes teal at low sun,
         // so its brightness is mapped onto a sunset palette, deep blue overhead through rose to orange and gold at the horizon
-        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; in vec2 v_textureCoordinates;
-          vec3 pal(float t) { t = clamp(t, 0.0, 1.0); vec3 a = vec3(0.12, 0.17, 0.4), b = vec3(0.55, 0.36, 0.58), c = vec3(1.0, 0.56, 0.36), d = vec3(1.0, 0.86, 0.62);
-            return t < 0.35 ? mix(a, b, t / 0.35) : t < 0.7 ? mix(b, c, (t - 0.35) / 0.35) : mix(c, d, (t - 0.7) / 0.3); }
-          void main() { vec4 c = texture(colorTexture, v_textureCoordinates); vec3 base = c.rgb;
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; uniform float u_skyb; in vec2 v_textureCoordinates;
+          // a dawn/dusk sky built from the actual view direction: orange and gold low towards the sun, rose and lavender away
+          // from it, deepening to blue overhead, with a glow around the sun itself
+          vec3 duskSky(vec2 uv) {
+            vec4 e = czm_inverseProjection * vec4(uv * 2.0 - 1.0, 1.0, 1.0); vec3 dirEC = normalize(e.xyz / e.w);
+            vec3 dir = normalize((czm_inverseView * vec4(dirEC, 0.0)).xyz), up = normalize(czm_viewerPositionWC), sun = normalize(czm_sunDirectionWC);
+            float h = dot(dir, up), s = max(dot(dir, sun), 0.0);
+            vec3 sunH = normalize(sun - up * dot(sun, up)), dirH = normalize(dir - up * h);
+            float toward = pow(max(dot(dirH, sunH), 0.0), 1.5);
+            vec3 zen = vec3(0.13, 0.22, 0.48), mid = vec3(0.42, 0.42, 0.66), away = vec3(0.86, 0.6, 0.66), warm = vec3(1.0, 0.56, 0.26), gold = vec3(1.0, 0.86, 0.58);
+            vec3 hor = mix(away, warm, toward);
+            vec3 c = mix(hor, mid, smoothstep(0.0, 0.16, h)); c = mix(c, zen, smoothstep(0.12, 0.6, h));
+            c += gold * (pow(s, 48.0) * 1.2 + pow(s, 8.0) * 0.35) * (1.0 - smoothstep(0.0, 0.35, h));
+            return c;
+          }
+          void main() { vec4 cc = texture(colorTexture, v_textureCoordinates); vec3 base = cc.rgb;
             float dep = czm_readDepth(depthTexture, v_textureCoordinates);
-            if (dep >= 0.9999) { base.g = min(base.g, 0.5 * (base.r + base.b) + 0.08); if (u_sky > 0.0) { float l = dot(base, vec3(0.3, 0.5, 0.2)); base = mix(base, pal(pow(l, 1.4) * 1.15) * (0.6 + 0.6 * l), u_sky); } }
+            if (dep >= 0.9999) { base.g = min(base.g, 0.5 * (base.r + base.b) + 0.08); if (u_sky > 0.0) {
+              // clouds don't write depth, so they'd be painted over too: leave bright, colourless pixels (cloud) alone
+              float mx = max(base.r, max(base.g, base.b)), sat = (mx - min(base.r, min(base.g, base.b))) / max(mx, 0.001), lum = dot(base, vec3(0.3, 0.5, 0.2));
+              float keep = smoothstep(0.5, 0.75, lum) * (1.0 - smoothstep(0.05, 0.2, sat));
+              base = mix(base, duskSky(v_textureCoordinates) * u_skyb, u_sky * 0.85 * (1.0 - keep)); } }
             vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
             col = (col - 0.5) * u_con + 0.5; vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
-            out_FragColor = vec4(clamp(col, 0.0, 1.0), c.a); }` }));
+            out_FragColor = vec4(clamp(col, 0.0, 1.0), cc.a); }` }));
     } catch (e) { console.warn('grade', e); grade = null; }
     // a light bloom so the sun and lit cloud edges glow (skipped on phones and the fast setting)
     const bloom = !coarse && GFX !== 'fast' ? scene.postProcessStages.bloom : null;
@@ -815,17 +831,17 @@ window.BoploSim = (() => {
       scene.backgroundColor = C.Color.fromCssColorString(e < -8 ? '#04060d' : e < -3 ? '#0d1530' : '#5E93D8');
       // sunlight on the aircraft and our own models: warm and low at sunset, blue and faint at night
       try { scene.light.color = new C.Color(K.lc[0], K.lc[1], K.lc[2], 1); scene.light.intensity = K.li; } catch { }
-      if (model) { try { model.color = C.Color.WHITE; if (model.imageBasedLighting) model.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(K.ibl[0], K.ibl[1]); } catch { } }
+      if (model) { try { model.color = C.Color.WHITE; if (model.imageBasedLighting) model.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(K.ibl[0], K.ibl[1]); const em = model.environmentMapManager; if (em) { em.brightness = K.eb; em.groundColor = new C.Color(lerp(.25, .55, (e + 6) / 20), lerp(.25, .56, (e + 6) / 20), lerp(.32, .5, (e + 6) / 20), 1); } } catch { } }
       if (scene.shadowMap) scene.shadowMap.darkness = lerp(.2, .55, (e + 6) / 8) - (e > 12 ? .15 : 0);
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
         if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD } },
-          fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { vec3 p = fsInput.attributes.positionEC; float d = length(p); float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.8); float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0); material.diffuse = mix(material.diffuse * u_light, mix(u_haze2, u_haze, s), h); }' }); tileset.customShader = tintShader; }
+          fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { vec3 p = fsInput.attributes.positionEC; float d = length(p); float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.6) * smoothstep(1500.0, 9000.0, d); float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0); material.diffuse = mix(material.diffuse * u_light, mix(u_haze2, u_haze, s), h); }' }); tileset.customShader = tintShader; }
         else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
-      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; }
+      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; u.u_skyb = K.sb; }
       if (bloom) { try { bloom.uniforms.brightness = K.bl; } catch { } }
       if (flare) flare.enabled = e > -1;
       // clouds: lit warm from below at sunset, dim at dusk, near-black at night
