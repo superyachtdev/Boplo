@@ -895,8 +895,8 @@ window.BoploSim = (() => {
               vec3 ld = normalize(czm_viewRotation * u_ldir);
               // expose for the level ground (the eye adapts to a low sun): flat land reads as fully lit, sun-facing slopes brighter,
               // slopes facing away fall into the sky's blue shade; once the light source is below the horizon only the shade is left
-              vec3 upE = normalize(czm_viewRotation * u_upW); float flat = dot(upE, ld);
-              float rel = clamp(dot(n, ld) / max(flat, 0.14), 0.0, 1.7) * smoothstep(-0.02, 0.05, flat);
+              vec3 upE = normalize(czm_viewRotation * u_upW); float lvl = dot(upE, ld);
+              float rel = clamp(dot(n, ld) / max(lvl, 0.14), 0.0, 1.7) * smoothstep(-0.02, 0.05, lvl);
               vec3 lit = mix(vec3(1.0), u_amb + u_sunc * rel * 0.85, u_rl);
               vec3 col = base * u_light * lit;
               if (u_night > 0.0) {
