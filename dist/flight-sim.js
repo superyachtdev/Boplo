@@ -770,11 +770,11 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.1, .12, .22], S: [-.88, -.3, 0], hz: [.03, .04, .08], hz2: [.03, .04, .08], hd: 9000, g: [.82, .9, 1.12], lf: [0, .01, .03], c: 1.08, sat: .8, v: .55, lc: [.55, .65, 1], li: .25, ibl: [.12, .35], sg: 0, bl: -.2 },
-      { e: -6, L: [.3, .29, .42], S: [-.5, 0, 0], hz: [.6, .4, .42], hz2: [.2, .2, .33], hd: 15000, g: [.95, .93, 1.05], lf: [.02, 0, .04], c: 1.1, sat: .95, v: .5, lc: [.75, .6, .8], li: .5, ibl: [.3, .6], sg: .6, bl: -.25 },
-      { e: -1, L: [.6, .47, .44], S: [-.08, 0, 0], hz: [1, .6, .4], hz2: [.42, .4, .55], hd: 22000, g: [1.06, .97, .9], lf: [.02, 0, .03], c: 1.12, sat: 1.05, v: .48, lc: [1, .6, .38], li: 1.5, ibl: [.45, .9], sg: 3, bl: -.2 },
-      { e: 5, L: [.9, .8, .68], S: [-.02, .04, 0], hz: [1, .78, .58], hz2: [.62, .66, .78], hd: 28000, g: [1.06, 1, .92], lf: [.012, 0, .015], c: 1.1, sat: 1.08, v: .4, lc: [1, .78, .55], li: 1.8, ibl: [.6, 1], sg: 2, bl: -.28 },
-      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4 }
+      { e: -14, L: [.1, .12, .22], S: [-.88, -.3, 0], hz: [.03, .04, .08], hz2: [.03, .04, .08], hd: 9000, g: [.82, .9, 1.12], lf: [0, .01, .03], c: 1.08, sat: .8, v: .55, lc: [.55, .65, 1], li: .25, ibl: [.12, .35], sg: 0, bl: -.2, sk: 0 },
+      { e: -6, L: [.3, .29, .42], S: [-.5, 0, 0], hz: [.6, .4, .42], hz2: [.2, .2, .33], hd: 15000, g: [.95, .93, 1.05], lf: [.02, 0, .04], c: 1.1, sat: .95, v: .5, lc: [.75, .6, .8], li: .5, ibl: [.3, .6], sg: .6, bl: -.25, sk: .5 },
+      { e: -1, L: [.6, .47, .44], S: [-.08, 0, 0], hz: [1, .6, .4], hz2: [.42, .4, .55], hd: 22000, g: [1.06, .97, .9], lf: [.02, 0, .03], c: 1.12, sat: 1.05, v: .48, lc: [1, .6, .38], li: 1.5, ibl: [.45, .9], sg: 3, bl: -.2, sk: .8 },
+      { e: 5, L: [.9, .8, .68], S: [-.02, .04, 0], hz: [1, .78, .58], hz2: [.62, .66, .78], hd: 28000, g: [1.06, 1, .92], lf: [.012, 0, .015], c: 1.1, sat: 1.08, v: .4, lc: [1, .78, .55], li: 1.8, ibl: [.6, 1], sg: 2, bl: -.28, sk: .4 },
+      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4, sk: 0 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
@@ -783,9 +783,15 @@ window.BoploSim = (() => {
     if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
     // colour grade over the whole frame: warm gain and lifted shadows at sunset, filmic contrast, a soft vignette
     try {
-      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28 },
-        fragmentShader: `uniform sampler2D colorTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; in vec2 v_textureCoordinates;
-          void main() { vec4 c = texture(colorTexture, v_textureCoordinates); vec3 col = c.rgb * u_gain + u_lift * (1.0 - c.rgb);
+      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0 },
+        // the open sky (nothing in the depth buffer) is recoloured at dawn and dusk: Cesium's scattering goes teal at low sun,
+        // so its brightness is mapped onto a sunset palette, deep blue overhead through rose to orange and gold at the horizon
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; in vec2 v_textureCoordinates;
+          vec3 pal(float t) { t = clamp(t, 0.0, 1.0); vec3 a = vec3(0.12, 0.17, 0.4), b = vec3(0.55, 0.36, 0.58), c = vec3(1.0, 0.56, 0.36), d = vec3(1.0, 0.86, 0.62);
+            return t < 0.35 ? mix(a, b, t / 0.35) : t < 0.7 ? mix(b, c, (t - 0.35) / 0.35) : mix(c, d, (t - 0.7) / 0.3); }
+          void main() { vec4 c = texture(colorTexture, v_textureCoordinates); vec3 base = c.rgb;
+            if (u_sky > 0.0) { float dep = czm_readDepth(depthTexture, v_textureCoordinates); if (dep >= 0.9999) { float l = dot(base, vec3(0.3, 0.5, 0.2)); base = mix(base, pal(pow(l, 1.4) * 1.15) * (0.6 + 0.6 * l), u_sky); } }
+            vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
             col = (col - 0.5) * u_con + 0.5; vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
             out_FragColor = vec4(clamp(col, 0.0, 1.0), c.a); }` }));
@@ -817,7 +823,7 @@ window.BoploSim = (() => {
         else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
-      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; }
+      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; }
       if (bloom) { try { bloom.uniforms.brightness = K.bl; } catch { } }
       if (flare) flare.enabled = e > -1;
       // clouds: lit warm from below at sunset, dim at dusk, near-black at night
