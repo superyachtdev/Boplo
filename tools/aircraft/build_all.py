@@ -39,6 +39,7 @@ for mid, cwd, args, dump, livs in PLANES:
         Image.new('RGB', (8, 8), (240, 242, 245)).save(f'{SP}/_ph.jpg', quality=80)
         reps.append(f'{tex}={SP}/_ph.jpg')
     subprocess.run(['python3', SP + '/swap.py', glb, f'{OUT}/{mid}.glb'] + reps, check=True)
+    subprocess.run(['python3', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gloss.py'), f'{OUT}/{mid}.glb'], check=True)  # glossy paint, glass and metal
     meta['tex'] = [t for t, _ in livs]
     summary[mid] = {k: (round(v, 2) if isinstance(v, float) else v) for k, v in meta.items()}
     print(mid, os.path.getsize(f'{OUT}/{mid}.glb') // 1024, 'KB', json.dumps(summary[mid]))

@@ -95,7 +95,7 @@
   }
 
   // ---- airliners from 3D models: the model is fetched once, and the chosen livery's textures are dropped into it ----
-  const modelCache = new Map(), MODEL_V = 4;
+  const modelCache = new Map(), MODEL_V = 5;
   const parseGLB = buf => { const dv = new DataView(buf), jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl, bl = dv.getUint32(bo, true); return { json, bin: new Uint8Array(buf, bo + 8, bl) }; };
   const pad4 = n => (n + 3) & ~3;
   const getBuf = url => { if (!modelCache.has(url)) modelCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).catch(e => { modelCache.delete(url); throw e; })); return modelCache.get(url); };

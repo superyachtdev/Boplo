@@ -755,7 +755,8 @@ window.BoploSim = (() => {
     scene.screenSpaceCameraController.enableInputs = false;
     scene.postProcessStages.fxaa.enabled = true;
     // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
-    if (!coarse && GFX === 'detailed') { try { scene.highDynamicRange = true; } catch { } }
+    // high dynamic range with Khronos' neutral tone mapper: bright sky reflections on the paint stay bright without washing out
+    if (!coarse && GFX !== 'fast') { try { scene.highDynamicRange = true; if (C.Tonemapper?.PBR_NEUTRAL != null) scene.postProcessStages.tonemapper = C.Tonemapper.PBR_NEUTRAL; } catch { } }
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
     // ---- time of day: the sun, sky, light on the scenery and fog all follow one clock you can move during the flight ----
@@ -913,7 +914,11 @@ window.BoploSim = (() => {
     AC.groundAtt = AC.groundAtt || 0;
     let model = null, bladeNode = null, discNode = null, gearNode = null, gearShown = 1; const surfNodes = {}, surfAng = {};
     try {
-      model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, imageBasedLighting: undefined });
+      // reflections: a live environment map of the sky and ground around the aircraft, so the clear-coated paint and glass
+      // mirror the real sky (and the sunset) as it flies
+      const envOpts = { enabled: true, maximumPositionEpsilon: 2000, maximumSecondsDifference: 600, brightness: 1.05, saturation: 1, groundAlbedo: .3, groundColor: new C.Color(.3, .32, .27, 1) };
+      try { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, environmentMapOptions: envOpts }); }
+      catch { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y }); }
       scene.primitives.add(model);
       model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); gearNode = model.getNode('gear'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
