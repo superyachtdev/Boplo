@@ -32,6 +32,7 @@ for mid, cwd, args, dump, livs in PLANES:
         json.dump(cfg, open(f'{SP}/_cfg.json', 'w'))
         r = subprocess.run(['python3', SP + '/paint.py', f'{SP}/_cfg.json'], cwd=SP, capture_output=True, text=True)
         if r.returncode: print(r.stderr); sys.exit(1)
+        if os.path.exists(f'{SP}/liv/{mid}_{i}-win.png'): shutil.copy(f'{SP}/liv/{mid}_{i}-win.png', f'{OUT}/{mid}/win-{i}.png')
         for lid in ['boplo', 'northwind', 'solair', 'fjord', 'verde', 'plain']:
             shutil.copy(f'{SP}/liv/{mid}_{i}-{lid}.jpg', f'{OUT}/{mid}/{lid}-{i}.jpg')
         # a tiny placeholder replaces the livery texture inside the model; the simulator loads the livery chosen

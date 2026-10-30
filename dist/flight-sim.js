@@ -772,27 +772,35 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.3, .25], sg: 0, bl: -.25, sk: 0, sb: .1, eb: .9 },
-      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.6, .4], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 1.6 },
-      { e: -1, L: [.52, .47, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, .55], sg: 3, bl: -.25, sk: 1, sb: .9, eb: 2.6 },
-      { e: 5, L: [.8, .74, .68], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, .5], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2 },
-      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, .5], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5 }
+      { e: -14, L: [.045, .055, .1], S: [-.9, -.3, 0], hz: [.025, .03, .06], hz2: [.025, .03, .06], hd: 14000, g: [.9, .95, 1.1], lf: [0, 0, 0], c: 1.08, sat: .9, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.25, .2], sg: 0, bl: -.2, sk: 1, sb: 1, eb: .6,
+        zen: [.004, .007, .018], mid: [.008, .012, .03], away: [.015, .02, .045], warm: [.02, .024, .05], gold: 0, stars: 1, rl: .25, amb: [.5, .55, .7], night: 1 },
+      { e: -6, L: [.22, .22, .32], S: [-.55, 0, 0], hz: [.45, .32, .36], hz2: [.18, .19, .3], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.55, .35], sg: .6, bl: -.28, sk: .95, sb: 1, eb: 1.3,
+        zen: [.03, .05, .13], mid: [.09, .11, .24], away: [.3, .22, .32], warm: [.55, .3, .25], gold: .3, stars: .35, rl: .35, amb: [.55, .55, .7], night: .7 },
+      { e: -1, L: [.6, .5, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, .5], sg: 3, bl: -.25, sk: 1, sb: .95, eb: 2.4,
+        zen: [.12, .24, .52], mid: [.34, .42, .68], away: [.82, .62, .66], warm: [1, .58, .28], gold: 1, stars: 0, rl: .8, amb: [.42, .45, .62], night: .15 },
+      { e: 5, L: [.86, .78, .7], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, .5], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2,
+        zen: [.16, .32, .64], mid: [.45, .58, .82], away: [.86, .74, .72], warm: [1, .74, .46], gold: .8, stars: 0, rl: .7, amb: [.55, .58, .72], night: 0 },
+      { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, .5], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5,
+        zen: [.2, .38, .72], mid: [.5, .64, .86], away: [.8, .84, .9], warm: [.95, .9, .84], gold: .5, stars: 0, rl: .3, amb: [.68, .7, .8], night: 0 }
     ];
     const mix = (a, b, t) => Array.isArray(a) ? a.map((v, i) => lerp(v, b[i], t)) : lerp(a, b, t);
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
     const sky = { hour: TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6, elev: 45, L: [1, 1, 1], dark: false, dim: false };
     let LIGHT = [1, 1, 1], starBox = null, flare = null, tintShader = null, grade = null, rwStRef = () => [];
     if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
-    const camUp = new C.Cartesian3(), camTan = new C.Cartesian2();
+    const camUp = new C.Cartesian3(), camTan = new C.Cartesian2(), moonW = new C.Cartesian3(0, 0, 1);
     // colour grade over the whole frame: warm gain and lifted shadows at sunset, filmic contrast, a soft vignette
     try {
       grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0, u_skyb: 1,
           u_cd: () => camera.directionWC, u_cu: () => camera.upWC, u_cr: () => camera.rightWC,
           u_up: () => C.Ellipsoid.WGS84.geodeticSurfaceNormal(camera.positionWC, camUp), u_sun: () => scene.context.uniformState.sunDirectionWC || C.Cartesian3.UNIT_Z,
-          u_tan: () => { const fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2); camTan.x = ty * (fr.aspectRatio || 1); camTan.y = ty; return camTan; } },
+          u_tan: () => { const fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2); camTan.x = ty * (fr.aspectRatio || 1); camTan.y = ty; return camTan; },
+          u_zen: new C.Cartesian3(.12, .24, .52), u_mid: new C.Cartesian3(.34, .42, .68), u_away: new C.Cartesian3(.82, .62, .66), u_warm: new C.Cartesian3(1, .58, .28), u_gold: 1, u_stars: 0,
+          u_moonW: () => moonW, u_moonB: 0, u_sunDisc: 0 },
         // the open sky (nothing in the depth buffer) is recoloured at dawn and dusk: Cesium's scattering goes teal at low sun,
         // so its brightness is mapped onto a sunset palette, deep blue overhead through rose to orange and gold at the horizon
-        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; uniform float u_skyb; uniform vec3 u_cd; uniform vec3 u_cu; uniform vec3 u_cr; uniform vec3 u_up; uniform vec3 u_sun; uniform vec2 u_tan; in vec2 v_textureCoordinates;
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; uniform float u_skyb; uniform vec3 u_cd; uniform vec3 u_cu; uniform vec3 u_cr; uniform vec3 u_up; uniform vec3 u_sun; uniform vec2 u_tan; uniform vec3 u_zen; uniform vec3 u_mid; uniform vec3 u_away; uniform vec3 u_warm; uniform float u_gold; uniform float u_stars; uniform vec3 u_moonW; uniform float u_moonB; uniform float u_sunDisc; in vec2 v_textureCoordinates;
+          float hash3(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
           // a dawn/dusk sky built from the actual view direction: orange and gold low towards the sun, rose and lavender away
           // from it, deepening to blue overhead, with a glow around the sun itself
           vec3 duskSky(vec2 uv) {
@@ -801,10 +809,16 @@ window.BoploSim = (() => {
             float h = dot(dir, up), s = max(dot(dir, sun), 0.0);
             vec3 sunH = normalize(sun - up * dot(sun, up)), dirH = normalize(dir - up * h);
             float toward = pow(max(dot(dirH, sunH), 0.0), 1.5);
-            vec3 zen = vec3(0.12, 0.24, 0.52), mid = vec3(0.34, 0.42, 0.68), away = vec3(0.82, 0.62, 0.66), warm = vec3(1.0, 0.58, 0.28), gold = vec3(1.0, 0.86, 0.58);
-            vec3 hor = mix(away, warm, toward);
-            vec3 c = mix(hor, mid, smoothstep(0.0, 0.1, h)); c = mix(c, zen, smoothstep(0.07, 0.38, h));
-            c += gold * (pow(s, 48.0) * 1.2 + pow(s, 8.0) * 0.35) * (1.0 - smoothstep(0.0, 0.35, h));
+            vec3 gold = vec3(1.0, 0.86, 0.58);
+            vec3 hor = mix(u_away, u_warm, toward);
+            vec3 c = mix(hor, u_mid, smoothstep(0.0, 0.1, h)); c = mix(c, u_zen, smoothstep(0.07, 0.38, h));
+            c += gold * u_gold * (pow(s, 48.0) * 1.2 + pow(s, 8.0) * 0.35) * (1.0 - smoothstep(0.0, 0.35, h));
+            // the sun's disc, sitting on the horizon at sunset
+            c += vec3(1.0, 0.88, 0.62) * 4.0 * u_sunDisc * smoothstep(0.99988, 0.99995, dot(dir, sun)) * step(-0.01, h);
+            // the moon: a small bright disc with a faint halo
+            if (u_moonB > 0.0) { float md = dot(dir, u_moonW); c += vec3(0.86, 0.9, 1.0) * u_moonB * (smoothstep(0.99996, 0.99998, md) * 1.6 + pow(max(md, 0.0), 1200.0) * 0.12) * step(0.0, h); }
+            // stars, fading out towards the horizon haze
+            if (u_stars > 0.0) { vec3 q = floor(dir * 520.0); float hs = hash3(q); c += vec3(0.85, 0.9, 1.0) * u_stars * smoothstep(0.9988, 0.9999, hs) * 0.9 * smoothstep(0.03, 0.25, h); }
             // below the horizon (scenery not loaded that far yet): hazy distant land, not sky
             c = mix(c, mix(vec3(0.3, 0.29, 0.36), hor * 0.6, 0.35), smoothstep(0.0, -0.03, h));
             return c;
@@ -829,6 +843,10 @@ window.BoploSim = (() => {
     if (bloom) { try { bloom.enabled = true; Object.assign(bloom.uniforms, { glowOnly: false, contrast: 119, brightness: -.4, delta: .9, sigma: 3.2, stepSize: 1 }); } catch { } }
     try { const sa = scene.skyAtmosphere; if (sa) sa.perFragmentAtmosphere = true; if (scene.atmosphere && C.DynamicAtmosphereLightingType) scene.atmosphere.dynamicLighting = C.DynamicAtmosphereLightingType.SUNLIGHT; } catch { }
     const C3 = a => new C.Cartesian3(a[0], a[1], a[2]);
+    // the sun and moon as directions from the airfield, in Earth-fixed coordinates
+    const startW = C.Cartesian3.fromDegrees(startLL[0], startLL[1], 0), upW = C.Ellipsoid.WGS84.geodeticSurfaceNormal(startW, new C.Cartesian3());
+    const bodyDir = (fn, jd) => { try { const pi = fn(jd), m = C.Transforms.computeIcrfToFixedMatrix(jd) || C.Transforms.computeTemeToPseudoFixedMatrix(jd); const pf = C.Matrix3.multiplyByVector(m, pi, new C.Cartesian3()); return C.Cartesian3.normalize(C.Cartesian3.subtract(pf, startW, pf), pf); } catch { return null; } };
+    const sunLight0 = scene.light;
     function applyTime(h) {
       sky.hour = ((h % 24) + 24) % 24; const e = sunElev(sky.hour); sky.elev = e;
       viewer.clock.currentTime = C.JulianDate.fromDate(new Date(SUN.day0 + (sky.hour - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false;
@@ -839,24 +857,64 @@ window.BoploSim = (() => {
       // stars once the sky is dark enough
       try { if (sky.dark && !starBox && C.SkyBox.createEarthSkyBox) starBox = C.SkyBox.createEarthSkyBox(); if (starBox) { scene.skyBox = starBox; starBox.show = e < -5; } } catch { }
       scene.backgroundColor = C.Color.fromCssColorString(e < -8 ? '#04060d' : e < -3 ? '#0d1530' : '#5E93D8');
-      // sunlight on the aircraft and our own models: warm and low at sunset, blue and faint at night
-      try { scene.light.color = new C.Color(K.lc[0], K.lc[1], K.lc[2], 1); scene.light.intensity = K.li; } catch { }
+      // where the sun and moon are, and how much of the moon is lit (full when it's opposite the sun)
+      const jd = viewer.clock.currentTime, sunD = bodyDir(C.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame, jd) || upW, moonD = bodyDir(C.Simon1994PlanetaryPositions.computeMoonPositionInEarthInertialFrame, jd);
+      const moonEl = moonD ? C.Cartesian3.dot(moonD, upW) : -1, illum = moonD ? (1 - C.Cartesian3.dot(sunD, moonD)) / 2 : 0, moonUp = moonEl > 0.02;
+      if (moonD) C.Cartesian3.clone(moonD, moonW);
+      sky.moon = moonUp && e < 2 ? illum : 0;
+      // the key light: the sun by day; at night the moon (bright when it's full) or, with no moon, a faint skylight from above
+      let toLight = sunD;
+      try {
+        if (e > -4) { scene.light = sunLight0; scene.light.color = new C.Color(K.lc[0], K.lc[1], K.lc[2], 1); scene.light.intensity = K.li; }
+        else { toLight = moonUp ? moonD : upW; const mi = moonUp ? .08 + .5 * illum : .07; scene.light = new C.DirectionalLight({ direction: C.Cartesian3.negate(toLight, new C.Cartesian3()), color: new C.Color(.62, .7, 1, 1), intensity: mi }); }
+      } catch { }
+      sky.toLight = toLight;
       if (model) { try { model.color = C.Color.WHITE; if (model.imageBasedLighting) model.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(K.ibl[0], K.ibl[1]); const em = model.environmentMapManager; if (em) { em.brightness = K.eb; em.groundColor = new C.Color(lerp(.25, .55, (e + 6) / 20), lerp(.25, .56, (e + 6) / 20), lerp(.32, .5, (e + 6) / 20), 1); } } catch { } }
       if (acShader) { try {
         const night = clamp((-e - 2) / 8, 0, 1), dusk = clamp(1 - Math.abs(e - 1) / 9, 0, 1);
-        const top = mix(mix([.33, .52, .88], [.22, .3, .58], dusk), [.02, .03, .06], night), hor = mix(mix([.86, .9, .96], [1, .64, .42], dusk), [.05, .06, .1], night), gnd = mix(mix([.16, .17, .14], [.12, .1, .11], dusk), [.015, .015, .02], night);
-        acShader.setUniform('u_top', C3(top)); acShader.setUniform('u_hor', C3(hor)); acShader.setUniform('u_gnd', C3(gnd)); acShader.setUniform('u_sunc', C3(K.lc.map(v => v * (e > -1 ? 1 : 0))));
-        acShader.setUniform('u_refl', lerp(.45, 1, (e + 8) / 10)); } catch { } }
+        const mn = sky.moon * night;
+        const top = mix(mix([.33, .52, .88], [.22, .3, .58], dusk), [.015 + .05 * mn, .02 + .06 * mn, .045 + .1 * mn], night), hor = mix(mix([.86, .9, .96], [1, .64, .42], dusk), [.03 + .03 * mn, .035 + .035 * mn, .06 + .05 * mn], night), gnd = mix(mix([.16, .17, .14], [.12, .1, .11], dusk), [.01, .01, .014], night);
+        acShader.setUniform('u_top', C3(top)); acShader.setUniform('u_hor', C3(hor)); acShader.setUniform('u_gnd', C3(gnd));
+        acShader.setUniform('u_sunc', C3(e > -1 ? K.lc : e > -4 ? [0, 0, 0] : [.55 * mn, .62 * mn, .9 * mn]));
+        acShader.setUniform('u_glintW', toLight);
+        acShader.setUniform('u_refl', e > 10 ? .55 : e > -4 ? .7 : .5);
+        acShader.setUniform('u_cabin', clamp((3 - e) / 8, 0, 1) * 1.5); } catch { } }
       if (scene.shadowMap) scene.shadowMap.darkness = lerp(.2, .55, (e + 6) / 8) - (e > 12 ? .15 : 0);
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
-        if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD } },
-          fragmentShaderText: 'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { vec3 p = fsInput.attributes.positionEC; float d = length(p); float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.6) * smoothstep(1500.0, 9000.0, d); float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0); material.diffuse = mix(material.diffuse * u_light, mix(u_haze2, u_haze, s), h); }' }); tileset.customShader = tintShader; }
-        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
+        if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD },
+            u_rl: { type: C.UniformType.FLOAT, value: K.rl }, u_amb: { type: C.UniformType.VEC3, value: C3(K.amb) }, u_sunc: { type: C.UniformType.VEC3, value: C3(K.lc) }, u_night: { type: C.UniformType.FLOAT, value: K.night }, u_ldir: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(toLight) } },
+          // the photo scenery has midday light baked in. Relight it from the real light direction using each surface's facet normal:
+          // slopes and walls facing a low sun light up warm, those facing away fall into blue shade, so dawn and dusk have real relief.
+          // At night, bright colourless built-up areas (roads, roofs, car parks) get scattered sodium and LED lamps.
+          fragmentShaderText: `float hsh(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+            void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+              vec3 p = fsInput.attributes.positionEC; float d = length(p); vec3 base = material.diffuse;
+              vec3 n = normalize(cross(dFdx(p), dFdy(p))); if (dot(n, -p) < 0.0) n = -n;
+              vec3 ld = normalize(czm_viewRotation * u_ldir);
+              float lam = clamp(dot(n, ld), 0.0, 1.0);
+              vec3 lit = mix(vec3(1.0), u_amb + u_sunc * lam * 1.15, u_rl);
+              vec3 col = base * u_light * lit;
+              if (u_night > 0.0) {
+                float l = dot(base, vec3(0.3, 0.59, 0.11)), mx = max(base.r, max(base.g, base.b)), sat = (mx - min(base.r, min(base.g, base.b))) / max(mx, 0.001);
+                float urban = smoothstep(0.38, 0.62, l) * (1.0 - smoothstep(0.05, 0.18, sat));
+                float hv = hsh(floor(fsInput.attributes.positionMC * 0.33));
+                float lamp = smoothstep(0.92, 0.97, hv) * urban;
+                float far = smoothstep(1200.0, 6000.0, d);
+                vec3 tint = hv > 0.985 ? vec3(0.85, 0.92, 1.0) : vec3(1.0, 0.64, 0.32);
+                col += u_night * (tint * mix(lamp * 2.4, urban * 0.22, far) + vec3(1.0, 0.7, 0.42) * urban * 0.035);
+              }
+              float h = clamp(1.0 - exp(-d * u_hk), 0.0, 0.6) * smoothstep(1500.0, 9000.0, d);
+              float s = pow(max(dot(p / max(d, 1.0), czm_sunDirectionEC), 0.0), 3.0);
+              material.diffuse = mix(col, mix(u_haze2, u_haze, s), h);
+            }` }); tileset.customShader = tintShader; }
+        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_rl', K.rl); tintShader.setUniform('u_amb', C3(K.amb)); tintShader.setUniform('u_sunc', C3(K.lc)); tintShader.setUniform('u_night', K.night); tintShader.setUniform('u_ldir', toLight); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
-      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; u.u_skyb = K.sb; }
+      if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; u.u_skyb = K.sb;
+        u.u_zen = C3(K.zen); u.u_mid = C3(K.mid); u.u_away = C3(K.away); u.u_warm = C3(K.warm); u.u_gold = K.gold;
+        u.u_stars = K.stars * (1 - .75 * sky.moon); u.u_moonB = sky.moon ? .35 + .9 * sky.moon : 0; u.u_sunDisc = e > -1.2 && e < 14 ? 1 : 0; }
       if (bloom) { try { bloom.uniforms.brightness = K.bl; } catch { } }
       if (flare) flare.enabled = e > -1;
       // clouds: lit warm from below at sunset, dim at dusk, near-black at night
@@ -962,16 +1020,18 @@ window.BoploSim = (() => {
       const V3 = (x, y, z) => new C.Cartesian3(x, y, z);
       acShader = new C.CustomShader({ uniforms: {
           u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
-          u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 } },
+          u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 },
+          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 } },
         fragmentShaderText: `void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+          material.emissive *= u_cabin; // cabin windows: dark by day, warm glow from dusk
           vec3 N = normalize(fsInput.attributes.normalEC), V = normalize(-fsInput.attributes.positionEC);
           if (dot(N, V) < 0.0) N = -N;
           vec3 R = reflect(-V, N), Rw = normalize(czm_inverseViewRotation * R);
           float h = dot(Rw, u_up), gl2 = clamp(1.0 - material.roughness, 0.0, 1.0); gl2 *= gl2;
           vec3 env = h > 0.0 ? mix(u_hor, u_top, smoothstep(0.0, 0.5, h)) : mix(u_hor * 0.55, u_gnd, smoothstep(0.0, 0.08, -h));
-          float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0), k = mix(0.07, 1.0, fres) * gl2 * u_refl;
-          float glint = pow(max(dot(R, czm_sunDirectionEC), 0.0), 600.0) * 6.0 + pow(max(dot(R, czm_sunDirectionEC), 0.0), 40.0) * 0.25;
-          material.diffuse *= 1.0 - k * 0.6;
+          float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0), k = mix(0.02, 0.5, fres) * gl2 * u_refl;
+          float gd = max(dot(Rw, u_glintW), 0.0), glint = pow(gd, 900.0) * 3.0 + pow(gd, 60.0) * 0.12;
+          material.diffuse *= 1.0 - k * 0.25;
           material.emissive += env * k + u_sunc * glint * gl2 * u_refl;
         }` });
       model.customShader = acShader;

@@ -113,6 +113,10 @@ def main(cfg):
         ph = (z - w['z0']) / pitch; dz = (ph - np.round(ph)) * pitch
         WIN = Fu & (np.abs(x) > dia * .3) & ((np.abs(dz) / (ww / 2)) ** 4 + (np.abs(y - yw) / (wh / 2)) ** 4 < 1) & (z <= w['z0'] + .01) & (z >= w['z1'])
         for zc, hw in skip: WIN &= ~(np.abs(z - zc) < hw)
+    # cabin window mask (white = window) for the night-time cabin glow in the simulator, with a little bloom around each window
+    if WIN.any():
+        wm = Image.fromarray(WIN.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(S / 1400))
+        wm.resize((1024, 1024), Image.LANCZOS).save(f"{cfg['out']}/{cfg['id']}{cfg.get('suffix', '')}-win.png", optimize=True)
     for lid, LV in LIVERIES.items():
         C = np.zeros((S, S, 3), np.float32) + rgb(LV['base'])
         bel = cfg.get('belly_y', -.42); win = cfg.get('win_y', .2)
@@ -173,6 +177,33 @@ def main(cfg):
             dr2 = ImageDraw.Draw(im)
             for r in cfg['fill_rects']: dr2.rectangle([int(r[0] * S), int(r[1] * S), int(r[2] * S), int(r[3] * S)], fill=r[4])
         p = f"{cfg['out']}/{cfg['id']}{cfg.get('suffix', '')}-{lid}.jpg"; im.convert('RGB').save(p, 'JPEG', quality=86, optimize=True, progressive=True); out[lid] = p
+    # no window layout in the config: find the windows in the plain (white) livery instead: dark, colourless blobs along the
+    # window line on the fuselage sides (models whose kits draw no clear windows simply get no cabin glow)
+    if not WIN.any() and 'plain' in out:
+        P = np.array(Image.open(out['plain']).convert('RGB'), np.float32); pl = P.mean(-1); pmx = P.max(-1); psat = (pmx - P.min(-1)) / np.maximum(pmx, 1)
+        # windows are often their own little meshes, so they sit in holes of the fuselage area: close the holes first
+        k = max(3, int(S / 700) | 1)
+        hole = max(9, int(S / 90) | 1)
+        Fc = np.array(Image.fromarray(Fu.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(hole)).filter(ImageFilter.MinFilter(hole))) > 0
+        lw = np.array(Image.fromarray(pl.astype(np.uint8)).filter(ImageFilter.MaxFilter(hole))).astype(np.float32)
+        from scipy import ndimage as ndi
+        # windows: small, compact, window-shaped spots that line up in rows along the fuselage; try strict settings first,
+        # then looser ones for faint or sparse windows (business jets have few, some airliner kits draw them faintly)
+        for contrast, minsz, inrow in ((14, 2, 8), (10, 4, 5)):
+            cand = Fc & (pl < lw - contrast) & (psat < .22) & (lw > 200)
+            lab, n = ndi.label(cand); objs = ndi.find_objects(lab); keepc = []
+            for ci, sl in enumerate(objs):
+                if sl is None: continue
+                hh_, ww_ = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start; area = np.count_nonzero(lab[sl] == ci + 1)
+                if minsz <= ww_ <= S / 40 and minsz + 1 <= hh_ <= S / 30 and .45 <= hh_ / ww_ <= 3.5 and area / (hh_ * ww_) > .4:
+                    keepc.append((ci + 1, (sl[0].start + sl[0].stop) / 2))
+            binw = max(2, S // 256); counts = {}
+            for _, cy in keepc: counts[int(cy // binw)] = counts.get(int(cy // binw), 0) + 1
+            sel = [ci for ci, cy in keepc if sum(counts.get(int(cy // binw) + d, 0) for d in (-1, 0, 1)) >= inrow]
+            if len(sel) >= 10: break
+        cand = np.isin(lab, sel)
+        blob = Image.fromarray(cand.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(S / 1400))
+        if np.count_nonzero(np.array(blob) > 40) > 50: blob.resize((1024, 1024), Image.LANCZOS).save(f"{cfg['out']}/{cfg['id']}{cfg.get('suffix', '')}-win.png", optimize=True)
     print('painted', cfg['id'], {k: round(np.count_nonzero(v) / S / S, 3) for k, v in {'M': M, 'F': F, 'E': E}.items()})
     return out
 

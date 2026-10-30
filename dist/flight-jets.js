@@ -95,15 +95,26 @@
   }
 
   // ---- airliners from 3D models: the model is fetched once, and the chosen livery's textures are dropped into it ----
-  const modelCache = new Map(), MODEL_V = 5;
+  const modelCache = new Map(), MODEL_V = 6;
   const parseGLB = buf => { const dv = new DataView(buf), jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl))), bo = 20 + jl, bl = dv.getUint32(bo, true); return { json, bin: new Uint8Array(buf, bo + 8, bl) }; };
   const pad4 = n => (n + 3) & ~3;
   const getBuf = url => { if (!modelCache.has(url)) modelCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).catch(e => { modelCache.delete(url); throw e; })); return modelCache.get(url); };
   async function assemble(J, liveryId) {
+    // cabin window masks (where a model has them) become emissive textures, so the cabin can glow at night
+    const winP = J.tex.map((_, i) => getBuf(`/aircraft-models/${J.model}/win-${i}.png?v=${MODEL_V}`).catch(() => null));
     const [mb, ...tex] = await Promise.all([getBuf(`/aircraft-models/${J.model}.glb?v=${MODEL_V}`), ...J.tex.map((_, i) => getBuf(`/aircraft-models/${J.model}/${liveryId}-${i}.jpg?v=${MODEL_V}`))]);
+    const wins = await Promise.all(winP);
     const M = parseGLB(mb), j = JSON.parse(JSON.stringify(M.json));
     const data = j.bufferViews.map(v => M.bin.subarray(v.byteOffset || 0, (v.byteOffset || 0) + v.byteLength));
-    for (const im of j.images || []) { const k = J.tex.indexOf(im.name); if (k >= 0) { data[im.bufferView] = new Uint8Array(tex[k]); im.mimeType = 'image/jpeg'; } }
+    const imgOf = {};
+    (j.images || []).forEach((im, ii) => { const k = J.tex.indexOf(im.name); if (k >= 0) { data[im.bufferView] = new Uint8Array(tex[k]); im.mimeType = 'image/jpeg'; imgOf[ii] = k; } });
+    wins.forEach((wb, k) => {
+      if (!wb || !(new Uint8Array(wb, 0, 4)[1] === 0x50)) return; // a PNG, not an error page
+      j.bufferViews.push({ buffer: 0, byteOffset: 0, byteLength: wb.byteLength }); data.push(new Uint8Array(wb));
+      j.images.push({ name: 'cabin-' + k, bufferView: j.bufferViews.length - 1, mimeType: 'image/png' });
+      j.textures.push({ source: j.images.length - 1, ...(j.samplers?.length ? { sampler: 0 } : {}) }); const ti = j.textures.length - 1;
+      for (const m of j.materials || []) { const bt = m.pbrMetallicRoughness?.baseColorTexture; if (bt && imgOf[j.textures[bt.index]?.source] === k) { m.emissiveTexture = { index: ti, ...(bt.texCoord ? { texCoord: bt.texCoord } : {}) }; m.emissiveFactor = [1, .78, .5]; } }
+    });
     let off = 0; j.bufferViews.forEach((v, i) => { v.byteOffset = off; v.byteLength = data[i].length; off = pad4(off + data[i].length); });
     const bin = new Uint8Array(off); j.bufferViews.forEach((v, i) => bin.set(data[i], v.byteOffset));
     j.buffers = [{ byteLength: off }];
