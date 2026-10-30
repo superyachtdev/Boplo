@@ -1612,7 +1612,7 @@ window.BoploSim = (() => {
       if (!replay && AP.hdg != null && !st.ground) { t.trk = AP.hdg; t.useHdg = true; }
       // vertical: route profile, or the selected altitude
       let ta = prof(pr.s + Math.max(st.v, 20) * 5);
-      if (approach && remain < 3500) ta = Math.min(ta, st.gnd + Math.max(0, remain - TDZ) * DG);
+      if (approach && remain < 3500) ta = Math.min(ta, g1 + Math.max(0, remain - TDZ) * DG); // the glidepath to the touchdown point, not the fields under the final
       if (!approach) { const ah = path.at(pr.s + 900), ga = elevAt(ah[0], ah[1]); if (ga != null) ta = Math.max(ta, ga + 160); ta = Math.max(ta, st.gnd + 120); }
       if (!replay && AP.alt != null) ta = AP.alt * FT + geoN;
       t.alt = ta;
