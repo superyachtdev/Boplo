@@ -564,7 +564,7 @@ window.BoploSim = (() => {
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="alt" aria-pressed="false">ALT</button><button type="button" class="ap-st" data-apd="alt" data-d="-500" aria-label="ALT down">−</button><b data-apv="alt">—</b><button type="button" class="ap-st" data-apd="alt" data-d="500" aria-label="ALT up">+</button></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="vs" aria-pressed="false">V/S</button><button type="button" class="ap-st" data-apd="vs" data-d="-100" aria-label="V/S down">−</button><b data-apv="vs">—</b><button type="button" class="ap-st" data-apd="vs" data-d="100" aria-label="V/S up">+</button></div>
         <div class="ap-row"><button type="button" class="ap-tog" data-apm="spd" aria-pressed="false">SPD</button><button type="button" class="ap-st" data-apd="spd" data-d="-5" aria-label="SPD down">−</button><b data-apv="spd">—</b><button type="button" class="ap-st" data-apd="spd" data-d="5" aria-label="SPD up">+</button></div>
-        <small class="ap-note">Each mode flies one thing. Anything without a mode is yours: LNAV on its own steers while you fly the pitch and power. A firm stick input takes that axis back.</small>
+        <small class="ap-note">Each mode flies one thing. Anything without a mode is yours: LNAV on its own steers while you fly the pitch and power. A firm stick input takes that axis back. With LNAV, VNAV and SPD all on, it flies the whole route for you, landing and stopping included.</small>
       </div>
       <div class="sim-replay" data-replaybar hidden>
         <button type="button" class="sim-b" data-play aria-label="Play or pause"><svg viewBox="0 0 24 24"><path data-pp2 d="M8 5v14M16 5v14"/></svg></button>
@@ -1602,6 +1602,10 @@ window.BoploSim = (() => {
       const pr = path.project(st.x, st.z), vk = st.v / KT, remain = L - pr.s;
       const look = clamp(st.gs * 7, 180, 900), [tx, tz] = path.at(pr.s + look);
       const routeTrk = Math.atan2(tx - st.x, tz - st.z) * R2D;
+      // full automation: with LNAV, VNAV and SPD all on and the route ending on a runway, the autopilot flies the whole flight,
+      // take-off clean-up to touchdown and stop: it slows down, configures flaps and gear, lines up, flares and brakes
+      const auto = !replay && apOn && AP.lnav && AP.vnav && AP.spd != null && AP.hdg == null && AP.alt == null && AP.vs == null && landEnd && !!arrE;
+      autoNow = auto;
       const approach = landEnd && remain < (circuit ? 1500 : 5000) && (replay || (AP.lnav && AP.vnav));
       const t = { phase: st.ground ? (st.landedOnce ? 'rollout' : 'takeoff') : 'air', trk: routeTrk, bankMax: st.agl < 60 && approach ? 6 : 25, approach };
       if (st.ground) { const [ax, az] = path.at(pr.s + Math.max(60, st.gs * 4)); t.trk = Math.atan2(ax - st.x, az - st.z) * R2D; t.flaps = 0; }
@@ -1618,10 +1622,11 @@ window.BoploSim = (() => {
       if (approach) { t.spd = st.agl < 60 ? PF.appr : PF.appr + 10; t.flaps = Math.max(fc.flaps, remain < (circuit ? 900 : 3000) ? FM.notches - 1 : Math.min(1, FM.notches - 1)); if (st.agl < 5) t.phase = 'flare'; }
       else { t.spd = PF.cruise * (circuit ? .82 : .92); t.flaps = 0; if (ta - st.alt > 40 && !st.ground) { t.thr = 1; t.spd = undefined; } }
       if (!replay && AP.spd != null && !approach) { t.spd = AP.spd; t.thr = undefined; }
-      // like a real autopilot, it leaves the flaps to you; and once you pick your own modes, the throttle is yours unless SPD is on
-      if (!replay) t.flaps = undefined; // like a real autopilot, it leaves the flaps to you
+      if (auto) autoPlan(t, remain);
+      // like a real autopilot, it leaves the flaps to you (unless it's flying the whole thing)
+      else if (!replay) t.flaps = undefined;
       flareNow = t.phase === 'flare';
-      if (!replay && approach && !st.ground && st.agl < 200 * FT && remain < 2500) { setAP(false); tipNow = 'Autopilot disconnected at 200 ft. You have control: land the aircraft'; tipUntil = performance.now() + 4000; return; }
+      if (!replay && !auto && approach && !st.ground && st.agl < 200 * FT && remain < 2500) { setAP(false); tipNow = 'Autopilot disconnected at 200 ft. You have control: land the aircraft'; tipUntil = performance.now() + 4000; return; }
       const trim0 = fc.trim, park0 = fc.parking;
       BoploPhysics.pilot(FM, t, dt);
       // hand back every axis the autopilot isn't flying
@@ -1632,6 +1637,49 @@ window.BoploSim = (() => {
         fc.brake = apSpd() ? Math.max(fc.brake, ctl.brake || 0) : (ctl.brake || 0); fc.parking = park0;
       }
       if (apSpd()) thrTarget = fc.throttle;
+      if (auto) autoAfter();
+    }
+    // the managed descent and approach: a speed and configuration for each stage, by distance to the touchdown point
+    let autoNow = false, autoSay = '', autoStopped = false;
+    function autoPlan(t, remain) {
+      const P0 = FM.p, ias = st.v / KT, full = FM.notches - 1, mid = Math.max(1, Math.round(full / 2)), jet = !!AC.jet;
+      const say = m => { if (m !== autoSay) { autoSay = m; tipNow = m; tipUntil = performance.now() + 3200; } };
+      if (st.ground) {
+        if (!st.landedOnce) { t.flaps = jet ? Math.min(1, full) : 0; say('Autopilot: take-off power, it will rotate at ' + Math.round(P0.vr || PF.vr) + ' kt'); }
+        else { t.flaps = fc.flaps; fc.spoiler = 1; fc.reverse = jet && ias > 60; say(ias > 25 ? 'Autopilot: braking on the runway' : 'Autopilot: stopping'); }
+        return;
+      }
+      fc.reverse = false;
+      const far = jet ? 30000 : 12000, slow = jet ? 16000 : 7000, gearAt = jet ? 9500 : 4000;
+      if (st.landedOnce) return;
+      // after take-off: gear up once climbing away (unless the runway is already close)
+      if (AC.jet && fc.gear && !t.approach && remain > gearAt * 1.5 && st.agl > 30 && st.vs > 1 && st.airT < 180) { fc.gear = 0; say('Autopilot: positive climb, gear up'); return; }
+      if (remain > far) {
+        // flaps up as the speed builds
+        t.flaps = st.agl > 250 || ias > (P0.vfe || 999) * .9 ? 0 : fc.flaps;
+        if (st.agl > 250 && fc.flaps) say('Autopilot: flaps up, climbing to cruise');
+        return;
+      }
+      // descent and approach: slow in steps, flaps as each speed allows, gear down before the final approach fix
+      let spd, flaps;
+      if (t.approach) { spd = st.agl < 60 ? PF.appr : PF.appr + (jet ? 5 : 3); flaps = full; }
+      else if (remain < slow) { spd = PF.appr + (jet ? 25 : 10); flaps = mid; }
+      else { spd = PF.appr + (jet ? 60 : 25); flaps = Math.min(1, full); }
+      spd = Math.min(spd, AP.spd ?? spd, t.spd ?? spd);
+      t.spd = spd; t.thr = undefined; AP.spd = Math.round(spd);
+      t.flaps = Math.max(fc.flaps, ias < (P0.vfe || 999) + 2 ? flaps : fc.flaps);
+      if (remain < gearAt && AC.jet && !fc.gear) fc.gear = 1;
+      if (fc.spoiler && (ias < spd + 5 || t.approach)) fc.spoiler = 0;
+      else if (!t.approach && ias > spd + 25 && jet) fc.spoiler = 1;
+      if (t.phase === 'flare') say('Autopilot: flare');
+      else if (t.approach) say(`Autopilot: on final, ${Math.round(PF.appr)} kt, landing flaps`);
+      else if (remain < gearAt) say('Autopilot: gear down, lining up for the runway');
+      else if (remain < slow) say(`Autopilot: slowing to ${Math.round(spd)} kt, more flap`);
+      else say(`Autopilot: descending, slowing to ${Math.round(spd)} kt`);
+    }
+    function autoAfter() {
+      // stopped on the runway: park it and hand back
+      if (st.ground && st.landedOnce && st.v / KT < 3 && !autoStopped) { autoStopped = true; fc.reverse = false; fc.spoiler = 0; fc.parking = true; fc.throttle = 0; thrTarget = 0; setAP(false); tipNow = 'Landed and stopped. Parking brake set, autopilot off'; tipUntil = performance.now() + 5000; }
     }
 
     // Photo tiles load coarse first, and a coarse tile can be tens of metres off. Once the detailed tiles around a runway
