@@ -771,8 +771,8 @@ window.BoploSim = (() => {
     // L scenery light · sky shift [brightness, saturation, hue] · haze colour · haze distance (m) · grade gain · grade lift
     // · contrast · saturation · vignette · sunlight colour · sunlight intensity · reflections [diffuse, specular] · sun glow · bloom
     const KEYS = [
-      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.6, .6], sg: 0, bl: -.25, sk: 0, sb: .1, eb: 3 },
-      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.8, .8], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 3 },
+      { e: -14, L: [.16, .18, .27], S: [-.85, -.3, 0], hz: [.04, .05, .1], hz2: [.04, .05, .1], hd: 12000, g: [.85, .92, 1.1], lf: [0, 0, 0], c: 1.06, sat: .85, v: .5, lc: [.55, .65, 1], li: .3, ibl: [.3, .4], sg: 0, bl: -.25, sk: 0, sb: .1, eb: .9 },
+      { e: -6, L: [.36, .36, .46], S: [-.5, 0, 0], hz: [.55, .38, .4], hz2: [.24, .25, .38], hd: 20000, g: [.96, .95, 1.04], lf: [0, 0, 0], c: 1.08, sat: .95, v: .45, lc: [.75, .62, .8], li: .6, ibl: [.6, .7], sg: .6, bl: -.3, sk: .9, sb: .45, eb: 1.6 },
       { e: -1, L: [.52, .47, .48], S: [-.05, 0, 0], hz: [1, .62, .42], hz2: [.5, .48, .62], hd: 30000, g: [1.05, .99, .94], lf: [0, 0, 0], c: 1.1, sat: 1.04, v: .42, lc: [1, .62, .4], li: 1.6, ibl: [1, 1], sg: 3, bl: -.25, sk: 1, sb: .9, eb: 2.6 },
       { e: 5, L: [.8, .74, .68], S: [-.02, .02, 0], hz: [1, .8, .62], hz2: [.66, .7, .82], hd: 35000, g: [1.04, 1, .95], lf: [0, 0, 0], c: 1.08, sat: 1.05, v: .36, lc: [1, .8, .6], li: 1.9, ibl: [1, 1], sg: 2, bl: -.32, sk: .55, sb: 1, eb: 2 },
       { e: 18, L: [1, 1, 1], S: [0, .04, 0], hz: [.85, .85, .88], hz2: [.72, .8, .93], hd: 45000, g: [1, 1, 1], lf: [0, 0, 0], c: 1.06, sat: 1.06, v: .26, lc: [1, .98, .95], li: 2, ibl: [1, 1], sg: 1, bl: -.4, sk: 0, sb: 1, eb: 1.5 }
@@ -1317,8 +1317,8 @@ window.BoploSim = (() => {
 
     /* ---- input ---- */
     const keys = new Set(), ctl = { roll: 0, pitch: 0, yaw: 0 };
-    const gateKey = PRF ? 'gatesFinal' : 'gates';
-    let showGates = !replay && store.get(gateKey, !PRF);
+    const gateKey = PRF ? 'gatesFinal2' : 'gates2';
+    let showGates = !replay && store.get(gateKey, false);
     const CS = Object.assign({ expo: .35, keyRate: 1, centre: true, mouse: false, axes: { roll: 0, pitch: 1, yaw: 2, thr: -1 }, axInv: { roll: false, pitch: false, yaw: false, thr: true } }, store.get('ctl', {}));
     const saveCS = () => store.set('ctl', CS);
     let mouseV = null;
