@@ -380,8 +380,13 @@
 .sim.is-touch .pfd-lv-track{height:72px}
 .sim.is-touch .pfd-fl{grid-template-columns:auto;}.sim.is-touch .pfd-trimbar{height:22px}
 .sim.is-touch .pfd-fl button{height:22px;width:36px}
-.sim.is-touch .pfd-dock{bottom:calc(env(safe-area-inset-bottom) + 196px);gap:2px;padding:4px}
-.sim.is-touch .pfd-dk{width:50px;height:46px}
+/* flap lever and trim sit side by side next to the throttle so the bottom row stays as tall as the stick */
+.sim.is-touch .pfd-flaps{grid-auto-flow:column;align-items:end}
+.sim.is-touch .pfd-lever>span,.sim.is-touch .pfd-fl>span{font-size:8.5px}
+.sim.is-touch .pfd-dock{bottom:calc(env(safe-area-inset-bottom) + 196px);gap:1px;padding:4px}
+.sim.is-touch .pfd-dk{width:47px;height:46px}
+.sim.is-touch .pfd-dk span{font-size:7.5px;letter-spacing:.03em}
+.sim.is-touch .pfd-dk[data-pf="lights"]{display:none}
 .sim.is-touch .ap-panel{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 254px);width:min(320px,calc(100vw - 20px))}
 @media (max-width:760px){
   .sim.hud-on .sim-top{padding-top:calc(env(safe-area-inset-top) + 8px)}
