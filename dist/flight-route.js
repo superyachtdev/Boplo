@@ -299,13 +299,16 @@ window.BoploRoute = (() => {
     // ---------- map clicks ----------
     map.on('mouseenter', 'rp-ap', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'rp-ap', () => map.getCanvas().style.cursor = '');
+    let clickT = 0;
     map.on('click', e => {
       const pad = 10, box = [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]];
       const hit = map.queryRenderedFeatures(box, { layers: ['rp-ap', 'rp-aplab', 'rp-rwy'] })[0];
       if (hit) { const a = aps.get(hit.properties.code); if (a) { showCard(a); paintData(); if (innerWidth <= 820) $('[data-rpanel]').classList.remove('min'); } return; }
       if (sel) { showCard(null); paintData(); }
-      if (plan.dep && plan.arr) { plan.wps.push({ lat: +e.lngLat.lat.toFixed(5), lng: +e.lngLat.wrap().lng.toFixed(5) }); changed(); }
+      // wait a moment so a double-click (zoom) doesn't drop two waypoints
+      if (plan.dep && plan.arr) { const ll = e.lngLat.wrap(); clearTimeout(clickT); clickT = setTimeout(() => { plan.wps.push({ lat: +ll.lat.toFixed(5), lng: +ll.lng.toFixed(5) }); changed(); }, 260); }
     });
+    map.on('dblclick', () => clearTimeout(clickT));
 
     // ---------- search ----------
     const q = $('[data-rq]'), res = $('[data-rres]');

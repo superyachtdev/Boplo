@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=14'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=15'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -986,7 +986,9 @@ window.BoploSim = (() => {
     const labelStyle = { font: '600 15px Archivo, system-ui, sans-serif', fillColor: C.Color.WHITE, outlineColor: C.Color.fromCssColorString('#06102A'), outlineWidth: 4, style: C.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(1500, 1, 40000, .55), translucencyByDistance: new C.NearFarScalar(30000, 1, 60000, 0) };
     if (O.country && window.BoploMap?.airfields) BoploMap.airfields(O.country).then(list => {
       if (!alive) return;
-      miniAps = list.filter(a => a.type !== 'W').map(a => ({ code: a.code, t: a.type, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < L + 150000);
+      const addMini = l => { const have = new Set(miniAps.map(o => o.code)); miniAps = miniAps.concat(l.filter(a => a.type !== 'W' && !a.code.includes('-') && !have.has(a.code)).map(a => ({ code: a.code, t: a.type, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < L + 150000)); };
+      addMini(list);
+      [O.depAirport?.cc, O.arrAirport?.cc].filter((c, i, l) => c && c !== O.country && l.indexOf(c) === i).forEach(c => BoploMap.airfields(c).then(l => alive && addMini(l)).catch(() => { }));
       list.filter(a => a.type !== 'S' && a.type !== 'H' && Number.isFinite(a.elev)).map(a => ({ a, xz: F.to(a.lat, a.lng) })).filter(o => Math.hypot(...o.xz) < Math.max(70000, L + 40000)).slice(0, 220)
         .forEach(({ a, xz }) => labels.add({ ...labelStyle, text: a.code, position: LLH(xz[0], xz[1], a.elev * FT + geoN + 45), fillColor: C.Color.fromCssColorString('#CFE8FF'), font: '600 13px Archivo, system-ui, sans-serif' }));
     });
@@ -1571,7 +1573,7 @@ window.BoploSim = (() => {
         const x = X(a.xz[0]), y = Y(a.xz[1]); if (x < -20 || y < -20 || x > w + 20 || y > h + 20) continue;
         if (a.t === 'S' && rNm > 25) continue;
         g.fillStyle = 'rgba(4,11,34,.9)'; g.strokeStyle = 'rgba(158,216,255,.7)'; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, a.t === 'L' ? 4 : 3, 0, 7); g.fill(); g.stroke();
-        if (rNm <= 50 || a.t === 'L') { g.fillStyle = 'rgba(222,233,255,.75)'; g.fillText(a.code, x, y + 14); }
+        if (a.t === 'L' || (a.t === 'M' && rNm <= 50) || rNm <= 5) { g.fillStyle = 'rgba(222,233,255,.75)'; g.fillText(a.code, x, y + 14); }
       }
       // runways
       g.strokeStyle = '#DDEBFF'; for (const r of rwys) { g.lineWidth = Math.max(2, r.wid * k); g.beginPath(); g.moveTo(X(r.A[0]), Y(r.A[1])); g.lineTo(X(r.B[0]), Y(r.B[1])); g.stroke(); }
