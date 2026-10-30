@@ -782,17 +782,21 @@ window.BoploSim = (() => {
     const sky = { hour: TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6, elev: 45, L: [1, 1, 1], dark: false, dim: false };
     let LIGHT = [1, 1, 1], starBox = null, flare = null, tintShader = null, grade = null, rwStRef = () => [];
     if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
+    const camUp = new C.Cartesian3(), camTan = new C.Cartesian2();
     // colour grade over the whole frame: warm gain and lifted shadows at sunset, filmic contrast, a soft vignette
     try {
-      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0, u_skyb: 1 },
+      grade = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_grade', uniforms: { u_gain: new C.Cartesian3(1, 1, 1), u_lift: new C.Cartesian3(0, 0, 0), u_con: 1.06, u_sat: 1.08, u_vig: .28, u_sky: 0, u_skyb: 1,
+          u_cd: () => camera.directionWC, u_cu: () => camera.upWC, u_cr: () => camera.rightWC,
+          u_up: () => C.Ellipsoid.WGS84.geodeticSurfaceNormal(camera.positionWC, camUp), u_sun: () => scene.context.uniformState.sunDirectionWC || C.Cartesian3.UNIT_Z,
+          u_tan: () => { const fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2); camTan.x = ty * (fr.aspectRatio || 1); camTan.y = ty; return camTan; } },
         // the open sky (nothing in the depth buffer) is recoloured at dawn and dusk: Cesium's scattering goes teal at low sun,
         // so its brightness is mapped onto a sunset palette, deep blue overhead through rose to orange and gold at the horizon
-        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; uniform float u_skyb; in vec2 v_textureCoordinates;
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 u_gain; uniform vec3 u_lift; uniform float u_con; uniform float u_sat; uniform float u_vig; uniform float u_sky; uniform float u_skyb; uniform vec3 u_cd; uniform vec3 u_cu; uniform vec3 u_cr; uniform vec3 u_up; uniform vec3 u_sun; uniform vec2 u_tan; in vec2 v_textureCoordinates;
           // a dawn/dusk sky built from the actual view direction: orange and gold low towards the sun, rose and lavender away
           // from it, deepening to blue overhead, with a glow around the sun itself
           vec3 duskSky(vec2 uv) {
-            vec4 e = czm_inverseProjection * vec4(uv * 2.0 - 1.0, 1.0, 1.0); vec3 dirEC = normalize(e.xyz / e.w);
-            vec3 dir = normalize((czm_inverseView * vec4(dirEC, 0.0)).xyz), up = normalize(czm_viewerPositionWC), sun = normalize(czm_sunDirectionWC);
+            // (the view uniforms in a post-process pass aren't the scene camera's, so the camera basis comes in as uniforms)
+            vec3 dir = normalize(u_cd + (uv.x * 2.0 - 1.0) * u_tan.x * u_cr + (uv.y * 2.0 - 1.0) * u_tan.y * u_cu), up = u_up, sun = u_sun;
             float h = dot(dir, up), s = max(dot(dir, sun), 0.0);
             vec3 sunH = normalize(sun - up * dot(sun, up)), dirH = normalize(dir - up * h);
             float toward = pow(max(dot(dirH, sunH), 0.0), 1.5);
