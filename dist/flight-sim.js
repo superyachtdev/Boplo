@@ -2205,7 +2205,9 @@ window.BoploSim = (() => {
       hudT += real; if (hudT > .05) { hudT = 0; hud(); }
     }
     raf = requestAnimationFrame(loop);
-    if (store.get("debug", false)) window.__boploSim = { viewer, st, C, tileset, model, path, FM, rwAt, elevAt, groundAt, approachCap, AP, dbg: () => ({ g0, g1, L, TDZ, DG, cruise, geoN, prof0: prof(0), arrE: arrE && arrE.id, depE: depE && depE.id, landPt, sThr, circuit }), key: k => { keys.add(k); }, unkey: k => keys.delete(k) };
+    if (store.get("debug", false)) window.__boploSim = { viewer, st, C, tileset, model, path, FM, rwAt, elevAt, groundAt, approachCap, AP, dbg: () => ({ g0, g1, L, TDZ, DG, cruise, geoN, prof0: prof(0), arrE: arrE && arrE.id, depE: depE && depE.id, landPt, sThr, circuit }), key: k => { keys.add(k); }, unkey: k => keys.delete(k),
+      // tests: fly n seconds of simulated time right now, without rendering
+      run: n => { for (let t = 0; t < n && !st.crashed && !(st.ground && st.landedOnce && st.v < 2); t += .04) { if (apOn) autopilot(.04); step(.04); } return { t: st.t, crashed: st.crashed, crash: st.crash, landed: st.landedOnce, v: st.v }; }, tip: () => tipNow };
     return { close: destroy };
   }
 
