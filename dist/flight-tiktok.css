@@ -1,40 +1,24 @@
-/* Boplo Flight landing: the @boploflight TikTok feed, in a phone you can swipe through */
-.tt{max-width:1240px;margin:0 auto;padding:clamp(100px,13vw,170px) var(--gutter) 0;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(32px,5vw,72px);align-items:center}
-.tt-copy h2{font-size:clamp(36px,5vw,68px);line-height:.98;letter-spacing:-.04em;font-weight:620;font-style:italic;font-variation-settings:'wdth' 112;text-wrap:balance}
-.tt-copy p{margin-top:20px;color:var(--mist);max-width:30em;font-size:18px}
-.tt-copy .cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
-.tt-handle{display:inline-flex;align-items:center;gap:10px;margin-top:26px;color:var(--ice);font-weight:560;font-size:15px}
-.tt-handle i{width:8px;height:8px;border-radius:50%;background:#FF2D55;box-shadow:0 0 0 4px rgba(255,45,85,.18)}
-.tt-stage{display:flex;align-items:center;justify-content:center;gap:clamp(14px,2vw,26px)}
-.tt-phone{position:relative;width:min(330px,78vw,calc((100svh - 150px) * .486));min-width:240px;aspect-ratio:9/18.5;border-radius:46px;padding:11px;background:linear-gradient(160deg,#1A2547,#060B1C 60%);box-shadow:0 0 0 1px var(--hair-d),0 50px 120px -40px rgba(10,98,255,.55),inset 0 0 0 1px rgba(255,255,255,.06)}
-.tt-screen{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#000}
-.tt-feed{height:100%;overflow-y:auto;scroll-snap-type:y mandatory;overscroll-behavior-y:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tt-feed::-webkit-scrollbar{display:none}
-.tt-slide{position:relative;height:100%;scroll-snap-align:start;scroll-snap-stop:always;background:#05091A center/cover no-repeat}
-.tt-slide::after{content:"";position:absolute;inset:auto 0 0;height:45%;background:linear-gradient(transparent,rgba(0,0,0,.78));pointer-events:none}
-.tt-slide.playing::after{display:none}
-.tt-slide iframe{position:absolute;inset:0;width:100%;height:100%;border:0;z-index:2;background:#000}
-.tt-play{position:absolute;inset:0;z-index:1;display:grid;place-items:center;border:0;background:none;cursor:pointer;color:#fff}
-.tt-play span{display:grid;place-items:center;width:74px;height:74px;border-radius:50%;background:rgba(255,255,255,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 0 0 1px rgba(255,255,255,.25);transition:transform .3s var(--ease),background-color .3s}
-.tt-play:hover span{transform:scale(1.06);background:rgba(255,255,255,.26)}
-.tt-play svg{width:26px;height:26px;margin-left:4px;fill:#fff}
-.tt-cap{position:absolute;left:18px;right:18px;bottom:22px;z-index:1;pointer-events:none}
-.tt-cap b{display:block;font-size:14px;font-weight:620}
-.tt-cap p{margin-top:6px;font-size:14px;line-height:1.4;color:rgba(255,255,255,.88);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.tt-ctrl{display:flex;flex-direction:column;align-items:center;gap:10px}
-.tt-ctrl button{width:48px;height:48px;border-radius:50%;border:1px solid var(--hair-d);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;display:grid;place-items:center;transition:background-color .2s}
-.tt-ctrl button:hover:not(:disabled){background:rgba(10,98,255,.3)}
-.tt-ctrl button:disabled{opacity:.3;cursor:default}
-.tt-ctrl svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.tt-ctrl output{font-size:13px;color:var(--mist);font-variant-numeric:tabular-nums}
-
-.tt-ctrl[hidden]{display:none}
-.tt-none{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:28px;background:radial-gradient(120% 70% at 50% 0%,#0B2A6E 0%,#040B22 55%,#020611 100%)}
-.tt-av{display:grid;place-items:center;width:84px;height:84px;border-radius:50%;background:linear-gradient(140deg,var(--electric-hi),#06102A);font-size:38px;font-weight:700;font-style:italic;box-shadow:0 0 0 3px rgba(255,255,255,.12)}
-.tt-none b{font-size:19px;font-weight:640;margin-top:6px}
-.tt-none p{color:var(--mist);font-size:14.5px;max-width:22em}
-.tt-go{margin-top:10px;display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:999px;background:#fff;color:var(--ink);font-weight:600;font-size:15px}
-.tt-empty{height:100%;display:grid;place-items:center;text-align:center;padding:28px;color:var(--mist);font-size:15px}
-@media (max-width:860px){.tt{grid-template-columns:1fr;text-align:left}.tt-stage{justify-content:center}}
-@media (max-width:520px){.tt-stage{flex-direction:column}.tt-ctrl{flex-direction:row;gap:18px}.tt-phone{width:min(86vw,calc((100svh - 190px) * .486))}}
-@media (prefers-reduced-motion:reduce){.tt-play span{transition:none}}
+/* Boplo Flight landing: the latest @boploflight posts as a row of real TikTok players */
+.tt{padding:clamp(100px,13vw,170px) 0 0;text-align:center}
+.tt-head{max-width:760px;margin:0 auto;padding:0 var(--gutter)}
+.tt-eyebrow{font-size:13px;letter-spacing:.24em;color:var(--mist);font-weight:560}
+.tt-head h2{margin-top:14px;font-size:clamp(36px,5vw,68px);line-height:.98;letter-spacing:-.04em;font-weight:620;font-style:italic;font-variation-settings:'wdth' 112;text-wrap:balance}
+.tt-head p{margin:18px auto 0;color:var(--mist);max-width:34em;font-size:18px}
+.tt-wrap{position:relative;max-width:1400px;margin:clamp(36px,4.5vw,56px) auto 0}
+.tt-row{display:grid;grid-auto-flow:column;grid-auto-columns:clamp(232px,18.4%,290px);gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding:0 var(--gutter);padding:4px var(--gutter) 14px;scrollbar-width:none;justify-content:safe center}
+.tt-row::-webkit-scrollbar{display:none}
+.tt-tile{position:relative;aspect-ratio:9/16;border-radius:20px;overflow:hidden;scroll-snap-align:start;background:#05091A;box-shadow:0 0 0 1px var(--hair-d),0 30px 70px -40px rgba(10,98,255,.6)}
+.tt-tile iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.tt-tile.wait::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,#05091A 30%,#0B1A3E 50%,#05091A 70%);background-size:200% 100%;animation:ttsk 1.4s linear infinite}
+@keyframes ttsk{to{background-position:-200% 0}}
+.tt-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:46px;height:46px;border-radius:50%;border:1px solid var(--hair-d);background:rgba(4,11,34,.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;cursor:pointer;transition:opacity .2s}
+.tt-nav[hidden]{display:none}
+.tt-nav:disabled{opacity:0;pointer-events:none}
+.tt-nav.l{left:max(8px,calc(var(--gutter) - 22px))}.tt-nav.r{right:max(8px,calc(var(--gutter) - 22px))}
+.tt-nav svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tt-follow{display:inline-flex;align-items:center;gap:10px;margin-top:clamp(28px,3.5vw,44px);padding-bottom:4px;border-bottom:1px solid rgba(158,216,255,.4);color:#fff;font-weight:560;font-size:15px;letter-spacing:.02em;transition:color .2s,border-color .2s}
+.tt-follow:hover{color:var(--ice);border-color:var(--ice)}
+.tt-follow i{width:8px;height:8px;border-radius:50%;background:#FF2D55;box-shadow:0 0 0 4px rgba(255,45,85,.18)}
+.tt-none{max-width:420px;margin:0 auto;padding:40px 24px;border-radius:22px;box-shadow:0 0 0 1px var(--hair-d);color:var(--mist)}
+@media (max-width:700px){.tt-row{grid-auto-columns:72%;justify-content:start}.tt-nav{display:none}}
+@media (prefers-reduced-motion:reduce){.tt-tile.wait::before{animation:none}}
