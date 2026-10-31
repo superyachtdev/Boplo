@@ -12,7 +12,7 @@
 /* 1. the statement, over a pilot's hands on the yoke above the water */
 .statement.ph-island{position:relative;max-width:none;margin:0 10px;border-radius:var(--r-frame);overflow:hidden;box-shadow:inset 0 0 0 1px var(--hair-d);isolation:isolate}
 .statement.ph-island>p{position:relative;z-index:1;max-width:1240px;margin:0 auto;color:rgba(242,246,255,.5)}
-.statement .ph-layer img{opacity:.42;object-position:60% 55%}
+.statement .ph-layer img{opacity:.55;object-position:60% 55%}
 .statement .ph-shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(2,6,17,.96) 0%,rgba(2,6,17,.8) 48%,rgba(2,6,17,.45) 100%),linear-gradient(180deg,rgba(2,6,17,.55),transparent 30%,transparent 70%,rgba(2,6,17,.6))}
 
 /* 2. a full-screen photo between the desk and the rules */
@@ -28,12 +28,13 @@
 
 /* 3. a photo card under the questions heading */
 .faq-photo{position:relative;margin-top:28px;aspect-ratio:4/5;max-width:420px;border-radius:var(--r-tile);overflow:hidden;box-shadow:inset 0 0 0 1px var(--hair-d);isolation:isolate}
-.faq-photo .ph-shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,6,17,.85) 0%,rgba(2,6,17,.1) 45%,rgba(2,6,17,.25) 100%)}
+.faq-photo img{filter:brightness(.82) saturate(.9)}
+.faq-photo .ph-shade{position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,6,17,.88) 0%,rgba(2,6,17,.15) 45%,rgba(2,6,17,.4) 100%)}
 .faq-photo figcaption{position:absolute;left:20px;right:20px;bottom:38px;z-index:1;font-size:15px;line-height:1.45;color:rgba(242,246,255,.9)}
 
 /* 4. the final call, over a Cessna at golden hour */
-.final-card .ph-layer img{opacity:.38;object-position:50% 60%}
-.final-card .ph-shade{position:absolute;inset:0;background:radial-gradient(80% 70% at 50% 45%,rgba(4,11,34,.7),rgba(4,11,34,.92) 80%),linear-gradient(180deg,rgba(4,11,34,.6),transparent 40%,rgba(7,23,70,.5))}
+.final-card .ph-layer img{opacity:.6;object-position:50% 60%}
+.final-card .ph-shade{position:absolute;inset:0;background:radial-gradient(70% 60% at 50% 45%,rgba(4,11,34,.62),rgba(4,11,34,.88) 85%),linear-gradient(180deg,rgba(4,11,34,.6),transparent 40%,rgba(7,23,70,.5))}
 .final-card>*:not(.ph-layer){z-index:1}
 
 /* photos settle into place as you scroll to them, where the browser supports it */
@@ -43,6 +44,7 @@
     @keyframes ph-settle{from{transform:scale(1.14) translateY(-3%)}to{transform:scale(1.02) translateY(0)}}
   }
 }
+@media (max-width:1080px){.faq-photo{max-width:560px;aspect-ratio:16/10}}
 @media (max-width:860px){
   .statement .ph-shade{background:linear-gradient(180deg,rgba(2,6,17,.9),rgba(2,6,17,.72) 50%,rgba(2,6,17,.9))}
   .faq-photo{max-width:none;aspect-ratio:16/10}
