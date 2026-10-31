@@ -11,14 +11,33 @@
 
   function build(videos) {
     row.innerHTML = videos.slice(0, 12).map((v, i) => `<div class="tt-tile wait" data-id="${esc(v.id)}" role="group" aria-label="TikTok post ${i + 1} of ${Math.min(12, videos.length)}${v.title ? ': ' + esc(v.title) : ''}"></div>`).join('');
-    // the browser loads each player as its tile comes near the screen (native lazy loading), the first few straight away
-    row.querySelectorAll('.tt-tile').forEach((t, i) => {
+    // Every player starts muted. Only the posts actually on screen play, and only the one under the mouse has sound,
+    // so a row of posts never talks over itself and nothing is heard once you've scrolled past.
+    const tiles = [...row.querySelectorAll('.tt-tile')], st = new Map();
+    const send = (t, type) => { try { t.querySelector('iframe')?.contentWindow?.postMessage({ type, value: undefined, 'x-tiktok-player': true }, '*'); } catch { } };
+    const apply = t => { const o = st.get(t); if (!o?.ready) return; if (o.vis && !document.hidden) { send(t, o.hover ? 'unMute' : 'mute'); send(t, 'play'); } else { send(t, 'mute'); send(t, 'pause'); } };
+    tiles.forEach((t, i) => {
+      st.set(t, { ready: false, vis: false, hover: false });
       const f = document.createElement('iframe');
-      f.src = `https://www.tiktok.com/player/v1/${t.dataset.id}?music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
+      f.src = `https://www.tiktok.com/player/v1/${t.dataset.id}?autoplay=1&muted=1&loop=1&music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
       f.title = 'TikTok post from @boploflight'; f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture'; f.allowFullscreen = true;
       if (i > 4) f.loading = 'lazy';
       f.onload = () => t.classList.remove('wait'); t.appendChild(f);
+      t.addEventListener('pointerenter', e => { if (e.pointerType !== 'mouse') return; tiles.forEach(o => { const s2 = st.get(o); if (s2.hover && o !== t) { s2.hover = false; apply(o); } }); st.get(t).hover = true; apply(t); });
+      t.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; st.get(t).hover = false; apply(t); });
     });
+    addEventListener('message', e => {
+      let d = e.data; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+      if (!d || !d['x-tiktok-player']) return;
+      const t = tiles.find(x => x.querySelector('iframe')?.contentWindow === e.source); if (!t) return;
+      if (d.type === 'onPlayerReady') { st.get(t).ready = true; apply(t); }
+      // a post that starts playing while off screen (TikTok's autoplay) is paused straight away
+      else if (d.type === 'onStateChange' && d.value === 1 && !st.get(t).vis) { send(t, 'mute'); send(t, 'pause'); }
+    });
+    // "on screen" means at least half the tile is visible, inside the row and inside the window
+    const vio = new IntersectionObserver(es => es.forEach(e => { const o = st.get(e.target); const v = e.isIntersecting && e.intersectionRatio >= .5; if (v !== o.vis) { o.vis = v; if (!v) o.hover = false; apply(e.target); } }), { threshold: [0, .5, 1] });
+    tiles.forEach(t => vio.observe(t));
+    document.addEventListener('visibilitychange', () => tiles.forEach(apply));
     requestAnimationFrame(arrows);
   }
   let started = false;
