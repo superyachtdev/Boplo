@@ -11,15 +11,14 @@
 
   function build(videos) {
     row.innerHTML = videos.slice(0, 12).map((v, i) => `<div class="tt-tile wait" data-id="${esc(v.id)}" role="group" aria-label="TikTok post ${i + 1} of ${Math.min(12, videos.length)}${v.title ? ': ' + esc(v.title) : ''}"></div>`).join('');
-    // each player loads as its tile comes near the screen, so a long row doesn't load all at once
-    const io = new IntersectionObserver(es => es.forEach(e => {
-      if (!e.isIntersecting) return; io.unobserve(e.target);
+    // the browser loads each player as its tile comes near the screen (native lazy loading), the first few straight away
+    row.querySelectorAll('.tt-tile').forEach((t, i) => {
       const f = document.createElement('iframe');
-      f.src = `https://www.tiktok.com/player/v1/${e.target.dataset.id}?music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
+      f.src = `https://www.tiktok.com/player/v1/${t.dataset.id}?music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
       f.title = 'TikTok post from @boploflight'; f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture'; f.allowFullscreen = true;
-      f.onload = () => e.target.classList.remove('wait'); e.target.appendChild(f);
-    }), { root: null, rootMargin: '300px 600px' });
-    row.querySelectorAll('.tt-tile').forEach(t => io.observe(t));
+      if (i > 4) f.loading = 'lazy';
+      f.onload = () => t.classList.remove('wait'); t.appendChild(f);
+    });
     requestAnimationFrame(arrows);
   }
   let started = false;
