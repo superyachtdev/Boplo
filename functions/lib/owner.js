@@ -145,20 +145,19 @@ export async function ownerStats(env, user, url) {
 }
 
 // ---------- one person: search, then their account, plan, usage and recent activity ----------
-const likeArg = s => '%' + String(s).toLowerCase().replace(/[\\%_]/g, c => '\\' + c) + '%';
 export async function ownerUsers(env, user, url) {
   if (!isOwner(env, user)) throw Object.assign(new Error('Not allowed.'), { status: 403 });
   await ensure(env);
   const q = String(url.searchParams.get('q') || '').trim().slice(0, 80);
   if (q.length < 2) return { users: [] };
-  const like = likeArg(q), where = `WHERE lower(u.email) LIKE ?1 ESCAPE '\\' OR lower(coalesce(u.display_name,'')) LIKE ?1 ESCAPE '\\' OR u.id=?2`;
+  const needle = q.toLowerCase(), where = `WHERE instr(lower(u.email), ?) > 0 OR instr(lower(coalesce(u.display_name,'')), ?) > 0 OR u.id=?`; // plain substring match: no LIKE wildcards to escape
   const flights = '(SELECT COUNT(*) FROM flight_records r WHERE r.user_id=u.id) flights';
   // richest query first; the optional tables (billing, schools) may not exist yet on a fresh database
   for (const sql of [
     `SELECT u.id, u.email, u.display_name name, u.created_at, p.user_id IS NOT NULL desk, b.status, b.price_key, m.role school_role, ${flights} FROM darts_users u LEFT JOIN flight_profiles p ON p.user_id=u.id LEFT JOIN flight_billing b ON b.user_id=u.id LEFT JOIN flight_school_members m ON m.user_id=u.id ${where} ORDER BY (p.user_id IS NOT NULL) DESC, u.created_at DESC LIMIT 20`,
     `SELECT u.id, u.email, u.display_name name, u.created_at, p.user_id IS NOT NULL desk, b.status, b.price_key, ${flights} FROM darts_users u LEFT JOIN flight_profiles p ON p.user_id=u.id LEFT JOIN flight_billing b ON b.user_id=u.id ${where} ORDER BY (p.user_id IS NOT NULL) DESC, u.created_at DESC LIMIT 20`,
     `SELECT u.id, u.email, u.display_name name, u.created_at FROM darts_users u ${where} ORDER BY u.created_at DESC LIMIT 20`
-  ]) { try { return { users: (await env.DB.prepare(sql).bind(like, q).all()).results || [] }; } catch { } }
+  ]) { try { return { users: (await env.DB.prepare(sql).bind(needle, needle, q).all()).results || [] }; } catch (e) { console.warn('owner search', e?.message); } }
   return { users: [] };
 }
 
