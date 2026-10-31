@@ -9,6 +9,7 @@ function env() {
   const db = new DatabaseSync(':memory:');
   for (const f of ['0002_darts_product.sql', '0009_boplo_flight.sql']) db.exec(readFileSync(new URL('../migrations/' + f, import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE flight_billing (user_id TEXT PRIMARY KEY, customer_id TEXT, subscription_id TEXT, status TEXT NOT NULL DEFAULT 'none', price_key TEXT, current_period_end INTEGER, cancel_at_period_end INTEGER NOT NULL DEFAULT 0, trial_end INTEGER, trial_used INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
+    CREATE TABLE flight_kv (k TEXT PRIMARY KEY, v TEXT NOT NULL); CREATE TABLE flight_attrib (user_id TEXT PRIMARY KEY, src TEXT, ref TEXT, landing TEXT, created_at INTEGER NOT NULL); CREATE TABLE site_hits (day TEXT NOT NULL, ts INTEGER NOT NULL, path TEXT, ref TEXT, src TEXT, country TEXT, device TEXT, vh TEXT);
     CREATE TABLE flight_school_members (user_id TEXT PRIMARY KEY, school_id TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'student');
     CREATE TABLE flight_schools (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'school', status TEXT NOT NULL DEFAULT 'none');
     CREATE TABLE flight_ai_usage (user_id TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));
@@ -44,4 +45,19 @@ test('owners can find a user and open their page; others cannot', async () => {
   await assert.rejects(ownerUser(e, owner, url({ id: 'nope' })), /No account/);
   await assert.rejects(ownerUsers(e, { id: 'u1', email: 'amy.pilot@example.com' }, url({ q: 'amy' })), /Not allowed/);
   await assert.rejects(ownerUser(e, { id: 'u1', email: 'amy.pilot@example.com' }, url({ id: 'u1' })), /Not allowed/);
+});
+
+test('the TikTok feed takes pasted links, short links included, and only owners can set it', async () => {
+  const { setTiktokFeed, tiktokFeed } = await import('../functions/lib/owner.js');
+  const e = env();
+  const fetcher = async (u, o) => {
+    if (u.includes('/oembed')) return new Response(JSON.stringify({ title: 'Short final at sunset', thumbnail_url: 'https://p16.tiktokcdn.com/x.jpg' }), { headers: { 'Content-Type': 'application/json' } });
+    if (u.includes('vm.tiktok.com')) return new Response(null, { status: 301, headers: { Location: 'https://www.tiktok.com/@boploflight/video/7300000000000000002?_r=1' } });
+    throw new Error('unexpected ' + u);
+  };
+  const r = await setTiktokFeed(e, owner, { links: 'https://www.tiktok.com/@boploflight/video/7300000000000000001?lang=en\nhttps://vm.tiktok.com/ZMabc/ https://example.com/nope https://www.tiktok.com/@boploflight/video/7300000000000000001' }, fetcher);
+  assert.deepEqual(r.videos.map(v => v.id), ['7300000000000000001', '7300000000000000002']);
+  assert.equal(r.videos[0].title, 'Short final at sunset'); assert.equal(r.bad.length, 1);
+  const f = await tiktokFeed(e, fetcher); assert.equal(f.videos.length, 2); assert.equal(f.videos[1].thumb, 'https://p16.tiktokcdn.com/x.jpg');
+  await assert.rejects(setTiktokFeed(e, { id: 'x', email: 'someone@example.com' }, { links: '' }, fetcher), /Not allowed/);
 });

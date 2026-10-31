@@ -29,10 +29,12 @@
   <link rel="stylesheet" href="flight-home.css?v=9">
   <link rel="stylesheet" href="flight-home-fx.css?v=1">
   <link rel="stylesheet" href="flight-home-tour.css?v=6">
+  <link rel="stylesheet" href="flight-tiktok.css?v=1">
   <script src="vendor/lenis.min.js" defer></script>
   <script src="flight-home.js?v=9" defer></script>
   <script src="flight-home-fx.js?v=2" defer></script>
   <script src="flight-home-tour.js?v=5" defer></script>
+  <script src="flight-tiktok.js?v=1" defer></script>
   <script src="/hit.js?v=1" defer></script>
   <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "Boplo", "url": "https://boplo.app", "logo": "https://boplo.app/icons/apple-touch-icon.png", "email": "support@boplo.app"}, {"@context": "https://schema.org", "@type": "WebSite", "name": "Boplo Flight", "url": "https://boplo.app/"}, {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Boplo Flight", "applicationCategory": "EducationalApplication", "operatingSystem": "Web, iOS, Android", "url": "https://boplo.app/", "image": "https://boplo.app/assets/og.png", "description": "A flight desk for student pilots: lesson preparation, a logbook with GPS tracks, progress toward FAA, UK CAA and EASA licence requirements, theory practice with mock exams, and a 3D landing simulator.", "offers": [{"@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD"}, {"@type": "Offer", "name": "Advanced, yearly", "price": "99.99", "priceCurrency": "USD"}, {"@type": "Offer", "name": "Advanced, monthly", "price": "11.99", "priceCurrency": "USD"}]}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Boplo a flight school or a course?", "acceptedAnswer": {"@type": "Answer", "text": "No. Boplo doesn’t teach you to fly. It keeps your preparation, flights and hours organised around the training you’re already doing with your school and instructor."}}, {"@type": "Question", "name": "Which licences does it support?", "acceptedAnswer": {"@type": "Answer", "text": "You can set a goal of the FAA Private Pilot certificate, a UK or EASA PPL(A), NPPL, LAPL, a Canadian, Australian or New Zealand PPL, or a next rating, or choose “still exploring” if you haven’t started. You also pick your licensing authority and country of training."}}, {"@type": "Question", "name": "Does it replace my logbook?", "acceptedAnswer": {"@type": "Answer", "text": "No. Keep your official logbook as your school and authority require. Boplo is a personal record with the context behind each flight."}}, {"@type": "Question", "name": "Does Boplo check weather or NOTAMs?", "acceptedAnswer": {"@type": "Answer", "text": "No. Always check weather, NOTAMs and operating information through official sources and with your instructor."}}, {"@type": "Question", "name": "Can I bring the hours I already have?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Add your existing flight time when you set up, and it’s kept separate from the flights you log in Boplo."}}]}]</script>
 </head>
@@ -385,6 +387,27 @@
           </table></div>
         </details>
         <p class="pricing-foot"><a class="text-link" href="/plan.html">Work out what your licence would cost</a> Prices in US dollars, plus tax where it applies. Cancel any time; 14-day money-back guarantee. For training support, not flight instruction or operational approval. <a class="text-link" href="/flight-app.html?preview=1">Try the example desk first</a> Running a flight school? <a class="text-link" href="/schools.html">One plan covers every student</a>.</p>
+      </div>
+    </section>
+
+    <!-- TikTok: the latest @boploflight videos, swipeable in a phone -->
+    <section class="tt" id="tiktok" aria-labelledby="tt-h" data-tt>
+      <div class="tt-copy">
+        <h2 id="tt-h">Short finals, every day.</h2>
+        <p>Landings from the Boplo simulator, quick theory checks and the bits of training nobody warns you about. Swipe through the latest from @boploflight.</p>
+        <a class="tt-handle" href="https://www.tiktok.com/@boploflight" target="_blank" rel="noopener"><i aria-hidden="true"></i>@boploflight on TikTok</a>
+        <div class="cta-row">
+          <a class="btn btn-light" href="https://www.tiktok.com/@boploflight" target="_blank" rel="noopener">Follow on TikTok <svg class="spark" aria-hidden="true"><use href="#spark"/></svg></a>
+          <a class="btn btn-ghost" href="/flight-app.html?preview=1#sim">Fly the simulator</a>
+        </div>
+      </div>
+      <div class="tt-stage">
+        <div class="tt-phone"><div class="tt-screen"><div class="tt-feed" data-tt-feed tabindex="0" aria-label="Videos from @boploflight. Use the up and down arrow keys to move between them."><div class="tt-empty">Loading the latest videos…</div></div></div></div>
+        <div class="tt-ctrl">
+          <button type="button" data-tt-up aria-label="Previous video" disabled><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+          <output data-tt-n aria-live="polite"></output>
+          <button type="button" data-tt-down aria-label="Next video" disabled><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
       </div>
     </section>
 
