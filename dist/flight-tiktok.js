@@ -39,10 +39,14 @@
     const s = document.createElement('script'); s.async = true; s.src = 'https://www.tiktok.com/embed.js'; document.body.appendChild(s);
   }
   // load once the section is close, so the rest of the page isn't slowed down
+  let started = false;
   const start = async () => {
+    if (started) return; started = true;
     let d = null; try { d = await fetch('/flight/tiktok').then(r => r.ok ? r.json() : null); } catch { }
     if (d?.videos?.length) build(d.videos); else creatorEmbed();
   };
   const near = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { near.disconnect(); start(); } }, { rootMargin: '600px 0px' });
   near.observe(root);
+  // the list is tiny, so fetch it anyway a moment after load (some browsers delay the observer in background tabs)
+  addEventListener('load', () => setTimeout(start, 2500), { once: true });
 })();
