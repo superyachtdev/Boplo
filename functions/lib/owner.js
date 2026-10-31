@@ -96,7 +96,7 @@ export async function ownerStats(env, user, url) {
     all(env, 'SELECT school_id, role, COUNT(*) n FROM flight_school_members GROUP BY school_id, role'),
     all(env, `SELECT a.src k, COUNT(*) n FROM flight_attrib a JOIN darts_users u ON u.id=a.user_id WHERE u.created_at>=?${notOwner('a.user_id')} GROUP BY a.src ORDER BY n DESC LIMIT 10`, since, ...O),
     all(env, `SELECT a.src k, COUNT(*) n, SUM(CASE WHEN b.status IN ('active','trialing','past_due') THEN 1 ELSE 0 END) paid FROM flight_attrib a LEFT JOIN flight_billing b ON b.user_id=a.user_id WHERE 1=1${notOwner('a.user_id')} GROUP BY a.src ORDER BY n DESC LIMIT 10`, ...O),
-    all(env, `SELECT u.email, u.display_name name, u.created_at, json_extract(p.data,'$.country') country, json_extract(p.data,'$.licence') licence, json_extract(p.data,'$.complete') complete, b.status, b.price_key, a.src, (SELECT COUNT(*) FROM flight_records r WHERE r.user_id=p.user_id) flights ${U.replace('WHERE 1=1', 'LEFT JOIN flight_billing b ON b.user_id=p.user_id LEFT JOIN flight_attrib a ON a.user_id=p.user_id WHERE 1=1')} ORDER BY u.created_at DESC LIMIT 25`, ...O),
+    all(env, `SELECT u.id, u.email, u.display_name name, u.created_at, json_extract(p.data,'$.country') country, json_extract(p.data,'$.licence') licence, json_extract(p.data,'$.complete') complete, b.status, b.price_key, a.src, (SELECT COUNT(*) FROM flight_records r WHERE r.user_id=p.user_id) flights ${U.replace('WHERE 1=1', 'LEFT JOIN flight_billing b ON b.user_id=p.user_id LEFT JOIN flight_attrib a ON a.user_id=p.user_id WHERE 1=1')} ORDER BY u.created_at DESC LIMIT 25`, ...O),
     all(env, `SELECT json_extract(p.data,'$.country') country, json_extract(p.data,'$.authority') authority, json_extract(p.data,'$.licence') licence ${U}`, ...O),
     one(env, `SELECT COUNT(DISTINCT user_id) n FROM (SELECT user_id FROM flight_profiles WHERE updated_at>=?1 UNION SELECT user_id FROM flight_records WHERE updated_at>=?1 UNION SELECT user_id FROM darts_sessions WHERE created_at>=?1)${ownerIds.length ? ` WHERE user_id NOT IN (${O.map((_, i) => '?' + (i + 2)).join(',')})` : ''}`, now - 7 * DAY, ...O),
     one(env, `SELECT COUNT(DISTINCT user_id) n FROM (SELECT user_id FROM flight_profiles WHERE updated_at>=?1 UNION SELECT user_id FROM flight_records WHERE updated_at>=?1 UNION SELECT user_id FROM darts_sessions WHERE created_at>=?1)${ownerIds.length ? ` WHERE user_id NOT IN (${O.map((_, i) => '?' + (i + 2)).join(',')})` : ''}`, now - 30 * DAY, ...O),
@@ -141,5 +141,69 @@ export async function ownerStats(env, user, url) {
     usage: { active7: active7?.n || 0, active30: active30?.n || 0, flights: flightsN?.n || 0, ask: askN?.n || 0, simFree: simN?.n || 0, simScores: scoresN?.n || 0, posts: postsN?.n || 0 },
     users: { countries: tally(profiles, 'country'), authorities: tally(profiles, 'authority'), licences: tally(profiles, 'licence'), recent },
     leads: { recent: leadsN?.n || 0, latest: leads }
+  };
+}
+
+// ---------- one person: search, then their account, plan, usage and recent activity ----------
+const likeArg = s => '%' + String(s).toLowerCase().replace(/[\\%_]/g, c => '\\' + c) + '%';
+export async function ownerUsers(env, user, url) {
+  if (!isOwner(env, user)) throw Object.assign(new Error('Not allowed.'), { status: 403 });
+  await ensure(env);
+  const q = String(url.searchParams.get('q') || '').trim().slice(0, 80);
+  if (q.length < 2) return { users: [] };
+  const like = likeArg(q), where = `WHERE lower(u.email) LIKE ?1 ESCAPE '\\' OR lower(coalesce(u.display_name,'')) LIKE ?1 ESCAPE '\\' OR u.id=?2`;
+  const flights = '(SELECT COUNT(*) FROM flight_records r WHERE r.user_id=u.id) flights';
+  // richest query first; the optional tables (billing, schools) may not exist yet on a fresh database
+  for (const sql of [
+    `SELECT u.id, u.email, u.display_name name, u.created_at, p.user_id IS NOT NULL desk, b.status, b.price_key, m.role school_role, ${flights} FROM darts_users u LEFT JOIN flight_profiles p ON p.user_id=u.id LEFT JOIN flight_billing b ON b.user_id=u.id LEFT JOIN flight_school_members m ON m.user_id=u.id ${where} ORDER BY (p.user_id IS NOT NULL) DESC, u.created_at DESC LIMIT 20`,
+    `SELECT u.id, u.email, u.display_name name, u.created_at, p.user_id IS NOT NULL desk, b.status, b.price_key, ${flights} FROM darts_users u LEFT JOIN flight_profiles p ON p.user_id=u.id LEFT JOIN flight_billing b ON b.user_id=u.id ${where} ORDER BY (p.user_id IS NOT NULL) DESC, u.created_at DESC LIMIT 20`,
+    `SELECT u.id, u.email, u.display_name name, u.created_at FROM darts_users u ${where} ORDER BY u.created_at DESC LIMIT 20`
+  ]) { try { return { users: (await env.DB.prepare(sql).bind(like, q).all()).results || [] }; } catch { } }
+  return { users: [] };
+}
+
+export async function ownerUser(env, user, url) {
+  if (!isOwner(env, user)) throw Object.assign(new Error('Not allowed.'), { status: 403 });
+  await ensure(env);
+  const id = String(url.searchParams.get('id') || '').slice(0, 80);
+  const u = await one(env, 'SELECT id, email, display_name name, google_subject IS NOT NULL google, created_at FROM darts_users WHERE id=?', id);
+  if (!u) throw Object.assign(new Error('No account with that id.'), { status: 404 });
+  const now = Date.now(), d90 = now - 90 * DAY, day90 = new Date(d90 + DAY).toISOString().slice(0, 10), day30 = new Date(now - 29 * DAY).toISOString().slice(0, 10);
+  const [prof, bill, attrib, member, sess, fl, flRecent, flDays, ai, aiDays, simFree, simDays, scoreSum, scores, scoreDays, posts, postN, postDays] = await Promise.all([
+    one(env, 'SELECT data, updated_at FROM flight_profiles WHERE user_id=?', id),
+    one(env, 'SELECT customer_id, status, price_key, current_period_end, cancel_at_period_end c, trial_end, updated_at FROM flight_billing WHERE user_id=?', id),
+    one(env, 'SELECT src, ref, landing, created_at FROM flight_attrib WHERE user_id=?', id),
+    one(env, 'SELECT m.role, s.name, s.plan, s.status FROM flight_school_members m LEFT JOIN flight_schools s ON s.id=m.school_id WHERE m.user_id=?', id),
+    one(env, 'SELECT MAX(created_at) last, COUNT(*) n, SUM(CASE WHEN expires_at>? THEN 1 ELSE 0 END) live FROM darts_sessions WHERE user_id=?', now, id),
+    one(env, "SELECT COUNT(*) n, SUM(json_extract(data,'$.minutes')) minutes, SUM(json_extract(data,'$.landings')) landings, SUM(CASE WHEN json_extract(data,'$.role') IN ('solo','pic') THEN json_extract(data,'$.minutes') ELSE 0 END) solo, MAX(json_extract(data,'$.date')) last, MAX(updated_at) touched FROM flight_records WHERE user_id=?", id),
+    all(env, "SELECT json_extract(data,'$.date') date, json_extract(data,'$.departure') dep, json_extract(data,'$.arrival') arr, json_extract(data,'$.aircraft') aircraft, json_extract(data,'$.minutes') minutes, json_extract(data,'$.role') role, json_extract(data,'$.landings') landings, created_at FROM flight_records WHERE user_id=? ORDER BY json_extract(data,'$.date') DESC, created_at DESC LIMIT 10", id),
+    all(env, "SELECT strftime('%Y-%m-%d', created_at/1000, 'unixepoch') day, COUNT(*) n FROM flight_records WHERE user_id=? AND created_at>=? GROUP BY day", id, d90),
+    one(env, 'SELECT SUM(n) total, SUM(CASE WHEN day>=? THEN n ELSE 0 END) recent, MAX(day) last FROM flight_ai_usage WHERE user_id=?', day30, id),
+    all(env, 'SELECT day, n FROM flight_ai_usage WHERE user_id=? AND day>=?', id, day90),
+    one(env, 'SELECT SUM(n) total, MAX(day) last FROM flight_sim_free WHERE user_id=?', id),
+    all(env, 'SELECT day, n FROM flight_sim_free WHERE user_id=? AND day>=?', id, day90),
+    one(env, 'SELECT COUNT(*) n, MAX(score) best, ROUND(AVG(score)) avg, MAX(created_at) last FROM sim_scores WHERE user_id=?', id),
+    all(env, 'SELECT ap, rw, kind, score, fpm, kt, aircraft, created_at FROM sim_scores WHERE user_id=? ORDER BY created_at DESC LIMIT 8', id),
+    all(env, 'SELECT day, COUNT(*) n FROM sim_scores WHERE user_id=? AND day>=? GROUP BY day', id, day90),
+    all(env, 'SELECT title, body, parent_id IS NOT NULL answer, score, hidden, created_at FROM community_posts WHERE user_id=? ORDER BY created_at DESC LIMIT 5', id),
+    one(env, 'SELECT COUNT(*) n FROM community_posts WHERE user_id=?', id),
+    all(env, "SELECT strftime('%Y-%m-%d', created_at/1000, 'unixepoch') day, COUNT(*) n FROM community_posts WHERE user_id=? AND created_at>=? GROUP BY day", id, d90)
+  ]);
+  // the training profile's headline fields only: not their private notes, questions or anything secret
+  let profile = null; try { const p = prof ? JSON.parse(prof.data || '{}') : null; if (p) { profile = {}; for (const k of ['name', 'country', 'authority', 'licence', 'airport', 'school', 'aircraft', 'target', 'nextLesson', 'lessonDate', 'goalHours', 'openingMinutes', 'lessonsPerWeek', 'currency', 'rateAircraft', 'rateInstructor', 'reminders', 'complete', 'step']) if (p[k] !== undefined && p[k] !== '' && p[k] !== null) profile[k] = p[k]; } } catch { profile = {}; }
+  // one row per day for the last 90 days: what they did
+  const act = {}; const add = (rows, k) => { for (const r of rows) (act[r.day] ||= { flights: 0, ask: 0, sim: 0, posts: 0 })[k] += r.n || 0; };
+  add(flDays, 'flights'); add(aiDays, 'ask'); add(simDays, 'sim'); add(scoreDays, 'sim'); add(postDays, 'posts');
+  const activity = []; for (let t = d90 + DAY; t <= now + 1; t += DAY) { const dd = new Date(t).toISOString().slice(0, 10); activity.push({ day: dd, ...(act[dd] || { flights: 0, ask: 0, sim: 0, posts: 0 }) }); }
+  const dayTs = s => s ? Date.parse(s + 'T12:00:00Z') : 0;
+  const lastActive = Math.max(prof?.updated_at || 0, fl?.touched || 0, sess?.last || 0, dayTs(ai?.last), dayTs(simFree?.last), scoreSum?.last || 0, posts[0]?.created_at || 0) || null;
+  return {
+    account: { id: u.id, email: u.email, name: u.name, google: !!u.google, created: u.created_at, lastSignIn: sess?.last || null, devices: sess?.live || 0, lastActive, owner: isOwner(env, { email: u.email }) },
+    profile, profileUpdated: prof?.updated_at || null,
+    plan: bill ? { status: bill.status, price: bill.price_key, renews: bill.current_period_end, cancelling: !!bill.c, trialEnd: bill.trial_end, customer: bill.customer_id, updated: bill.updated_at } : null,
+    school: member?.role ? member : null,
+    source: attrib,
+    usage: { flights: fl?.n || 0, minutes: fl?.minutes || 0, soloMinutes: fl?.solo || 0, landings: fl?.landings || 0, lastFlight: fl?.last || null, ask: ai?.total || 0, ask30: ai?.recent || 0, simFree: simFree?.total || 0, scores: scoreSum?.n || 0, best: scoreSum?.best ?? null, avg: scoreSum?.avg ?? null, posts: postN?.n || 0 },
+    activity, flights: flRecent, scores, posts: posts.map(p => ({ ...p, body: String(p.body || '').slice(0, 160) }))
   };
 }

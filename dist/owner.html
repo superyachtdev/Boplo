@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/flight-app.css?v=17">
   <style>
     body{background:var(--cloud)}
-    .oh{margin:10px;border-radius:var(--r-frame);padding:clamp(22px,3.5vw,40px) clamp(18px,4vw,56px) clamp(64px,7vw,92px);box-shadow:inset 0 0 0 1px var(--hair-d)}
+    .oh{z-index:3;overflow:visible;margin:10px;border-radius:var(--r-frame);padding:clamp(22px,3.5vw,40px) clamp(18px,4vw,56px) clamp(64px,7vw,92px);box-shadow:inset 0 0 0 1px var(--hair-d)}
     .oh>*{position:relative}
     .oh nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:clamp(24px,4vw,48px)}
     .oh h1{font-size:clamp(34px,5vw,64px)}
@@ -80,6 +80,37 @@
     .sk{min-height:120px;background:linear-gradient(90deg,var(--paper),var(--well),var(--paper));background-size:200% 100%;animation:sk 1.4s linear infinite}
     @keyframes sk{to{background-position:-200% 0}}
     @media (prefers-reduced-motion:reduce){.sk{animation:none}}
+    /* find one person */
+    .us{position:relative;margin-top:22px;max-width:520px}
+    .us input{width:100%;height:46px;border-radius:999px;border:0;padding:0 18px 0 44px;font:inherit;font-size:15px;color:#fff;background:rgba(158,216,255,.1);box-shadow:inset 0 0 0 1px var(--hair-d)}
+    .us input::placeholder{color:rgba(222,233,255,.55)}
+    .us input:focus{outline:2px solid var(--ice);outline-offset:2px}
+    .us svg{position:absolute;left:16px;top:14px;width:18px;height:18px;stroke:rgba(222,233,255,.6);fill:none;stroke-width:2;pointer-events:none}
+    .us-res{position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:20;background:var(--paper);color:var(--ink);border-radius:16px;box-shadow:0 18px 48px rgba(2,6,17,.35);padding:6px;max-height:min(420px,60vh);overflow:auto}
+    .us-res[hidden]{display:none}
+    .us-res button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;text-align:left;border:0;background:none;font:inherit;color:inherit;padding:10px 12px;border-radius:11px;cursor:pointer}
+    .us-res button:hover,.us-res button[aria-selected=true]{background:var(--well)}
+    .us-res b{font-weight:600;font-size:14px;display:block}
+    .us-res small{color:var(--ink-3);font-size:12.5px}
+    .us-res .tag{flex:none;font-size:12px;color:var(--ink-2);background:var(--well);border-radius:999px;padding:3px 9px}
+    .us-res p{padding:12px;color:var(--ink-3);font-size:13.5px}
+    tr[data-uid]{cursor:pointer}tr[data-uid]:hover td{background:var(--well)}
+    /* one person's page */
+    dialog.ud{width:min(1240px,100vw);max-width:100vw;height:100dvh;max-height:100dvh;margin:0 auto;padding:0;border:0;background:var(--cloud);color:var(--ink)}
+    dialog.ud::backdrop{background:rgba(2,6,17,.55)}
+    .ud-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(12px,2.5vw,28px);background:var(--cloud);border-bottom:1px solid var(--hair-l)}
+    .ud .ow{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;padding:16px clamp(12px,2.5vw,28px) 48px}
+    .ud-id h2{font-size:clamp(24px,3vw,34px);font-weight:640;letter-spacing:-.02em;margin:0 0 4px}
+    .ud-id a{color:var(--ink-2)}
+    .ud-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .ud-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px 18px;margin-top:18px}
+    .ud-meta div span{display:block;font-size:12.5px;color:var(--ink-3)}
+    .ud-meta div b{font-weight:560;font-size:14px}
+    dl.ud-dl{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;font-size:13.5px;margin:0}
+    .ud-dl dt{color:var(--ink-3)}.ud-dl dd{margin:0;color:var(--ink)}
+    .hm{display:block;max-width:100%;height:auto}
+    .hm-leg{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);margin-top:10px}
+    .hm-leg i{display:inline-block;width:11px;height:11px;border-radius:3px}
   </style>
   <script src="/hit.js?v=1" defer></script>
 </head>
@@ -87,7 +118,10 @@
   <header class="oh night">
     <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a><a class="btn btn-ghost btn-sm" href="/flight-app.html">Back to the flight desk</a></nav>
     <div class="oh-row">
-      <div><h1 class="display">Owner analytics</h1><p data-gen>Visits, sign-ups, plans and revenue across Boplo Flight.</p></div>
+      <div><h1 class="display">Owner analytics</h1><p data-gen>Visits, sign-ups, plans and revenue across Boplo Flight.</p>
+        <div class="us" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" data-us placeholder="Find a user by name or email" aria-label="Find a user by name or email" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="us-res">
+          <div class="us-res" id="us-res" role="listbox" hidden></div></div></div>
       <div class="seg" role="group" aria-label="Period">
         <button type="button" data-days="7" aria-pressed="false">7 days</button>
         <button type="button" data-days="30" aria-pressed="true">30 days</button>
@@ -100,6 +134,7 @@
     <section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section>
     <section class="tile s12 sk" style="min-height:260px"></section>
   </main>
-  <script src="/owner.js?v=2" defer></script>
+  <dialog class="ud" data-ud aria-label="User"><div class="ud-top"><button type="button" class="btn btn-line btn-sm" data-udx>Back to analytics</button><span class="sub" data-udn style="margin:0"></span></div><div class="ow" data-udb></div></dialog>
+  <script src="/owner.js?v=3" defer></script>
 </body>
 </html>

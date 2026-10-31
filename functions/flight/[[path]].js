@@ -2,7 +2,7 @@ import { osmRunways, contributeOSM } from '../lib/osmrunways.js';
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
-import { recordHit, saveAttrib, ownerStats } from '../lib/owner.js';
+import { recordHit, saveAttrib, ownerStats, ownerUsers, ownerUser } from '../lib/owner.js';
 import { coachRoutes, runDigest, digestOff } from '../lib/coach.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
@@ -112,6 +112,8 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  }
  if(path==='attrib'&&request.method==='POST')return json(await saveAttrib(env,user,await body()));
  if(path==='owner/stats'&&request.method==='GET')return json(await ownerStats(env,user,url));
+ if(path==='owner/users'&&request.method==='GET')return json(await ownerUsers(env,user,url));
+ if(path==='owner/user'&&request.method==='GET')return json(await ownerUser(env,user,url));
  if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));
  if(path==='debrief'&&request.method==='POST'){needAdvanced('Tidying your debrief');return json(await debrief(env,await body()));}
