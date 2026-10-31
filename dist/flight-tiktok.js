@@ -31,19 +31,17 @@
     const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && e.intersectionRatio > .6) { cur = slides.indexOf(e.target); sync(); } else if (!e.isIntersecting || e.intersectionRatio < .3) stop(e.target); }), { root: feed, threshold: [0, .3, .6, 1] });
     slides.forEach(s => io.observe(s)); sync();
   }
-  // no videos picked yet: TikTok's own profile widget, which lists the latest posts
-  function creatorEmbed() {
+  // no videos picked yet: a card that sends people to the profile (TikTok's own profile widget is unreliable for new accounts)
+  function emptyCard() {
     root.querySelector('.tt-ctrl').hidden = true;
-    feed.className = 'tt-embed';
-    feed.innerHTML = '<blockquote class="tiktok-embed" cite="https://www.tiktok.com/@boploflight" data-unique-id="boploflight" data-embed-type="creator" style="max-width:780px;min-width:288px"><section><a target="_blank" rel="noopener" href="https://www.tiktok.com/@boploflight?refer=creator_embed">@boploflight</a></section></blockquote>';
-    const s = document.createElement('script'); s.async = true; s.src = 'https://www.tiktok.com/embed.js'; document.body.appendChild(s);
+    feed.innerHTML = `<div class="tt-none"><span class="tt-av" aria-hidden="true">B</span><b>@boploflight</b><p>Short finals, theory checks and sunsets in the sim. New videos every week.</p><a class="tt-go" href="https://www.tiktok.com/@boploflight" target="_blank" rel="noopener">Watch on TikTok</a></div>`;
   }
   // load once the section is close, so the rest of the page isn't slowed down
   let started = false;
   const start = async () => {
     if (started) return; started = true;
     let d = null; try { d = await fetch('/flight/tiktok').then(r => r.ok ? r.json() : null); } catch { }
-    if (d?.videos?.length) build(d.videos); else creatorEmbed();
+    if (d?.videos?.length) build(d.videos); else emptyCard();
   };
   const near = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { near.disconnect(); start(); } }, { rootMargin: '600px 0px' });
   near.observe(root);
