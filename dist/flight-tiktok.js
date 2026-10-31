@@ -11,11 +11,14 @@
 
   function build(videos) {
     row.innerHTML = videos.slice(0, 12).map((v, i) => `<div class="tt-tile wait" data-id="${esc(v.id)}" role="group" aria-label="TikTok post ${i + 1} of ${Math.min(12, videos.length)}${v.title ? ': ' + esc(v.title) : ''}"></div>`).join('');
-    // Every player starts muted. Only the posts actually on screen play, and only the one under the mouse has sound,
-    // so a row of posts never talks over itself and nothing is heard once you've scrolled past.
+    // Every player starts paused and muted. With a mouse, only the post under it plays (with sound): slideshows don't all
+    // flick through their pictures at once and nothing talks over itself. On touch screens a post plays when it's tapped.
+    // Anything off screen, or scrolled past, is paused.
+    const touch = matchMedia('(hover: none)').matches;
     const tiles = [...row.querySelectorAll('.tt-tile')], st = new Map();
     const send = (t, type) => { try { t.querySelector('iframe')?.contentWindow?.postMessage({ type, value: undefined, 'x-tiktok-player': true }, '*'); } catch { } };
-    const apply = t => { const o = st.get(t); if (!o?.ready) return; if (o.vis && !document.hidden) { send(t, o.hover ? 'unMute' : 'mute'); send(t, 'play'); } else { send(t, 'mute'); send(t, 'pause'); } };
+    const live = o => o.vis && o.hover && !document.hidden;
+    const apply = t => { const o = st.get(t); if (!o?.ready) return; if (live(o)) { send(t, 'unMute'); send(t, 'play'); } else if (!touch || !o.vis || document.hidden) { send(t, 'mute'); send(t, 'pause'); } };
     tiles.forEach((t, i) => {
       st.set(t, { ready: false, vis: false, hover: false });
       const f = document.createElement('iframe');
@@ -30,9 +33,15 @@
       let d = e.data; if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
       if (!d || !d['x-tiktok-player']) return;
       const t = tiles.find(x => x.querySelector('iframe')?.contentWindow === e.source); if (!t) return;
-      if (d.type === 'onPlayerReady') { st.get(t).ready = true; apply(t); }
-      // a post that starts playing while off screen (TikTok's autoplay) is paused straight away
-      else if (d.type === 'onStateChange' && d.value === 1 && !st.get(t).vis) { send(t, 'mute'); send(t, 'pause'); }
+      if (d.type === 'onPlayerReady') { const o = st.get(t); o.ready = true; o.at = performance.now(); if (!live(o)) { send(t, 'mute'); send(t, 'pause'); } apply(t); }
+      // a post that starts playing by itself (TikTok's autoplay) when it shouldn't is paused straight away;
+      // on touch screens a tapped post may play, and any other that was playing stops
+      else if (d.type === 'onStateChange' && d.value === 1) {
+        const o = st.get(t);
+        const tapped = touch && o.vis && performance.now() - (o.at || 0) > 2000; // TikTok's own autoplay comes right after loading; a tap comes later
+        if (tapped) tiles.forEach(x => { if (x !== t && st.get(x).ready) { send(x, 'mute'); send(x, 'pause'); } });
+        else if (!live(o)) { send(t, 'mute'); send(t, 'pause'); }
+      }
     });
     // "on screen" means at least half the tile is visible, inside the row and inside the window
     const vio = new IntersectionObserver(es => es.forEach(e => { const o = st.get(e.target); const v = e.isIntersecting && e.intersectionRatio >= .5; if (v !== o.vis) { o.vis = v; if (!v) o.hover = false; apply(e.target); } }), { threshold: [0, .5, 1] });
