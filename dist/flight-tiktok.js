@@ -18,7 +18,7 @@
     const tiles = [...row.querySelectorAll('.tt-tile')], st = new Map();
     const send = (t, type) => { try { t.querySelector('iframe')?.contentWindow?.postMessage({ type, value: undefined, 'x-tiktok-player': true }, '*'); } catch { } };
     const live = o => o.vis && o.hover && !document.hidden;
-    const apply = t => { const o = st.get(t); if (!o?.ready) return; if (live(o)) { send(t, 'unMute'); send(t, 'play'); } else if (!touch || !o.vis || document.hidden) { send(t, 'mute'); send(t, 'pause'); } };
+    const apply = t => { const o = st.get(t); if (!o?.ready) return; if (live(o)) { send(t, 'play'); if (navigator.userActivation ? navigator.userActivation.hasBeenActive : true) send(t, 'unMute'); } else if (!touch || !o.vis || document.hidden) { send(t, 'mute'); send(t, 'pause'); } };
     tiles.forEach((t, i) => {
       st.set(t, { ready: false, vis: false, hover: false });
       load(t, t.dataset.kind || 'photo', i > 4);
@@ -55,6 +55,7 @@
       t.appendChild(f);
     }
     document.addEventListener('visibilitychange', () => tiles.forEach(apply));
+    addEventListener('pointerdown', () => setTimeout(() => tiles.forEach(t => { if (live(st.get(t))) apply(t); }), 0), { passive: true });
     requestAnimationFrame(arrows);
   }
   let started = false;
