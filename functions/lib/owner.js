@@ -221,27 +221,27 @@ export async function tiktokFeed(env, fetcher = fetch) {
   await ensure(env);
   let videos = []; try { videos = JSON.parse((await one(env, 'SELECT v FROM flight_kv WHERE k=?', TT_KEY))?.v || '[]'); } catch { }
   if (videos.some(v => !v.at || Date.now() - v.at > 12 * 3600e3)) {
-    const fresh = await Promise.all(videos.map(v => v.at && Date.now() - v.at < 12 * 3600e3 ? v : ttInfo(v.id, fetcher).then(n => n.at ? n : { ...v, at: Date.now() - 11 * 3600e3 })));
+    const fresh = await Promise.all(videos.map(v => v.at && Date.now() - v.at < 12 * 3600e3 ? v : ttInfo(v.id, fetcher).then(n => n.at ? { ...n, kind: v.kind } : { ...v, at: Date.now() - 11 * 3600e3 })));
     videos = fresh; await env.DB.prepare('UPDATE flight_kv SET v=? WHERE k=?').bind(JSON.stringify(videos), TT_KEY).run().catch(() => { });
   }
-  return { handle: 'boploflight', videos: videos.map(({ id, title, thumb }) => ({ id, title: title || '', thumb: thumb || '' })) };
+  return { handle: 'boploflight', videos: videos.map(({ id, title, thumb, kind }) => ({ id, kind: kind || '', title: title || '', thumb: thumb || '' })) };
 }
 // a link becomes a video id; short links (vm.tiktok.com, tiktok.com/t/…) are followed to the real one
 async function ttId(link, fetcher) {
   const s = String(link || '').trim(); if (!s) return null;
-  if (/^\d{15,22}$/.test(s)) return s;
+  if (/^\d{15,22}$/.test(s)) return { id: s, kind: '' };
   let u; try { u = new URL(/^https?:/i.test(s) ? s : 'https://' + s); } catch { return null; }
   if (!/(^|\.)tiktok\.com$/i.test(u.hostname)) return null;
-  const m = u.pathname.match(/\/(?:video|photo)\/(\d{15,22})/); if (m) return m[1];
-  try { const r = await fetcher(u.href, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0' } }); const loc = r.headers.get('Location') || ''; const m2 = loc.match(/\/(?:video|photo)\/(\d{15,22})/); return m2 ? m2[1] : null; } catch { return null; }
+  const m = u.pathname.match(/\/(video|photo)\/(\d{15,22})/); if (m) return { id: m[2], kind: m[1] };
+  try { const r = await fetcher(u.href, { redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0' } }); const loc = r.headers.get('Location') || ''; const m2 = loc.match(/\/(video|photo)\/(\d{15,22})/); return m2 ? { id: m2[2], kind: m2[1] } : null; } catch { return null; }
 }
 export async function setTiktokFeed(env, user, b, fetcher = fetch) {
   if (!isOwner(env, user)) throw Object.assign(new Error('Not allowed.'), { status: 403 });
   await ensure(env);
   const links = (Array.isArray(b?.links) ? b.links : String(b?.links || '').split(/[\s,]+/)).slice(0, 30);
   const ids = [], bad = [];
-  for (const l of links) { if (!String(l).trim()) continue; const id = await ttId(l, fetcher); if (id) { if (!ids.includes(id)) ids.push(id); } else bad.push(String(l).slice(0, 120)); }
-  const videos = await Promise.all(ids.map(id => ttInfo(id, fetcher)));
+  const kinds = {}; for (const l of links) { if (!String(l).trim()) continue; const r = await ttId(l, fetcher); if (r) { if (!ids.includes(r.id)) { ids.push(r.id); kinds[r.id] = r.kind; } } else bad.push(String(l).slice(0, 120)); }
+  const videos = await Promise.all(ids.map(id => ttInfo(id, fetcher).then(v => ({ ...v, kind: kinds[id] || '' }))));
   await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(TT_KEY, JSON.stringify(videos)).run();
-  return { videos: videos.map(({ id, title, thumb }) => ({ id, title: title || '', thumb: thumb || '' })), bad };
+  return { videos: videos.map(({ id, title, thumb, kind }) => ({ id, kind: kind || '', title: title || '', thumb: thumb || '' })), bad };
 }

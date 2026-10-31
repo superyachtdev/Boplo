@@ -10,7 +10,7 @@
   row.addEventListener('scroll', arrows, { passive: true }); addEventListener('resize', arrows);
 
   function build(videos) {
-    row.innerHTML = videos.slice(0, 12).map((v, i) => `<div class="tt-tile wait" data-id="${esc(v.id)}" role="group" aria-label="TikTok post ${i + 1} of ${Math.min(12, videos.length)}${v.title ? ': ' + esc(v.title) : ''}"></div>`).join('');
+    row.innerHTML = videos.slice(0, 12).map((v, i) => `<div class="tt-tile wait" data-id="${esc(v.id)}" data-kind="${esc(v.kind || '')}" role="group" aria-label="TikTok post ${i + 1} of ${Math.min(12, videos.length)}${v.title ? ': ' + esc(v.title) : ''}"></div>`).join('');
     // Every player starts paused and muted. With a mouse, only the post under it plays (with sound): slideshows don't all
     // flick through their pictures at once and nothing talks over itself. On touch screens a post plays when it's tapped.
     // Anything off screen, or scrolled past, is paused.
@@ -21,11 +21,7 @@
     const apply = t => { const o = st.get(t); if (!o?.ready) return; if (live(o)) { send(t, 'unMute'); send(t, 'play'); } else if (!touch || !o.vis || document.hidden) { send(t, 'mute'); send(t, 'pause'); } };
     tiles.forEach((t, i) => {
       st.set(t, { ready: false, vis: false, hover: false });
-      const f = document.createElement('iframe');
-      f.src = `https://www.tiktok.com/player/v1/${t.dataset.id}?autoplay=1&muted=1&loop=1&music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
-      f.title = 'TikTok post from @boploflight'; f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture'; f.allowFullscreen = true;
-      if (i > 4) f.loading = 'lazy';
-      f.onload = () => t.classList.remove('wait'); t.appendChild(f);
+      load(t, t.dataset.kind || 'photo', i > 4);
       t.addEventListener('pointerenter', e => { if (e.pointerType !== 'mouse') return; tiles.forEach(o => { const s2 = st.get(o); if (s2.hover && o !== t) { s2.hover = false; apply(o); } }); st.get(t).hover = true; apply(t); });
       t.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; st.get(t).hover = false; apply(t); });
     });
@@ -46,6 +42,18 @@
     // "on screen" means at least half the tile is visible, inside the row and inside the window
     const vio = new IntersectionObserver(es => es.forEach(e => { const o = st.get(e.target); const v = e.isIntersecting && e.intersectionRatio >= .5; if (v !== o.vis) { o.vis = v; if (!v) o.hover = false; apply(e.target); } }), { threshold: [0, .5, 1] });
     tiles.forEach(t => vio.observe(t));
+    // TikTok's player only takes commands with the right start-up setting for the kind of post: a slideshow with autoplay on
+    // ignores "pause" (and keeps flicking through its pictures), a video with autoplay off never gets ready. If a player
+    // hasn't said it's ready a while after loading, it's reloaded with the other setting.
+    function load(t, kind, lazy) {
+      t.querySelector('iframe')?.remove(); const o = st.get(t); o.kind = kind; o.ready = false;
+      const f = document.createElement('iframe');
+      f.src = `https://www.tiktok.com/player/v1/${t.dataset.id}?autoplay=${kind === 'video' ? 1 : 0}&muted=1&loop=1&music_info=1&description=1&controls=1&progress_bar=1&rel=0&native_context_menu=0&closed_caption=1`;
+      f.title = 'TikTok post from @boploflight'; f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture'; f.allowFullscreen = true;
+      if (lazy) f.loading = 'lazy';
+      f.onload = () => { t.classList.remove('wait'); if (!o.retried) setTimeout(() => { if (!o.ready && !o.retried) { o.retried = true; load(t, kind === 'video' ? 'photo' : 'video', false); } }, 10000); };
+      t.appendChild(f);
+    }
     document.addEventListener('visibilitychange', () => tiles.forEach(apply));
     requestAnimationFrame(arrows);
   }

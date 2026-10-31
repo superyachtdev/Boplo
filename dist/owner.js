@@ -129,13 +129,13 @@
   /* ---------- the landing page's TikTok feed ---------- */
   async function wireTiktok() {
     const box = $('[data-ttbox]'); if (!box) return; const ta = box.querySelector('[data-ttl]'), btn = box.querySelector('[data-tts]'), msg = box.querySelector('[data-ttm]');
-    try { const d = await fetch('/flight/tiktok', { cache: 'no-store' }).then(r => r.json()); ta.value = (d.videos || []).map(v => `https://www.tiktok.com/@boploflight/video/${v.id}`).join('\n'); msg.textContent = d.videos?.length ? `${d.videos.length} video${d.videos.length === 1 ? '' : 's'} showing` : 'No videos picked yet: the landing page shows a link to the profile'; } catch { }
+    try { const d = await fetch('/flight/tiktok', { cache: 'no-store' }).then(r => r.json()); ta.value = (d.videos || []).map(v => `https://www.tiktok.com/@boploflight/${v.kind === 'photo' ? 'photo' : 'video'}/${v.id}`).join('\n'); msg.textContent = d.videos?.length ? `${d.videos.length} video${d.videos.length === 1 ? '' : 's'} showing` : 'No videos picked yet: the landing page shows a link to the profile'; } catch { }
     btn.onclick = async () => {
       btn.disabled = true; msg.textContent = 'Saving…';
       try {
         const r = await fetch('/flight/owner/tiktok', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ links: ta.value }) }); const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'That didn’t save.');
-        ta.value = d.videos.map(v => `https://www.tiktok.com/@boploflight/video/${v.id}`).join('\n');
+        ta.value = d.videos.map(v => `https://www.tiktok.com/@boploflight/${v.kind === 'photo' ? 'photo' : 'video'}/${v.id}`).join('\n');
         msg.textContent = `Saved ${d.videos.length} video${d.videos.length === 1 ? '' : 's'}.` + (d.bad.length ? ` ${d.bad.length} link${d.bad.length === 1 ? ' wasn’t a TikTok video' : 's weren’t TikTok videos'} and ${d.bad.length === 1 ? 'was' : 'were'} skipped.` : '') + ' The landing page updates within 2 minutes.';
       } catch (e) { msg.textContent = e.message; } finally { btn.disabled = false; }
     };
