@@ -142,7 +142,7 @@
 
   /* ---------------- nav tone + desk reveal ---------------- */
   const nav = $('[data-nav]');
-  const lightSections = $$('.desk, .pricing');
+  const lightSections = $$('.desk, .nums, .pricing');
   function navTone() {
     const y = nav.getBoundingClientRect().bottom - 30;
     nav.classList.toggle('on-light', lightSections.some(s => { const r = s.getBoundingClientRect(); return r.top < y && r.bottom > y; }));

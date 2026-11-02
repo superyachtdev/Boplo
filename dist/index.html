@@ -29,13 +29,15 @@
   <link rel="stylesheet" href="flight-home.css?v=9">
   <link rel="stylesheet" href="flight-home-fx.css?v=3">
   <link rel="stylesheet" href="flight-home-route.css?v=1">
+  <link rel="stylesheet" href="flight-home-nums.css?v=1">
   <link rel="stylesheet" href="flight-home-tour.css?v=6">
   <link rel="stylesheet" href="flight-tiktok.css?v=3">
   <link rel="stylesheet" href="flight-audience.css?v=1">
   <script src="vendor/lenis.min.js" defer></script>
-  <script src="flight-home.js?v=9" defer></script>
+  <script src="flight-home.js?v=10" defer></script>
   <script src="flight-home-fx.js?v=3" defer></script>
   <script src="flight-home-route.js?v=1" defer></script>
+  <script src="flight-home-nums.js?v=1" defer></script>
   <script src="flight-home-tour.js?v=6" defer></script>
   <script src="flight-tiktok.js?v=9" defer></script>
   <script src="/hit.js?v=1" defer></script>
@@ -327,6 +329,31 @@
             <figcaption>Example flight around San Diego. Map is simplified.</figcaption>
           </figure>
         </div>
+      </div>
+    </section>
+
+    <!-- The airfield catalogue: real counts from the data the desk uses -->
+    <section class="nums" id="airfields" aria-labelledby="nums-h" data-nums>
+      <div class="nums-inner">
+        <header class="nums-head">
+          <h2 id="nums-h">Every airfield, on the map.</h2>
+          <p>Runways, radio frequencies and live weather for airfields worldwide. Plan a route to any of them, then fly it in the simulator.</p>
+        </header>
+        <div class="nums-big">
+          <strong data-count="53380">53,380</strong>
+          <p>airfields, across 240 countries and territories</p>
+        </div>
+        <ul class="nums-cards">
+          <li><strong data-count="34557">34,557</strong><p>runways, each with its heading and length</p></li>
+          <li class="hi"><strong data-count="17101">17,101</strong><p>radio frequencies: tower, ground, ATIS and CTAF</p></li>
+          <li><strong data-count="16">16</strong><p>aircraft to fly in the simulator, from a Piper Cub to a jumbo</p></li>
+        </ul>
+        <ul class="nums-rows">
+          <li><span>Highest</span><b>Daocheng Yading <i>14,472 ft</i></b><em>ZUDC · Sichuan, China</em></li>
+          <li><span>Lowest</span><b>Bar Yehuda <i>−1,266 ft</i></b><em>LLMZ · by the Dead Sea, Israel</em></li>
+          <li><span>Longest public runway in the US</span><b>Denver 16R/34L <i>16,000 ft</i></b><em>KDEN · Colorado</em></li>
+        </ul>
+        <p class="nums-src">Airfield data from OurAirports (public domain), refreshed October 2026. Check official charts before you fly.</p>
       </div>
     </section>
 
