@@ -1297,14 +1297,14 @@ window.BoploSim = (() => {
       const camName = camName0();
       if (cockpit() || camName === 'Wing') {
         // attitude-locked cameras: the pilot's eye in the left seat, or on the left wing looking forward along the fuselage
-        const e = camName === 'Wing' ? [AC.tips.left[0] * 1.05, AC.tips.left[1] + .9, AC.tips.left[2] + 1.6] : (AC.eye || [.25, .4, .4]), F = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
-        const px = st.x + F[0] * bz + U[0] * by + R[0] * bx, pz = st.z + F[2] * bz + U[2] * by + R[2] * bx, py = st.alt + F[1] * bz + U[1] * by + R[1] * bx;
+        const e = camName === 'Wing' ? [AC.tips.left[0] * 1.05, AC.tips.left[1] + .9, AC.tips.left[2] + 1.6] : (AC.eye || [.25, .4, .4]), Fv = fs.F, U = fs.U, R = fs.R, bx = -e[0], by = e[1] + AC.wheelDrop, bz = e[2];
+        const px = st.x + Fv[0] * bz + U[0] * by + R[0] * bx, pz = st.z + Fv[2] * bz + U[2] * by + R[2] * bx, py = st.alt + Fv[1] * bz + U[1] * by + R[1] * bx;
         const fov = C.Math.toRadians(camName === 'Wing' ? 62 : 72 / Math.max(.6, Math.min(orb.zoom, 1.6)));
         if (Math.abs(camera.frustum.fov - fov) > 1e-3) { camera.frustum.fov = fov; camera.frustum.near = .1; }
         const yaw = orb.yaw + (camName === 'Wing' ? 128 : 0), pit = orb.pitch * -1 + (camName === 'Wing' ? -9 : -4);
         // look direction built from the aircraft's body axes, so head-turns stay correct in any attitude
         const cy = Math.cos(yaw * D2R), sy = Math.sin(yaw * D2R), cp = Math.cos(pit * D2R), sp = Math.sin(pit * D2R);
-        const dir = [0, 1, 2].map(i => F[i] * cy * cp + R[i] * sy * cp + U[i] * sp), rgt = [0, 1, 2].map(i => R[i] * cy - F[i] * sy);
+        const dir = [0, 1, 2].map(i => Fv[i] * cy * cp + R[i] * sy * cp + U[i] * sp), rgt = [0, 1, 2].map(i => R[i] * cy - Fv[i] * sy);
         const upv = [dir[1] * rgt[2] - dir[2] * rgt[1], dir[2] * rgt[0] - dir[0] * rgt[2], dir[0] * rgt[1] - dir[1] * rgt[0]]; // basis is east, up, north (left-handed), as in the flight model
         const dest = LLH(px, pz, py), enu = C.Transforms.eastNorthUpToFixedFrame(dest), sxc = F.sx(st.z), toW = v => C.Cartesian3.normalize(C.Matrix4.multiplyByPointAsVector(enu, new C.Cartesian3(v[0] * sxc, v[2], v[1]), new C.Cartesian3()), new C.Cartesian3());
         camera.setView({ destination: dest, orientation: { direction: toW(dir), up: toW(upv) } });
