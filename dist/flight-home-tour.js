@@ -5,7 +5,7 @@
   if (!lap || !phn) return;
   const keys = steps.map(s => s.dataset.k), shots = {};
   const img = (src, eager) => { const i = new Image(); i.className = 'shot'; i.alt = ''; i.decoding = 'async'; if (!eager) i.loading = 'lazy'; i.src = src; return i; };
-  keys.forEach((k, n) => { const a = img(`/assets/tour/${k}-d.webp`, !n), b = img(`/assets/tour/${k}-m.webp`, !n); if (k === 'sim') b.classList.add('full'); lap.append(a); phn.append(b); shots[k] = [a, b]; });
+  keys.forEach((k, n) => { const a = img(`/assets/tour/${k}-d.webp?v=2`, !n), b = img(`/assets/tour/${k}-m.webp?v=2`, !n); if (k === 'sim') b.classList.add('full'); lap.append(a); phn.append(b); shots[k] = [a, b]; });
   // dots let you jump between features without scrolling the whole list
   const dots = document.createElement('div'); dots.className = 'tour-dots'; dots.setAttribute('role', 'group'); dots.setAttribute('aria-label', 'Features');
   steps.forEach((s, n) => { const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', s.querySelector('h3').textContent); b.onclick = () => s.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); dots.append(b); });
