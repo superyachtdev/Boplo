@@ -1,0 +1,74 @@
+/* Boplo Flight landing: a logged cross-country, drawn as you scroll (pairs with flight-home-route.js) */
+.route{position:relative;height:340vh;margin:10px}
+.route-stage{position:sticky;top:10px;height:calc(100svh - 20px);min-height:560px}
+.route-frame{position:relative;height:100%;border-radius:var(--r-frame);overflow:hidden;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);align-items:center;gap:clamp(24px,4vw,64px);padding:clamp(96px,10vh,120px) clamp(24px,5vw,80px) clamp(28px,5vh,56px);
+  background:radial-gradient(120% 90% at 78% 40%,rgba(10,98,255,.22),transparent 60%),radial-gradient(80% 70% at 10% 100%,rgba(158,216,255,.08),transparent 60%),linear-gradient(180deg,var(--deep),var(--night));
+  box-shadow:inset 0 0 0 1px var(--hair-d)}
+.route .section-head{margin-bottom:clamp(24px,4vh,40px)}
+.route .section-head h2{font-size:clamp(34px,4.4vw,62px)}
+
+/* the readout */
+.rt-hud{position:relative;max-width:440px;padding:18px 20px 16px;border-radius:var(--r-tile);background:rgba(6,16,42,.66);box-shadow:inset 0 0 0 1px var(--hair-d),0 30px 60px -30px rgba(0,0,0,.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.rt-top{display:flex;justify-content:space-between;font-size:13.5px;color:var(--mist);font-variant-numeric:tabular-nums}
+.rt-top [data-rt-leg]{color:var(--ice);font-weight:560}
+.rt-name{margin-top:6px;font-size:clamp(22px,2vw,28px);font-weight:600;letter-spacing:-.02em;font-variation-settings:'wdth' 108;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+.rt-read{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 0}
+.rt-read div{min-width:0}
+.rt-read dt{font-size:12.5px;color:var(--mist)}
+.rt-read dd{margin:2px 0 0;font-size:clamp(17px,1.5vw,21px);font-weight:560;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:#E8F0FF}
+.rt-log{display:none}
+.rt-hud.done .rt-fly{display:none}
+.rt-hud.done .rt-log{display:grid;animation:rt-in .5s var(--ease) both}
+.rt-hud.done .rt-name{color:var(--ice)}
+@keyframes rt-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.rt-bar{position:relative;height:3px;margin-top:16px;border-radius:3px;background:rgba(158,216,255,.12);overflow:hidden}
+.rt-bar i{position:absolute;inset:0;transform-origin:left;transform:scaleX(var(--p,0));background:linear-gradient(90deg,var(--electric),var(--ice));border-radius:inherit}
+
+/* the map */
+.route-map{position:relative;margin:0;height:100%;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.route-map svg{width:100%;height:100%;max-height:78svh;overflow:visible}
+.route-map figcaption{margin-top:10px;font-size:12.5px;color:rgba(143,160,196,.75)}
+/* corner brackets around the chart */
+.route-map::before{content:"";position:absolute;inset:-6px -10px 22px;pointer-events:none;
+  background:linear-gradient(var(--hair-d),var(--hair-d)) 0 0/18px 1px,linear-gradient(var(--hair-d),var(--hair-d)) 0 0/1px 18px,
+  linear-gradient(var(--hair-d),var(--hair-d)) 100% 0/18px 1px,linear-gradient(var(--hair-d),var(--hair-d)) 100% 0/1px 18px,
+  linear-gradient(var(--hair-d),var(--hair-d)) 0 100%/18px 1px,linear-gradient(var(--hair-d),var(--hair-d)) 0 100%/1px 18px,
+  linear-gradient(var(--hair-d),var(--hair-d)) 100% 100%/18px 1px,linear-gradient(var(--hair-d),var(--hair-d)) 100% 100%/1px 18px;background-repeat:no-repeat;filter:brightness(2.2)}
+.rt-grid line{stroke:rgba(158,216,255,.06);stroke-width:1}
+.rt-coast{fill:none;stroke:rgba(158,216,255,.28);stroke-width:1.4;stroke-linejoin:round}
+.rt-sea{fill:rgba(158,216,255,.3);font-size:13px;font-style:italic;letter-spacing:.02em}
+.rt-plan{fill:none;stroke:rgba(158,216,255,.3);stroke-width:1.4;stroke-dasharray:2 6;stroke-linecap:round}
+.rt-track{fill:none;stroke:url(#rt-trk);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1 1;stroke-dashoffset:1;filter:drop-shadow(0 0 6px rgba(47,123,255,.8))}
+.rt-pt circle{fill:var(--night);stroke:rgba(158,216,255,.45);stroke-width:1.5;transition:fill .3s,stroke .3s,r .3s}
+.rt-pt.apt circle{stroke-width:2}
+.rt-pt text{fill:rgba(143,160,196,.6);font-size:12.5px;font-weight:500;transition:fill .3s}
+.rt-pt text b,.rt-pt .id{font-weight:650}
+.rt-pt.on circle{fill:var(--ice);stroke:#fff}
+.rt-pt.on text{fill:#E8F0FF}
+.rt-pt.now circle{filter:drop-shadow(0 0 6px rgba(158,216,255,.9))}
+.rt-craft path{fill:#fff}
+.rt-craft{transition:opacity .3s}
+
+/* phones: title, chart, readout stacked */
+@media (max-width:860px){
+  .route{margin:8px}
+  .route-stage{top:8px;height:calc(100svh - 16px)}
+  .route-frame{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);align-items:stretch;gap:8px;padding:84px 16px 132px}
+  .route-copy{display:contents}
+  .route .section-head{margin:0;order:0}
+  .route .section-head h2{font-size:clamp(28px,7.6vw,40px)}
+  .route .section-head p{display:none}
+  .route-map{order:1;min-height:0}
+  .route-map::before{inset:0 0 20px}
+  .rt-hud{order:2;max-width:none;padding:14px 16px 12px}
+  .rt-name{font-size:20px}
+  .rt-read dd{font-size:16px}
+  .route-map figcaption{margin-top:4px}
+}
+@media (max-width:860px) and (min-height:940px){.route .section-head p{display:block;margin-top:10px;font-size:15px}}
+
+/* no motion, or no script: the whole flight, logged */
+.route.static{height:auto}
+.route.static .route-stage{position:relative;top:0;height:auto;min-height:0}
+.route.static .route-frame{min-height:min(860px,100svh)}
+@media (max-width:860px){.route.static .route-map{height:62svh}}

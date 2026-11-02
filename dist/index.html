@@ -27,13 +27,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
   <link rel="stylesheet" href="flight-home.css?v=9">
-  <link rel="stylesheet" href="flight-home-fx.css?v=1">
+  <link rel="stylesheet" href="flight-home-fx.css?v=2">
+  <link rel="stylesheet" href="flight-home-route.css?v=1">
   <link rel="stylesheet" href="flight-home-tour.css?v=6">
   <link rel="stylesheet" href="flight-tiktok.css?v=3">
   <link rel="stylesheet" href="flight-audience.css?v=1">
   <script src="vendor/lenis.min.js" defer></script>
   <script src="flight-home.js?v=9" defer></script>
-  <script src="flight-home-fx.js?v=2" defer></script>
+  <script src="flight-home-fx.js?v=3" defer></script>
+  <script src="flight-home-route.js?v=1" defer></script>
   <script src="flight-home-tour.js?v=5" defer></script>
   <script src="flight-tiktok.js?v=9" defer></script>
   <script src="/hit.js?v=1" defer></script>
@@ -142,7 +144,7 @@
 
     <!-- Statement -->
     <section class="statement" aria-label="Why Boplo Flight">
-      <p>Flight training is spread across a paper logbook, a notes app and whatever you remember from the debrief. <span>Boplo keeps the next lesson, the last one and every hour in between in one place.</span></p>
+      <p>Flight training is spread across a <i class="stp stp-log" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4.5h10.5a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2zM5 18a2 2 0 0 1 2-2h10.5M9 8.5h5M9 11.5h5"/></svg></i> paper logbook, a <i class="stp stp-note" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2.5"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg></i> notes app and whatever you remember from the <i class="stp stp-head" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 14v-2a7 7 0 0 1 14 0v2"/><rect x="3.5" y="13" width="4" height="6" rx="1.5"/><rect x="16.5" y="13" width="4" height="6" rx="1.5"/><path d="M18.5 19c0 1.5-2 2.5-5 2.5"/></svg></i> debrief. <span>Boplo keeps the next lesson, the last one and every hour in between in one place.</span></p>
     </section>
 
     <!-- Feature tour: the real app, on the laptop and the phone -->
@@ -280,6 +282,51 @@
           </article>
         </div>
         <p class="footnote">Example account. Your instructor and your licensing authority decide what counts toward a licence.</p>
+      </div>
+    </section>
+
+    <!-- A logged cross-country, drawn as you scroll -->
+    <section class="route" id="route" aria-labelledby="route-h" data-route>
+      <div class="route-stage">
+        <div class="route-frame">
+          <div class="route-copy">
+            <header class="section-head">
+              <h2 id="route-h">Your cross-country, leg by leg.</h2>
+              <p>Record the flight with GPS and the logbook keeps the track, every waypoint and the time between them. Then fly the same route again in the simulator.</p>
+            </header>
+            <div class="rt-hud" data-rt-hud aria-live="off">
+              <div class="rt-top"><span data-rt-leg>Leg 1 of 6</span><span data-rt-clock>0:00</span></div>
+              <p class="rt-name" data-rt-name>KSEE Gillespie Field</p>
+              <dl class="rt-read rt-fly">
+                <div><dt>Altitude</dt><dd data-rt-alt>388 ft</dd></div>
+                <div><dt>Heading</dt><dd data-rt-hdg>024°</dd></div>
+                <div><dt>Ground speed</dt><dd data-rt-gs>0 kt</dd></div>
+              </dl>
+              <dl class="rt-read rt-log">
+                <div><dt>Distance</dt><dd>58 nm</dd></div>
+                <div><dt>Flight time</dt><dd>0.9 h</dd></div>
+                <div><dt>Landings</dt><dd>3</dd></div>
+              </dl>
+              <div class="rt-bar" aria-hidden="true"><i data-rt-bar></i></div>
+            </div>
+          </div>
+          <figure class="route-map">
+            <svg viewBox="0 0 500 520" data-rt-svg role="img" aria-label="An example cross-country flight from Gillespie Field to Ramona, then Palomar, and back to Gillespie Field, drawn on a map of San Diego County">
+              <defs>
+                <linearGradient id="rt-trk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ED8FF"/><stop offset="1" stop-color="#2F7BFF"/></linearGradient>
+                <radialGradient id="rt-glow"><stop offset="0" stop-color="#9ED8FF" stop-opacity=".55"/><stop offset="1" stop-color="#9ED8FF" stop-opacity="0"/></radialGradient>
+              </defs>
+              <g class="rt-grid" data-rt-grid></g>
+              <path class="rt-coast" d="M16.8 0 L40 45 L62.9 90 L86 140 L109 190 L118 230 L125.8 270 L132 315 L138.4 360 L131 392 L125.8 420 L134 446 L142.6 470 L151 520"/>
+              <text class="rt-sea" x="44" y="330">Pacific</text>
+              <path class="rt-plan" data-rt-plan/>
+              <path class="rt-track" data-rt-track pathLength="1"/>
+              <g data-rt-pts></g>
+              <g class="rt-craft" data-rt-craft><circle r="16" fill="url(#rt-glow)"/><path d="M0-7 1.2-2 7 1.5 7 3 1.2 1.5.9 5 3 6.5 3 7.5 0 6.8-3 7.5-3 6.5-.9 5-1.2 1.5-7 3-7 1.5-1.2-2Z"/></g>
+            </svg>
+            <figcaption>Example flight around San Diego. Map is simplified.</figcaption>
+          </figure>
+        </div>
       </div>
     </section>
 

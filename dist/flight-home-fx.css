@@ -73,3 +73,11 @@ body:has(.dock.on) .bradio{bottom:86px}
 
 @media (prefers-reduced-motion:reduce){.drum .reel,.drum .slot,.bill-thumb{transition:none}}
 .tier-price .drum span{font-size:inherit;color:inherit;line-height:1}
+
+/* statement: small pictures inside the sentence, lighting up with their words */
+.statement .stp{display:inline-flex;align-items:center;justify-content:center;width:1.5em;height:.84em;margin:0 .04em;border-radius:999px;vertical-align:-.04em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 8px 24px -10px rgba(0,0,0,.6)}
+.statement .stp svg{width:.56em;height:.56em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.statement .stp-log{background:linear-gradient(160deg,#F3E7CC,#D9C49B);color:#5A4220}
+.statement .stp-note{background:linear-gradient(160deg,#FFE27A,#F5C431);color:#5B4300}
+.statement .stp-head{background:linear-gradient(160deg,var(--electric-hi),var(--electric));color:#fff}
+.statement p.lit .stp.w{opacity:calc(.25 + var(--k) * .75);transform:scale(calc(.82 + var(--k) * .18));transition:opacity .25s linear,transform .4s var(--ease)}

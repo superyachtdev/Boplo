@@ -67,7 +67,8 @@
           const frag = document.createDocumentFragment();
           n.textContent.split(/(\s+)/).forEach(t => { if (!t) return; if (/^\s+$/.test(t)) { frag.append(t); return; } const w = document.createElement('span'); w.className = 'w'; w.textContent = t; w.dataset.b = bright ? '1' : '0'; words.push(w); frag.append(w); });
           n.replaceWith(frag);
-        } else if (n.nodeType === 1) wrap(n, bright || n.tagName === 'SPAN');
+        } else if (n.nodeType === 1 && n.classList.contains('stp')) { n.classList.add('w'); n.dataset.b = '0'; words.push(n); }
+        else if (n.nodeType === 1) wrap(n, bright || n.tagName === 'SPAN');
       }
     };
     wrap(stmt, false);
