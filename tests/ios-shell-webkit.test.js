@@ -121,6 +121,36 @@ test('iOS sign-in is minimal and the flight desk still receives taps when native
     assert.equal(hit.side, false);
     assert.equal(hit.bar, true);
     assert.deepEqual(hit.tabs, ['Desk', 'Logbook', 'Study', 'Fly', 'You']);
+    await page.waitForSelector('.bradio');
+    const tabBar = async (label) => {
+      const info = await page.evaluate(() => {
+        const bar = document.querySelector('.ios-tabs');
+        const link = bar.querySelector('a[aria-current="page"]') || bar.querySelector('a');
+        const br = bar.getBoundingClientRect();
+        const lr = link.getBoundingClientRect();
+        const cs = getComputedStyle(bar);
+        const ls = getComputedStyle(link);
+        const hitAt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
+        const radio = document.querySelector('.bradio');
+        const rr = radio && radio.getBoundingClientRect();
+        return {
+          h: Math.round(br.height), top: Math.round(br.top), bottom: Math.round(br.bottom), vh: innerHeight,
+          inView: br.height > 44 && br.top >= 0 && br.bottom <= innerHeight + 1 && br.width > innerWidth * 0.9,
+          opacity: Number(ls.opacity),
+          blur: `${cs.backdropFilter || ''} ${cs.webkitBackdropFilter || ''}`.trim(),
+          hit: !!(hitAt && (hitAt === link || link.contains(hitAt))),
+          radioClears: !rr || rr.width < 2 || rr.bottom <= br.top + 1
+        };
+      });
+      assert.equal(info.inView, true, label + ' ' + JSON.stringify(info));
+      assert.equal(info.opacity > 0.9, true, label + ' opacity ' + info.opacity);
+      assert.equal(info.hit, true, label + ' not the topmost element ' + JSON.stringify(info));
+      assert.equal(/none/.test(info.blur) || info.blur === '', true, label + ' blur ' + info.blur);
+      assert.equal(info.radioClears, true, label + ' radio ' + JSON.stringify(info));
+    };
+    await tabBar('loaded');
+    await page.evaluate(() => { const s = document.querySelector('.ios-scroll'); if (s) s.scrollTop = Math.max(400, s.scrollHeight); });
+    await tabBar('scrolled');
     for (const d of hit.dialogs) {
       assert.equal(d.open, false);
       assert.equal(d.display, 'none');
@@ -137,6 +167,7 @@ test('iOS sign-in is minimal and the flight desk still receives taps when native
       await page.waitForFunction(h => location.hash === h, href);
       const shown = await page.evaluate(() => document.querySelector('.ios-large')?.textContent.trim());
       assert.equal(shown, title, href);
+      await tabBar(href);
     }
     await page.locator('.ios-tabs a[href="#logbook"]').click();
     await page.waitForFunction(() => location.hash === '#logbook');
