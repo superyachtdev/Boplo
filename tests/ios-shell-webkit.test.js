@@ -107,28 +107,42 @@ test('iOS sign-in is minimal and the flight desk still receives taps when native
 
     signIn();
     await page.goto(`http://127.0.0.1:${port}/flight-app.html`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.topbar [data-add]');
+    await page.waitForSelector('.ios-tabs');
     const hit = await page.evaluate(() => {
-      const btn = document.querySelector('.topbar [data-add]');
+      const btn = document.querySelector('.ios-glance [data-add]');
       const r = btn.getBoundingClientRect();
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
       const dialogs = [...document.querySelectorAll('dialog')].map(d => ({ id: d.id, open: d.open, display: getComputedStyle(d).display, pe: getComputedStyle(d).pointerEvents }));
-      return { top: top === btn || btn.contains(top), dialogs, onclick: typeof btn.onclick };
+      const tabs = [...document.querySelectorAll('.ios-tabs a')].map(a => a.textContent.trim());
+      return { top: top === btn || btn.contains(top), dialogs, onclick: typeof btn.onclick, tabs, side: !!document.querySelector('.side'), bar: !!document.querySelector('.ios-nav') };
     });
     assert.equal(hit.top, true, 'a closed dialog or overlay is covering Log flight');
     assert.equal(hit.onclick, 'function');
+    assert.equal(hit.side, false);
+    assert.equal(hit.bar, true);
+    assert.deepEqual(hit.tabs, ['Desk', 'Logbook', 'Study', 'Fly', 'You']);
     for (const d of hit.dialogs) {
       assert.equal(d.open, false);
       assert.equal(d.display, 'none');
       assert.equal(d.pe, 'none');
     }
-    await page.locator('.topbar [data-add]').click();
+    await page.locator('.ios-glance [data-add]').click();
     await page.waitForSelector('#sheet[open]');
     assert.equal(await page.evaluate(() => document.getElementById('sheet').open), true);
+    const grab = await page.evaluate(() => getComputedStyle(document.getElementById('sheet'), '::before').height);
+    assert.equal(grab, '5px');
     await page.evaluate(() => document.getElementById('sheet').close());
-    await page.locator('.tabbar a[href="#logbook"]').click();
+    for (const [href, title] of [['#logbook', 'Logbook'], ['#study', 'Study'], ['#sim', 'Simulator'], ['#more', 'Account']]) {
+      await page.locator(`.ios-tabs a[href="${href}"]`).click();
+      await page.waitForFunction(h => location.hash === h, href);
+      const shown = await page.evaluate(() => document.querySelector('.ios-large')?.textContent.trim());
+      assert.equal(shown, title, href);
+    }
+    await page.locator('.ios-tabs a[href="#logbook"]').click();
     await page.waitForFunction(() => location.hash === '#logbook');
-    assert.equal(await page.evaluate(() => document.querySelector('.page-head h1')?.textContent.trim()), 'Logbook');
+    await page.locator('.ios-chips a[href="#map"]').click();
+    await page.waitForFunction(() => location.hash === '#map');
+    assert.equal(await page.locator('.ios-back').innerText(), 'Logbook');
     assert.deepEqual(pageErrors, []);
   } finally {
     await browser.close();
