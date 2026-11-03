@@ -6,7 +6,8 @@ import { recordHit, saveAttrib, ownerStats, ownerUsers, ownerUser, tiktokFeed, s
 import { coachRoutes, runDigest, digestOff } from '../lib/coach.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
-import {switchInterval, health, checkPromo, planOf, effectivePlan, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
+import {switchInterval, health, checkPromo, withOwner, publicBilling, billingRow, subscribe, syncCustomer, setCancel, portal, cancelNow, webhook, FREE_LIMITS } from '../lib/billing.js';
+import { appleForUser, claimTransactions, applyNotification } from '../lib/apple.js';
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const fail = (status,message) => {throw Object.assign(new Error(message),{status});};
 const text = (value,max=200) => String(value ?? '').trim().slice(0,max);
@@ -43,6 +44,7 @@ export async function onRequest({request,env,waitUntil}) {
  if(!env.DB)fail(503,'The Flight database is not connected yet.');
  if(path==='hit'&&request.method==='POST'){const site=request.headers.get('Sec-Fetch-Site');if(site&&site!=='same-origin')return new Response(null,{status:204});return await recordHit(env,request).catch(()=>new Response(null,{status:204}));}
  if(path==='billing/webhook'&&request.method==='POST')return await webhook(env,request,fetch,c=>syncSchool(env,c));
+ if(path==='billing/apple/notifications'&&request.method==='POST'){let note;try{note=JSON.parse(await request.text());}catch{return json({error:'Bad payload'},400);}try{return json(await applyNotification(env,note));}catch(e){return json({error:e.message||'Rejected'},e.status||400);}}
  if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');const o={origin:env.APP_ORIGIN||url.origin};const r=await runNudges(env,o);const dg=await runDigest(env,o).catch(e=>({digestError:e.message}));return json({...r,...dg});}
  if(path==='digest/off'&&request.method==='GET')return await digestOff(env,url);
  if(path==='nudges/off'&&request.method==='GET')return await nudgesOff(env,url);
@@ -58,7 +60,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
  if(!user)fail(401,'Your session has expired. Please sign in again.');
- const smem=await schoolMembership(env,user.id).catch(()=>null);let brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null));if(smem&&schoolActive(smem.school))brow={...(brow||{}),school:{name:smem.school.name,role:smem.role}};const plan=effectivePlan(env,brow);
+ const smem=await schoolMembership(env,user.id).catch(()=>null);let brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null));if(smem&&schoolActive(smem.school))brow={...(brow||{}),school:{name:smem.school.name,role:smem.role}};const apple=await appleForUser(env,user.id).catch(()=>null);const plan=publicBilling(env,brow,apple).plan;
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Upgrade from Plan & billing.`);};
  const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='runways/osm'&&request.method==='POST')return json(await contributeOSM(env,await body(),async cc=>{try{const r=await (env.ASSETS?env.ASSETS.fetch(new Request(url.origin+'/runways/'+cc+'.json')):fetch(url.origin+'/runways/'+cc+'.json'));return r.ok?(await r.json()).rows:{};}catch{return {};}}));
@@ -66,7 +68,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const profile=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();
  const records=await env.DB.prepare('SELECT id,data FROM flight_records WHERE user_id=? ORDER BY created_at DESC').bind(user.id).all();
  const prof=profile?JSON.parse(profile.data):null;if(prof){prof.shareOn=!!prof.shareHash;delete prof.shareHash;prof.calOn=!!prof.calHash;delete prof.calHash;}
- return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||'',billing:publicBilling(env,brow),school:await publicSchool(env,smem,url.origin).catch(()=>null)});
+ return json({user,profile:prof,flights:(records.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),mapsKey:env.GOOGLE_MAPS_BROWSER_KEY||'',billing:publicBilling(env,brow,apple),school:await publicSchool(env,smem,url.origin).catch(()=>null)});
  }
  if(path==='profile'&&request.method==='PUT'){
  const prevRow=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const prev=prevRow?JSON.parse(prevRow.data):{};const p=validateProfile(await body(),prev);await env.DB.prepare('INSERT INTO flight_profiles(user_id,data,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at').bind(user.id,JSON.stringify(p),Date.now()).run();return json({profile:p});
@@ -122,22 +124,23 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='school/coach'||path==='coach'||path.startsWith('coach/')){const r=await coachRoutes(env,path,request.method,user,smem,body,url.origin);if(r)return json(r);fail(404,'Not found.');}
  if(path==='school'||path.startsWith('school/')){const r=await schoolRoutes(env,path,request.method,user,body,url.origin,!!brow?.owner);if(r)return json(r);}
  // ---------- plan and billing ----------
- if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow));
+ if(path==='billing'&&request.method==='GET')return json(publicBilling(env,brow,apple));
+ if(path==='billing/apple'&&request.method==='POST'){const input=await body();await claimTransactions(env,user.id,input.signedTransactions||input.signedTransaction);return json(publicBilling(env,brow,await appleForUser(env,user.id)));}
  // ---------- Ask Boplo ----------
  if(path==='ask/usage'&&request.method==='GET')return json({...(await askUsage(env,user.id,plan)),sources:sourceLinks()});
  if(path==='ask'&&request.method==='POST'){const r=await ask(env,user,plan,await body());if(waitUntil)waitUntil(r.done);return r.response;}
  if(path==='billing/health'&&request.method==='GET')return json(await health(env));
  if(path==='billing/promo'&&request.method==='POST')return json(await checkPromo(env,await body()));
  if(path==='billing/subscribe'&&request.method==='POST')return json(await subscribe(env,user,await body(),url.origin));
- if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,withOwner(env,user,r)));}
- if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,true))));
- if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,false))));
- if(path==='billing/switch'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await switchInterval(env,user,await body()))));
+ if(path==='billing/sync'&&request.method==='POST'){const r=brow?.customer_id?await syncCustomer(env,brow.customer_id):brow;return json(publicBilling(env,withOwner(env,user,r),apple));}
+ if(path==='billing/cancel'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,true)),apple));
+ if(path==='billing/resume'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await setCancel(env,user,false)),apple));
+ if(path==='billing/switch'&&request.method==='POST')return json(publicBilling(env,withOwner(env,user,await switchInterval(env,user,await body())),apple));
  if(path==='billing/portal'&&request.method==='POST')return json(await portal(env,user,url.origin));
  // ---------- your data ----------
- if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}
+ if(path==='account/export'&&request.method==='GET'){const pr=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();const rs=await env.DB.prepare('SELECT id,data,created_at FROM flight_records WHERE user_id=? ORDER BY created_at').bind(user.id).all();const prof=pr?JSON.parse(pr.data):null;if(prof)delete prof.shareHash;return new Response(JSON.stringify({exported:new Date().toISOString(),account:{email:user.email,name:user.display_name},profile:prof,flights:(rs.results||[]).map(r=>({id:r.id,...JSON.parse(r.data)})),plan:publicBilling(env,brow,apple)},null,2),{headers:{'Content-Type':'application/json','Content-Disposition':`attachment; filename="boplo-flight-export.json"`,'Cache-Control':'no-store'}});}
  if(path==='account/delete'&&request.method==='POST'){const input=await body();if(input?.confirm!=='DELETE')fail(400,'Type DELETE to confirm.');if(smem?.role==='admin'&&schoolActive(smem.school))fail(400,`You manage ${smem.school.name}’s school plan. Cancel it from the School page first, then delete your account.`);await cancelNow(env,user.id).catch(()=>{});
-  for(const q of ['DELETE FROM flight_records WHERE user_id=?','DELETE FROM flight_profiles WHERE user_id=?','DELETE FROM flight_billing WHERE user_id=?','DELETE FROM flight_school_members WHERE user_id=?','DELETE FROM darts_sessions WHERE user_id=?'])await env.DB.prepare(q).bind(user.id).run().catch(()=>{});
+  for(const q of ['DELETE FROM flight_records WHERE user_id=?','DELETE FROM flight_profiles WHERE user_id=?','DELETE FROM flight_billing WHERE user_id=?','DELETE FROM flight_apple WHERE user_id=?','DELETE FROM flight_apns WHERE user_id=?','DELETE FROM flight_school_members WHERE user_id=?','DELETE FROM darts_sessions WHERE user_id=?'])await env.DB.prepare(q).bind(user.id).run().catch(()=>{});
   try{await env.DB.prepare('DELETE FROM darts_users WHERE id=?').bind(user.id).run();}catch{await env.DB.prepare("UPDATE darts_users SET email=?,display_name='' WHERE id=?").bind('deleted-'+user.id+'@deleted.invalid',user.id).run().catch(()=>{});}
   return new Response(JSON.stringify({ok:true}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':'boplo_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'}});}
  return json({error:'Not found.'},404);

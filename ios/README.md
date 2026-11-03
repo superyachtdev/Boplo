@@ -1,63 +1,54 @@
-# Boplo Flight on iOS
+# Run Boplo Flight in the iOS simulator
 
-This folder is a Capacitor 8 shell. It does not contain a second copy of the flight desk. The Xcode app opens `https://boplo.app/flight-app.html#overview` inside a WebView. Why that is the right first step, and why it is not yet an App Store submission, is in `APP_STORE_PLAN.md` at the repo root.
+The Xcode project is a Capacitor 8 shell. Bundle id `app.boplo.flight`. Home-screen name **Boplo**. It is iPhone only. Nothing here is submitted to Apple.
 
-Nothing here talks to Apple. There is no certificate, no provisioning profile and no upload.
+The WebView opens `https://boplo.app/flight-app.html#overview`. That is the live site, so the session cookie and the flight API keep working. The new iOS screens (Sign in with Apple, App Store subscribe, Restore purchases, hidden school checkout, hidden direct messages) are in this branch’s website code. They show up in the simulator after this branch is what boplo.app serves. Until then, the simulator shows today’s production desk inside the new shell. This repository does not deploy that.
 
 ## What you need
 
-- A Mac with a current Xcode. Capacitor 8.6 is tested against the iOS 26 simulator. An old Xcode will fail when it resolves the Swift package.
-- This repo, on the branch that contains `capacitor.config.json`.
-- Node 22 (the version this project already uses) and npm.
-- The Apple Developer Program is **not** required to run in the simulator. It is required for a device build you can send to TestFlight or the App Store.
+- A Mac.
+- Xcode current enough for Capacitor 8.6. That release is tested against the iOS 26 simulator.
+- Node 22 and npm.
+- This branch: `cursor/ios-app-store-plan-771d`.
 
-## Build and run
+A paid Apple Developer account is not required for the simulator steps below. It is required before Sign in with Apple, push, and a device build will sign. Enrol as an Individual. The seller name will be your personal name.
 
-In the repo root, on the Mac:
+## Steps
+
+In Terminal, from the repo root:
 
 ```bash
+git fetch origin
+git checkout cursor/ios-app-store-plan-771d
 npm install
 npm run ios:sync
 npx cap open ios
 ```
 
-`npm run ios:sync` copies `native/www` into the Xcode project and writes `ios/App/App/capacitor.config.json`. Those generated files are gitignored. Xcode uses Swift Package Manager (there is no CocoaPods install). The first open downloads `capacitor-swift-pm` from GitHub, so the Mac needs a network.
+`npm run ios:sync` copies the small local fallback page into the Xcode project and links the native plugin. Those generated files are gitignored. The first open downloads Capacitor’s Swift package, so the Mac needs a network.
 
 In Xcode:
 
-1. Open the project at `ios/App/App.xcodeproj` if `cap open` did not.
-2. Select the **App** target. Signing & Capabilities: choose your Team when you have one. Until then, run on a simulator and leave signing automatic.
-3. Pick an iPhone simulator.
+1. If the project did not open, open `ios/App/App.xcodeproj`.
+2. Select the **App** target. Set the destination to an **iPhone** simulator. There is no iPad target.
+3. Signing & Capabilities: leave Team empty for a plain simulator run of the shell. If Xcode refuses to build because of Sign in with Apple or Push, choose your Apple ID as the Team. Those two capabilities need the paid program and the App ID `app.boplo.flight` before a signed build succeeds. The entitlements file is `ios/App/App/App.entitlements`.
 4. Press Run.
 
-The simulator should show the night-navy splash, then the live flight desk. The home-screen name is **Boplo**. The bundle id is `app.boplo.flight`.
+You should see a night-navy splash (`#020611`) and the glossy blue “b”, then the flight desk. If boplo.app cannot be reached, the screen says “Can’t reach Boplo”.
 
-The shell appends `BoploFlightiOS` to the WebView user agent. Safari on the same Mac does not. If a provider ever blocks that token, remove `appendUserAgent` from `capacitor.config.json` and sync again.
+## After this branch is deployed
 
-## If the desk does not load
+Sign in shows **Sign in with Apple**, Google, and the email link. Plan & billing shows **Subscribe** and **Restore purchases**, not the Stripe card form. School setup is only “join with a code”. Students nearby is gone. Record a flight, then lock the simulator (Device → Lock). The track keeps updating. Unlock and stop the recording.
 
-- The WebView is pointed at production. Simulator network must be allowed.
-- A failed load shows `native/www/error.html` (navy page, “Can’t reach Boplo”).
-- To point the shell at another origin while debugging, change `server.url` in the root `capacitor.config.json`, run `npm run ios:sync`, and run again. Do not commit a non-production URL.
-- Removing `server.url` makes the app show only the local fallback page. It will not load the flight desk from disk. The desk is not bundled, on purpose. See the plan.
+Google’s button is still there. Google blocks that sign-in inside a WebView, so use Sign in with Apple. The email link opens in Mail and, until Associated Domains is set up, in Safari rather than in the app.
 
-## What is already set
+App Store products, once created in App Store Connect:
 
-- App icon: 1024×1024, scaled from `dist/icons/icon-maskable-512.png` (full-bleed navy, glossy blue “b”). iOS applies its own rounded mask, so the pre-rounded `icon-512.png` is not used.
-- Splash and launch screen: `#020611`, the same night token as the PWA `theme_color`.
-- Permission strings in `Info.plist` for the features the website already uses: location while the app is open, camera, photo library, microphone, speech recognition, and motion. There is no background-location mode. Adding one before a native recorder exists is a good way to be rejected.
-- `PrivacyInfo.xcprivacy` is in the app target. The App Store nutrition labels still have to be filled in by hand. The plan lists them.
-- `ITSAppUsesNonExemptEncryption` is false. The app uses HTTPS only.
-- A `boplo://` URL scheme is registered. Nothing sends those links yet.
+- `app.boplo.flight.advanced.yearly` — US $99.99
+- `app.boplo.flight.advanced.monthly` — US $11.99
 
-## What this Mac project does not do yet
+Until those products exist, Subscribe reports that the plan isn’t available yet. The receipt check also needs the Cloudflare flag `nodejs_compat`. The keys and the notification URL are listed in `APP_STORE_PLAN.md`.
 
-These need the paid developer account and are described in the plan. Do not flip them on just to see if the project still builds.
+## Do not leave a local URL in the committed config
 
-- Sign in with Apple
-- Associated Domains and the `apple-app-site-association` file (magic links currently open in Safari, not in the app)
-- Push Notifications (APNs)
-- Background location for the flight recorder
-- In-app purchase
-
-Google sign-in and the email link are the same pages as the website. Both are likely to fail inside the WebView until the plan’s sign-in work is done. That is expected on the first simulator run. The rest of the desk, including `?preview=1` if you paste it on the URL, does not need an account.
+To point the simulator at a Pages preview of this branch before production, change `server.url` in `capacitor.config.json`, run `npm run ios:sync`, and run again. Use an `https` preview URL. Do not commit that change, and do not turn on cleartext HTTP.

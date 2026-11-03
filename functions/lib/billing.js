@@ -1,3 +1,4 @@
+import { appleGrants, storeOf, publicApple, PRODUCTS as APPLE_PRODUCTS } from './apple.js';
 // Boplo Flight billing: Stripe subscriptions through the REST API (no SDK needed on Cloudflare).
 // Secrets (Cloudflare env): STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_FLIGHT_WEBHOOK_SECRET (this endpoint's own signing secret).
 // Options (Cloudflare env, optional): STRIPE_TAX=on to calculate VAT/sales tax with Stripe Tax.
@@ -111,12 +112,17 @@ export async function syncCustomer(env, customerId, fetcher = fetch) {
   });
 }
 
-export function publicBilling(env, row) {
+export function publicBilling(env, row, apple = null, now = Date.now()) {
+  const appleOn = appleGrants(apple, now);
+  const plan = effectivePlan(env, row) === 'advanced' || appleOn ? 'advanced' : 'free';
+  const stripeOn = !!(row && ACTIVE.has(row.status));
   return {
-    plan: effectivePlan(env, row), owner: !!row?.owner, school: row?.school || null, enforced: billingOn(env), status: row?.status || 'none', interval: row?.price_key || null, periodEnd: row?.current_period_end || null,
-    cancelAtPeriodEnd: !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: false,
+    plan, owner: !!row?.owner, school: row?.school || null, enforced: billingOn(env), status: appleOn && !stripeOn && !row?.owner && !row?.school ? (apple.status === 'grace' ? 'past_due' : 'active') : (row?.status || 'none'), interval: (appleOn && !stripeOn ? (apple.interval || apple.interval_key) : row?.price_key) || null, periodEnd: (appleOn && !stripeOn ? apple.expires_at : row?.current_period_end) || null,
+    cancelAtPeriodEnd: appleOn && !stripeOn ? apple.will_renew === 0 || apple.will_renew === false : !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: false,
     trialDays: 0, publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
-    tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS
+    tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS,
+    store: storeOf(row, apple, now), apple: publicApple(apple),
+    products: { yearly: Object.keys(APPLE_PRODUCTS).find(id => APPLE_PRODUCTS[id].interval === 'yearly'), monthly: Object.keys(APPLE_PRODUCTS).find(id => APPLE_PRODUCTS[id].interval === 'monthly') }
   };
 }
 

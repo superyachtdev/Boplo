@@ -20,8 +20,49 @@ Capacitor’s own config marks `server.url` as a live-reload setting, not a prod
 
 So the path is:
 
-1. This branch: an Xcode project that loads the real desk, with the icon, splash, permission strings and privacy manifest in place. Safe to run in the simulator. Not a submission.
-2. Before the first upload: add the native features in the 4.2 section below, and only then decide whether the WebView still loads the live site or a bundled shell. Payments and Sign in with Apple are Gianni’s decisions, listed at the end. They are not implemented.
+1. This branch: the Xcode project, plus the account-based App Store entitlement, Sign in with Apple, background recording, and native push described under Decisions. Safe to run in the simulator. Not a submission.
+2. The first upload still waits on Gianni’s Apple account, the two subscription products, the push key, a demo account, and `support@boplo.app`. Those are listed at the end. Nothing in this branch is sent to Apple.
+
+## Decisions, 3 November 2026
+
+Gianni decided these. The code in this branch follows them. Browser pricing, the website’s Stripe checkout, and browser sign-in are unchanged. Anything that is iOS-only runs only when `Capacitor.isNativePlatform()` is true.
+
+| # | Decision | What the code does |
+|---|---|---|
+| 1 | Advanced in the iOS app is an auto-renewable In-App Purchase, yearly by default and monthly as well, worldwide. Stripe stays for the website and for school plans. A Stripe subscriber is Advanced in the app. An App Store subscriber is Advanced on the web. No Stripe checkout and no link to buy on the web inside the iOS app. Restore Purchases is required. | `functions/lib/apple.js` checks the App Store JWS against Apple Root CA - G3 and writes `flight_apple`. `publicBilling` is Advanced if Stripe **or** Apple **or** a school seat **or** an owner email says so. `POST /flight/billing/apple` claims a receipt for the signed-in account and refuses to move it onto a second account. `POST /flight/billing/apple/notifications` takes App Store Server Notifications V2. The iOS plan screen calls StoreKit and shows Restore purchases. RevenueCat was not added: the same Cloudflare Functions and D1 already hold the Stripe row. |
+| 2 | iOS prices match the website: **$99.99 a year** and **$11.99 a month**. He will join the Small Business Program. | Product ids `app.boplo.flight.advanced.yearly` and `app.boplo.flight.advanced.monthly`. Both amounts are US price points he can select in App Store Connect. Other countries should stay on Apple’s automatic price. If a storefront has no exact cent, pick the nearest and do not raise the US price. The commission comes out of the same sticker price. |
+| 3 | School plans stay on the website. | The iOS app hides “Set up your school”, the Stripe school checkout, “Plans for schools”, and “Billing and invoices”. Joining with a school code still works, and a school member is still Advanced. |
+| 4 | Sign in with Apple, next to Google and the email link. | `POST /auth/auth/apple` checks Apple’s identity token. A verified email that already has a Boplo account is linked, unless that account is already tied to a different Apple ID. A private-relay address that matches nobody creates a new account. The button is only in the iOS shell. Google and the magic link are untouched for browsers. |
+| 5 | Apple Developer enrolment is **Individual**. The seller name on the store will be Gianni’s personal name. | The checklist says Individual. No organisation or D-U-N-S step. |
+| 6 | Hide Students nearby and direct messages in the iOS app until there is an age check. | The iOS shell drops that tab and sends `#students` to Community. The website still has it. |
+| 7 | iPhone only for v1. | `TARGETED_DEVICE_FAMILY` is 1. No iPad screenshots. |
+| 8 | Background GPS for the logbook recorder, including with the screen off. | `BoploPlugin` uses `CLLocationManager` with the location background mode, nearest-ten-metres accuracy and a 15 metre filter. It records only after Start and stops on Stop. The blue status bar stays visible while it records. |
+| 9 | Keep Google 3D Tiles. | `onlyUsingWithGoogleGeocoder: true` stays. Cesium’s credit line stays on screen, and a “3D scenery © Google” or “Imagery © Google” line is added in front of it. The privacy policy already links the Google Maps terms. Runways are still OurAirports and OpenStreetMap, not traced from the tiles. |
+| 10 | Native push (APNs). The demo account and `support@boplo.app` will be supplied by Gianni. | The app registers an APNs token at `POST /flight/push/apns`. Sends use the key below when it exists. Placeholders, not values, are in git. |
+
+### What Gianni still has to supply
+
+These are empty on purpose. Do not paste the keys into chat or into git.
+
+| Placeholder | Where it goes | What it is |
+|---|---|---|
+| Apple ID for the Developer Program | developer.apple.com, Individual | His personal Apple ID. Seller name will be his name. |
+| `APPLE_TEAM_ID` | Cloudflare Pages, and App Store Connect | 10-character Team ID |
+| `APPLE_APNS_KEY_ID` | Cloudflare | Key ID of an APNs auth key (.p8) |
+| `APPLE_APNS_PRIVATE_KEY` | Cloudflare, secret | The .p8 file contents |
+| `APPLE_BUNDLE_ID` | Cloudflare, optional | Defaults to `app.boplo.flight` |
+| `APPLE_APNS_ENV` | Cloudflare | `sandbox` until TestFlight production, then `production` |
+| Sign in with Apple capability | App ID `app.boplo.flight` | Turn it on. The entitlements file already asks for it. |
+| Push capability | Same App ID | Turn it on. Create the APNs key. |
+| Two subscriptions | App Store Connect | Yearly `app.boplo.flight.advanced.yearly` at US $99.99. Monthly `app.boplo.flight.advanced.monthly` at US $11.99. Group them. Yearly first. |
+| Server Notifications V2 | App Store Connect → the app → App Store Server Notifications | Production and sandbox URL `https://boplo.app/flight/billing/apple/notifications` |
+| `nodejs_compat` | Cloudflare Pages → Settings → Functions → Compatibility flags | Required or receipt checks return 503. The rest of the desk does not need it. |
+| Migration `migrations/0012_apple.sql` | D1 console | Optional. The server also creates the Apple table and the `apple_subject` column on first use. |
+| App Review demo account | App Store Connect review notes | A real Boplo email and password, plus what to tap: logbook, record a flight, simulator. |
+| `support@boplo.app` | A mailbox that receives mail, and the Support URL in App Store Connect | Not created by this branch. |
+| Small Business Program | App Store Connect | Enrol so the commission is the small-business rate. |
+
+Google sign-in inside the WebView will still be refused by Google (`disallowed_useragent`). The button stays, because Google stays as a sign-in method. Sign in with Apple is the one that works in the shell. The magic link opens in Mail and, until an Associated Domains file exists, in Safari rather than in the app.
 
 ### Why the other approaches lose
 
@@ -82,10 +123,10 @@ What usually moves a wrapper across the line, and how it maps onto this product:
 
 | Native capability | Why it is more than the website | State |
 |---|---|---|
-| Background GPS for the flight recorder | iOS will not keep a website’s `watchPosition` running with the screen locked. A real lesson log needs `CLLocationManager`, the location background mode, and a clear purpose string. The current recorder already asks for location and a wake lock, and it stops when the phone sleeps. | Not built. Do not add the background mode until the recorder exists. The Info.plist string for **while-in-use** location is already there, because the website asks for it. |
-| Push via APNs | Web Push in this codebase needs a service worker. iOS delivers web push to a Home Screen web app, not to a WKWebView. `PushManager` will be missing in the shell, so the existing toggle will correctly do nothing. A native token plus a send path next to `functions/lib/push.js` is the App Store version. | Not built. The server only speaks VAPID today. |
+| Background GPS for the flight recorder | iOS will not keep a website’s `watchPosition` running with the screen locked. A real lesson log needs `CLLocationManager`, the location background mode, and a clear purpose string. | Built in `BoploPlugin`. Nearest-ten-metres accuracy, 15 metre filter, only while a recording is running. Not yet tried on a phone. |
+| Push via APNs | Web Push in this codebase needs a service worker. iOS delivers web push to a Home Screen web app, not to a WKWebView. | Built. The iOS shell registers a device token at `POST /flight/push/apns`. Sends wait for the APNs key in Cloudflare. Web push is unchanged. |
 | Offline desk | The service worker caches the shell for Safari. WKWebView support for that worker is unreliable, and this binary does not contain the desk. A reviewer who opens the app in airplane mode will see the navy error page. | The error page exists. Real offline use is later work, and it has to keep the cookie problem in mind. |
-| Sign in with Apple | Required for a different guideline (below), and it is a native sign-in sheet rather than a Google page inside the WebView. | Not built. |
+| Sign in with Apple | Required for a different guideline (below), and it is a native sign-in sheet rather than a Google page inside the WebView. | Built. The button is iOS-only. The route is `POST /auth/auth/apple`. It still needs the capability on the App ID before Xcode will sign it. |
 | Camera logbook scan, microphone, motion | The website already does these. They help only if they work in the WebView and the purpose strings match. Strings are in the binary. Behaviour is untested. | Strings only. |
 
 Also relevant, from the same page:
@@ -97,6 +138,8 @@ Also relevant, from the same page:
 Ship at least background recording and APNs, plus Sign in with Apple if Google sign-in stays, before the first review. A build that is only this branch’s WebView should be expected to come back under 4.2.
 
 ## Payments
+
+**Chosen on 3 November 2026:** In-App Purchase for Advanced worldwide, at the same prices, Stripe unchanged on the website and for schools. The options below are the reasoning. They are not still open.
 
 Advanced is a digital subscription used inside the app (unlimited logbook, study, the simulator, and the rest listed in the billing code). Apple’s default rule is In-App Purchase. The guidelines were read on 3 November 2026. They have already changed once because of a US court, so read them again on the day of submission.
 
@@ -111,7 +154,9 @@ Advanced is a digital subscription used inside the app (unlimited logbook, study
 
 Prices in code today, and they should stay the prices until Gianni decides otherwise: Advanced **$11.99 a month** or **$99.99 a year**, School **$999 a year**, School Plus **$1,999 a year**. No free trial. The 14-day refund is Boplo’s own policy on the web (`dist/refunds.html`). Apple refunds for In-App Purchase are requested from Apple, not from that page.
 
-### Options, none of them implemented
+### Options that were considered
+
+The choice is option A, worldwide, at the same prices. B and C are closed. None of this changes the website’s Stripe form.
 
 **A. In-App Purchase for Advanced, Stripe stays on the website.** This is the one that can be sold outside the US. Add two auto-renewable products matching the current prices, yearly first, because the product already pushes yearly. When a purchase completes, the server marks the same `flight_billing` row the Stripe webhook marks, or a sibling row the app already understands. People who already pay Stripe keep access under 3.1.3(b), because the IAP exists too. Apple’s commission (the standard rate, or the Small Business Program rate if the account is eligible) comes out of the same sticker price unless Gianni chooses to charge more on iOS. School checkout stays on `boplo.app` and should not be a button inside the iOS app except on a storefront where an external link is allowed. A student who already has a school seat signs in and is Advanced, which the code already does.
 
@@ -212,40 +257,31 @@ Merging this branch to the branch Cloudflare publishes will deploy that script. 
 
 Apple will not accept these steps from a cloud agent, and this repo must not collect the passwords or the `.p8` key.
 
-1. Enrol in the Apple Developer Program. Individual or organisation: see the decision list. Cost is Apple’s annual fee. Organisation enrolment needs a D-U-N-S number and takes longer.
+1. Enrol in the Apple Developer Program as an **Individual**, with his own Apple ID. The seller name on the store will be his personal name. There is no D-U-N-S step. Cost is Apple’s annual fee. Guideline 5.1.1(ix) still mentions air travel and individual developers. The app is a training logbook, not an operator. If Review rejects it on that point, the remedy is an organisation account later.
 2. On a Mac, install Xcode, clone this branch, and follow `ios/README.md` until the simulator shows the desk.
-3. In the Apple Developer account, register the App ID `app.boplo.flight`. Enable the capabilities only when the matching code exists: Sign in with Apple, Associated Domains, Push Notifications. Enabling Push before there is a send path just creates a certificate you are not using.
+3. In the Apple Developer account, register the App ID `app.boplo.flight`. Turn on Sign in with Apple and Push Notifications. The send path and the sign-in route are already in this branch. Associated Domains can wait until the Team ID exists and the magic link should open the app.
 4. Create the iOS distribution certificate and a provisioning profile. Xcode’s automatic signing can do this once the Team is selected. Store the results in Keychain on that Mac, not in git.
 5. Create the app in App Store Connect. Name: **Boplo Flight**. Bundle id: `app.boplo.flight`. Primary language English. Privacy policy URL `https://boplo.app/privacy.html`. Support URL a page on boplo.app, or `mailto:support@boplo.app` if Connect still accepts a mail link. The support address itself still needs a mailbox. Category: Education is the closest fit. Do not pick Navigation.
 6. Age rating questionnaire, from the real community features. Export compliance is already answered in the plist (`ITSAppUsesNonExemptEncryption` false).
 7. Fill the nutrition labels from the table above.
-8. Screenshots on the required iPhone sizes (6.7-inch and 6.5-inch at the time of writing; confirm the current set in Connect). Use the real example desk, `flight-app.html?preview=1`, not mockups. The target is iPhone and iPad (`TARGETED_DEVICE_FAMILY` 1 and 2). iPad needs its own screenshots. Drop iPad in the Xcode target if the layout is not ready, and then you do not need iPad shots.
+8. Screenshots on the required iPhone sizes (6.7-inch and 6.5-inch at the time of writing; confirm the current set in Connect). Use the real example desk, `flight-app.html?preview=1`, not mockups. The target is iPhone only, so no iPad screenshots.
 9. App Review notes: a demo account email and password, the steps to open the logbook, the recorder and the simulator, and a sentence that the app is a training logbook, not a flight-planning or navigation tool, and not an approved training device. Mention `?preview=1` only as a backup. Reviewers prefer a real account.
 10. Host the Apple App Site Association file once the Team ID exists, then turn on Associated Domains and try a magic link on a device. The link must open the app, not Safari.
-11. If he chooses In-App Purchase: create the subscription group in Connect, yearly and monthly, and a sandbox tester. If he chooses US-only Stripe: set the app’s availability to the United States and re-read 3.1.1(a) that week.
+11. Create the subscription group in App Store Connect. Yearly product `app.boplo.flight.advanced.yearly` at US $99.99. Monthly product `app.boplo.flight.advanced.monthly` at US $11.99. Put yearly first. Add a sandbox tester. Point Server Notifications V2 at `https://boplo.app/flight/billing/apple/notifications`. On Cloudflare, set `nodejs_compat` and the APNs secrets from the table above. The app is sold worldwide. Stripe stays on the website.
 12. Archive in Xcode, upload to TestFlight, install on his own iPhone, and only then submit. Test on that phone, with the screen locked, the things this plan says are untested: the recorder, the simulator frame rate, the microphone, Google or Apple sign-in, the Stripe sheet or the IAP, and a failed network.
 
 Rotate the Cloudflare deploy hook if it was ever pasted into a chat. That is independent of Apple, and the brief already flagged it. Do not paste a new hook into a chat.
 
-## Decisions only Gianni can make
+## Decisions
 
-1. **Where the app is sold.** United States only, keeping today’s Stripe sheet (option B), or worldwide, which means In-App Purchase for Advanced (option A). This chooses the payment work. Prices stay $11.99, $99.99, $999 and $1,999 until he says otherwise.
-2. **Whether iOS shows a higher price** to cover Apple’s commission, or the same sticker price with a smaller margin. Tied to option A.
-3. **School plan inside the app.** Recommended: no buy button on iOS. Schools keep paying on the website. Confirm he is happy for a reviewer to see a signed-in school student on Advanced with no In-App Purchase of their own.
-4. **Sign-in.** Add Sign in with Apple, or remove Google from the iOS app and keep the email link only.
-5. **Developer account type.** Individual sole trader, or an organisation, knowing Guideline 5.1.1(ix) mentions air travel and individual developers.
-6. **Age rating and community.** Ship Students nearby and direct messages in version 1, or hide them until there is an age check. The privacy page already says 16+.
-7. **iPad.** Keep the universal target and produce iPad screenshots, or set the target to iPhone only for the first version.
-8. **Background recording.** Confirm the App Store app may record a GPS track with the screen off. That is the feature that most clearly clears 4.2, and it is also the feature that asks for Always location. The product line is still “between lessons”, so he should be comfortable that this recorder is for the logbook after a lesson, not a moving-map navigator.
-9. **Google 3D Tiles inside an App Store app.** He should be content with the Maps Platform terms, or the sim ships the EOX fallback only.
-10. **Demo account** for App Review, and whether `support@boplo.app` is a real mailbox before the listing goes in.
-11. **When to merge.** Merging deploys `flight-native.js` to the website. It does not change browser behaviour. It does not publish an iOS app. Uploading to App Store Connect is a separate, later act on his Mac.
+Recorded at the top of this file, on 3 November 2026. They are no longer open. What is still missing is the accounts and keys in that table, not a product choice.
 
 ## What this branch deliberately does not do
 
 - No App Store Connect record, no certificate, no TestFlight, no production deploy triggered from here.
-- No change to Stripe, prices, trials, promo codes or school Checkout.
-- No change to who can sign in on the website.
-- No Sign in with Apple, no APNs, no background location mode.
-- No copy of the GPL models, Cesium or the airfield data into the app.
+- No change to website prices, the Stripe Payment Element, trials, promo codes, or school Checkout on the website.
+- No change to Google sign-in or the email magic link for browsers.
+- No RevenueCat. Receipts are checked in Pages Functions.
+- No copy of the GPL models into the app binary.
 - No deletion of Scout, Darts, Wingman or Move.
+- Merging deploys the website changes (the iOS-only gates, the Apple sign-in route, the receipt route). It does not submit an app. The simulator keeps loading production until that deploy, so the new buttons appear in the app only after boplo.app is serving this branch.

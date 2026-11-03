@@ -57,19 +57,20 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Boplo records your GPS track while you log a flight, so the path can be saved in your logbook.</string>
+	<string>Boplo records the GPS track of a flight you start, so the path can be saved in your logbook.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Boplo records the GPS track of a flight you start, including while the screen is locked, so the path can be saved in your logbook. Recording stops when you stop it.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Boplo records the GPS track of a flight you start, including while the screen is locked, so the path can be saved in your logbook. Recording stops when you stop it.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Boplo uses the camera to photograph a paper logbook page so it can be read into your logbook.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

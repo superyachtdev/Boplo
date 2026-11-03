@@ -69,7 +69,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=22'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=23'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -943,7 +943,7 @@ window.BoploSim = (() => {
     // look at the departure while scenery loads
     camera.setView({ destination: LLH(P[0][0] - Math.sin(path.at(80)[2]) * 400, P[0][1] - Math.cos(path.at(80)[2]) * 400, (O.fromElevFt || 0) * FT + 250), orientation: { heading: path.at(80)[2], pitch: C.Math.toRadians(-22), roll: 0 } });
 
-    let tileset = null, scenery = 'globe';
+    let tileset = null, scenery = 'globe', googleImagery = false;
     if (O.googleKey && GFX !== 'fast') {
       try {
         tileset = await C.createGooglePhotorealistic3DTileset({ key: O.googleKey, onlyUsingWithGoogleGeocoder: true }, { maximumScreenSpaceError: SSE0, dynamicScreenSpaceError: true, dynamicScreenSpaceErrorFactor: 18, foveatedScreenSpaceError: true, cacheBytes: 640 * 1024 * 1024, skipLevelOfDetail: true, shadows: C.ShadowMode.RECEIVE_ONLY });
@@ -959,11 +959,13 @@ window.BoploSim = (() => {
       // level), otherwise Sentinel-2 cloudless (10 m pixels)
       let gsat = null;
       if (O.googleKey) { try { const r = await Promise.race([fetch(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(O.googleKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapType: 'satellite', language: 'en-US', region: 'US' }) }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]); const j = r.ok ? await r.json() : null; if (j?.session) gsat = j.session; } catch (e) { console.warn('satellite tiles', e); } }
-      if (gsat) scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${gsat}&key=${encodeURIComponent(O.googleKey)}`, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 19, credit: new C.Credit('Imagery © Google · Terrain: AWS Terrain Tiles') }));
+      if (gsat) { googleImagery = true; scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${gsat}&key=${encodeURIComponent(O.googleKey)}`, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 19, credit: new C.Credit('Imagery © Google · Terrain: AWS Terrain Tiles') })); }
       else scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
       const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = 2; g.tileCacheSize = 600; g.preloadSiblings = true; g.enableLighting = false;
     }
     root.classList.toggle('is-google', scenery === 'google');
+    // Google’s tile terms: the copyright line stays on screen, not only inside a collapsed credit.
+    if ($('[data-credits]') && (scenery === 'google' || googleImagery)) { const line = document.createElement('div'); line.className = 'sim-attr'; line.textContent = scenery === 'google' ? '3D scenery © Google' : 'Imagery © Google'; $('[data-credits]').prepend(line); }
     // light level: tint the photo scenery (it has its own baked lighting) and the imagery for dusk and night
     // visibility and cloud from the weather (METAR or a preset)
     const WX = O.weather || {};

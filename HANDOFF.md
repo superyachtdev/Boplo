@@ -291,4 +291,5 @@ Not submitted to Apple and not a production deploy. Read `APP_STORE_PLAN.md` and
 - The WebView loads `https://boplo.app/flight-app.html#overview`. The flight desk is not copied into the app. `native/www` is only the offline error page.
 - Reason: `boplo_session` is host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, and `functions/flight/[[path]].js` rejects any non-GET whose `Origin` is not the function’s own origin. A `capacitor://localhost` bundle would fail sign-in and every save.
 - `dist/flight-native.js` is loaded by `flight-app.html`. With no Capacitor bridge (every browser) it returns immediately. In the shell it sets the status bar and, later, follows a `https://boplo.app` link iOS opened back into the app.
-- No payment, price or auth change. No Sign in with Apple, APNs or background GPS yet. Those are decisions in the plan. Scout, Darts, Wingman and Move are untouched.
+- Decisions recorded in `APP_STORE_PLAN.md` (3 Nov): IAP worldwide at $99.99/$11.99, Stripe stays on the web, school purchase hidden in the app, Sign in with Apple, Individual developer account, no Students nearby or DMs in the app, iPhone only, background GPS, Google 3D tiles kept, APNs. Entitlement is `publicBilling` plus `flight_apple`. Tests in `tests/apple.test.js`.
+- Scout, Darts, Wingman and Move are untouched.
