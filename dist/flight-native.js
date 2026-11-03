@@ -28,8 +28,10 @@
     };
     try {
       if (plugins.StatusBar) {
-        Promise.resolve(plugins.StatusBar.setStyle({ style: 'DARK' })).catch(function () {});
-        Promise.resolve(plugins.StatusBar.setBackgroundColor({ color: '#020611' })).catch(function () {});
+        if (plugins.StatusBar.setOverlaysWebView) Promise.resolve(plugins.StatusBar.setOverlaysWebView({ overlay: true })).catch(function () {});
+        // LIGHT means dark text, for the cloud desk. Sign-in switches to light text itself.
+        Promise.resolve(plugins.StatusBar.setStyle({ style: 'LIGHT' })).catch(function () {});
+        Promise.resolve(plugins.StatusBar.setBackgroundColor({ color: '#EDF2FA' })).catch(function () {});
       }
     } catch (e) {}
     /* The splash plugin turns off touches until its hide animation finishes. Ask again after layout settles. */

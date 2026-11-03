@@ -33,6 +33,8 @@
     document.body.classList.add('ios-app');
     const meta = document.querySelector('meta[name=viewport]');
     if (meta) meta.setAttribute('content', 'width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no');
+    const theme = document.querySelector('meta[name=theme-color]');
+    if (theme) theme.setAttribute('content', '#EDF2FA');
   }
   function haptic(kind) {
     if (!nativeApp()) return;
@@ -49,6 +51,8 @@
       const bar = window.Capacitor?.Plugins?.StatusBar;
       if (!bar) return;
       const light = kind === 'light';
+      // LIGHT is Capacitor’s name for dark status-bar text. The web view draws underneath it.
+      if (bar.setOverlaysWebView) Promise.resolve(bar.setOverlaysWebView({ overlay: true })).catch(() => {});
       if (bar.setStyle) Promise.resolve(bar.setStyle({ style: light ? 'LIGHT' : 'DARK' })).catch(() => {});
       if (bar.setBackgroundColor) Promise.resolve(bar.setBackgroundColor({ color: light ? '#EDF2FA' : '#020611' })).catch(() => {});
     } catch (e) {}

@@ -46,7 +46,7 @@ The splash plugin used to turn off every touch on the view until its hide animat
 
 Not signed in: a navy sign-in screen with the Boplo wordmark, one short line, and Continue with Apple, Google, and email. No marketing page, no “back to boplo.app”.
 
-Signed in, the iPhone shell is a five-tab app (Desk, Logbook, Study, Fly, You): a large title, a blurred tab bar, and back chevrons for the screens behind each tab. That chrome is website JavaScript and CSS, so it appears after the Cloudflare deploy. Tab taps and saving a flight use `@capacitor/haptics`. Run `npm install`, then `npm run ios:sync`, then rebuild in Xcode so the haptics plugin is in the binary. Until that rebuild, those taps still work; they just don’t vibrate.
+Signed in, the iPhone shell is a five-tab app (Desk, Logbook, Study, Fly, You). The page background is cloud `#EDF2FA` and it runs under the status bar and the home indicator. The native window, web view, and splash use that same colour, and the status bar uses dark text. Those native colours are in the Xcode project: run `npm run ios:sync`, then rebuild. The tab layout itself is website CSS, so it updates on the next Cloudflare deploy. Tab taps and saving a flight use `@capacitor/haptics`, which is in the same rebuild.
 
 New account, setup not finished: Boplo’s existing setup (name, country, licence, hours), then the desk.
 
