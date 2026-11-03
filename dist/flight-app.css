@@ -1446,7 +1446,9 @@ body.ios-app{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 body.ios-app input,body.ios-app textarea,body.ios-app select{font-size:16px}
 body.ios-app button:active,body.ios-app .btn:active,body.ios-app .ios-tabs a:active,body.ios-app .ios-chips a:active{transform:scale(.97);opacity:.72}
 html:has(body.ios-app .ios-shell),body.ios-app:has(.ios-shell){height:100%;overflow:hidden;overscroll-behavior:none;background:var(--cloud)}
-body.ios-app .ios-shell{height:100svh;height:100dvh;display:flex;flex-direction:column;background:var(--cloud);color:var(--ink)}
+body.ios-app{--ios-tab:calc(56px + env(safe-area-inset-bottom,0px));--ios-radio:48px}
+/* Fixed to the viewport. A percentage height doesn't resolve through #app, and 100dvh on device can be taller than the web view, so the bar was laid out below the screen. */
+body.ios-app .ios-shell{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;min-height:0;height:auto;width:auto;background:var(--cloud);color:var(--ink)}
 body.ios-app .ios-nav,body.ios-app .ios-tabs,body.ios-app .ios-chips,body.ios-app .btn,body.ios-app .ios-large{-webkit-user-select:none;user-select:none}
 body.ios-app .ios-nav{flex:none;z-index:6;padding:calc(env(safe-area-inset-top) + 2px) 8px 0 4px;background:rgba(237,242,250,.84);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
 body.ios-app .ios-nav-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:44px}
@@ -1466,10 +1468,11 @@ body.ios-app .ios-chips a{flex:none;min-height:32px;display:inline-flex;align-it
 body.ios-app .ios-chips a[aria-current="page"]{background:var(--ink);color:#fff}
 body.ios-app .ios-actions-row{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px 12px}
 body.ios-app .ios-actions-row .btn{min-height:44px}
-body.ios-app .ios-body{padding:0 16px 28px}
+body.ios-app .ios-body{padding:0 16px calc(var(--ios-radio) + 20px)}
 body.ios-app .ios-body .grid{gap:12px}
-body.ios-app .ios-tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);gap:0;padding:4px 2px calc(env(safe-area-inset-bottom) + 4px);background:rgba(237,242,250,.78);border-top:1px solid rgba(5,11,31,.08);-webkit-backdrop-filter:saturate(180%) blur(22px);backdrop-filter:saturate(180%) blur(22px)}
-body.ios-app .ios-tabs a{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--ink-3);font-size:10px;font-weight:620;letter-spacing:-.01em}
+/* No backdrop-filter here. On device WKWebView, a blurred grid that sits after the scrolling flex item paints its background and drops the icons and labels, so the bar looks like an empty strip. The header can stay blurred: its filter is on a wrapper, not on the grid itself. */
+body.ios-app .ios-tabs{position:relative;z-index:40;flex:none;display:grid;grid-template-columns:repeat(5,1fr);gap:0;box-sizing:border-box;min-height:var(--ios-tab);padding:4px 2px env(safe-area-inset-bottom,0px);background:#F4F7FB;border-top:1px solid rgba(5,11,31,.1);-webkit-backdrop-filter:none;backdrop-filter:none}
+body.ios-app .ios-tabs a{position:relative;z-index:1;min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#3E4C6E;font-size:10px;font-weight:620;letter-spacing:-.01em;opacity:1}
 body.ios-app .ios-tabs a .ico{width:24px;height:24px;stroke-width:1.7}
 body.ios-app .ios-tabs a[aria-current="page"]{color:var(--electric)}
 body.ios-app .ios-tabs a[aria-current="page"] .ico{stroke-width:2.25}
@@ -1498,7 +1501,7 @@ body.ios-app #sheet[open]{display:flex;flex-direction:column;width:100%;max-widt
 body.ios-app #sheet[open]::before{content:"";display:block;width:36px;height:5px;border-radius:3px;margin:8px auto 0;background:rgba(5,11,31,.22);flex:none}
 body.ios-app #sheet[open] > form{display:flex;flex-direction:column;min-height:0;overflow:hidden}
 body.ios-app #sheet .sheet-body{overflow:auto;-webkit-overflow-scrolling:touch}
-body.ios-app .bradio{bottom:calc(78px + env(safe-area-inset-bottom)) !important;right:12px}
+body.ios-app .bradio,body.ios-app .bradio.in-app,body.ios-app .bradio.lift,body.ios-app .shell ~ .bradio{position:fixed !important;top:auto !important;right:12px !important;bottom:calc(var(--ios-tab) + 10px) !important;z-index:30 !important}
 body.ios-app .onboard{padding-top:env(safe-area-inset-top)}
 body.ios-app .ios-shell.ios-push .ios-scroll{animation:ios-push .42s var(--ease)}
 body.ios-app .ios-shell.ios-pop .ios-scroll{animation:ios-pop .42s var(--ease)}

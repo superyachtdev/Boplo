@@ -5,6 +5,22 @@
   try {
     var cap = window.Capacitor;
     if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return;
+    /* A service worker registered by an older build would keep serving the previous shell. Drop it so a deploy shows up on the next open. */
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          if (!regs || !regs.length) return;
+          Promise.all(regs.map(function (r) { return r.unregister(); })).then(function () {
+            try {
+              if (navigator.serviceWorker.controller && sessionStorage.getItem('boplo-sw-cleared') !== '1') {
+                sessionStorage.setItem('boplo-sw-cleared', '1');
+                location.reload();
+              }
+            } catch (e) {}
+          }).catch(function () {});
+        }).catch(function () {});
+      }
+    } catch (e) {}
     var plugins = cap.Plugins || {};
     var unlock = function () {
       try { if (plugins.SplashScreen && plugins.SplashScreen.hide) Promise.resolve(plugins.SplashScreen.hide({ fadeOutDuration: 0 })).catch(function () {}); } catch (e) {}
