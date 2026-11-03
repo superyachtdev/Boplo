@@ -131,7 +131,16 @@
   const CONTOURS = { a: null, b: null };
   const contours = k => CONTOURS[k] || (CONTOURS[k] = contourSVG(k === 'a' ? 1200 : 500, k === 'a' ? 800 : 1000, k === 'a' ? 0 : 3.7));
 
-  const brand = (href = '/') => `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
+  const brand = (href = '/') => {
+    const home = href === '/' || href === '/index.html';
+    if (nativeApp() && home) return `<span class="brand" aria-label="Boplo"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></span>`;
+    return `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
+  };
+  function hideNativeSplash() {
+    if (!nativeApp()) return;
+    const hide = () => { try { const splash = window.Capacitor?.Plugins?.SplashScreen; if (splash?.hide) Promise.resolve(splash.hide()).catch(() => {}); } catch (e) {} };
+    requestAnimationFrame(() => requestAnimationFrame(hide));
+  }
 
   /* ---------------- sign in ---------------- */
   function auth(notice = '') {
@@ -148,7 +157,6 @@
       <section class="auth-card" aria-labelledby="auth-title">
         <h2 id="auth-title">Sign in or create your desk</h2>
         <p>New here? Signing in creates your account. It’s free to start.</p>
-        ${nativeApp() ? `<button type="button" class="btn btn-light" data-apple>Sign in with Apple</button>` : ''}
         <a class="btn btn-google" href="/auth/auth/google">${ico('google')}Continue with Google</a>
         <div class="or">or use your email</div>
         <form data-email novalidate>
@@ -161,20 +169,6 @@
       </section>
     </div></main>`;
     const form = $('[data-email]'), note = $('[data-note]');
-    const appleBtn = $('[data-apple]');
-    if (appleBtn) appleBtn.onclick = async () => {
-      appleBtn.disabled = true; note.className = 'auth-note'; note.textContent = '';
-      try {
-        const plugin = nativePlugin();
-        if (!plugin?.signInWithApple) throw new Error('Sign in with Apple isn’t in this build yet.');
-        const result = await plugin.signInWithApple();
-        if (result?.cancelled) { appleBtn.disabled = false; return; }
-        const res = await fetch('/auth/auth/apple', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identityToken: result.identityToken, name: result.name || '' }) });
-        const out = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(out.error || 'Apple sign-in didn’t work.');
-        location.reload();
-      } catch (err) { note.textContent = err.message; note.classList.add('err'); appleBtn.disabled = false; }
-    };
     form.onsubmit = async e => {
       e.preventDefault();
       const email = form.email.value.trim(), btn = form.querySelector('button');
@@ -191,13 +185,68 @@
   }
 
   function failure(err) {
-    root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
-      <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
-      <section class="auth-card"><h2>Try again</h2><p>Your records are safe. This is usually a connection problem.</p>
-        <button class="btn btn-blue" data-retry>Reload my desk</button>
-        <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div></section>
-    </div></main>`;
+    if (nativeApp()) {
+      root.innerHTML = `<main class="ios-auth"><div>${brand()}<h1 class="display">Couldn’t open</h1><p class="lead">${esc(err.message)}</p></div><div class="ios-actions"><button type="button" class="btn btn-blue" data-retry>Try again</button></div></main>`;
+    } else {
+      root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
+        <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
+        <section class="auth-card"><h2>Try again</h2><p>Your records are safe. This is usually a connection problem.</p>
+          <button class="btn btn-blue" data-retry>Reload my desk</button>
+          <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div></section>
+      </div></main>`;
+    }
     $('[data-retry]').onclick = start;
+    hideNativeSplash();
+  }
+
+  /* iOS shell only. Browsers keep auth() above. After sign-in, the existing setup (onboard) runs for a new account. */
+  function iosAuth(notice = '') {
+    document.title = 'Sign in · Boplo';
+    root.innerHTML = `<main class="ios-auth">
+      <div>
+        ${brand()}
+        <h1 class="display">Your flight desk</h1>
+        <p class="lead">Sign in to pick up between lessons. Boplo keeps your logbook, your study and your next lesson together. It doesn’t replace your instructor, your official logbook, or the official sources.</p>
+      </div>
+      <div class="ios-actions">
+        <button type="button" class="btn btn-light" data-apple>Sign in with Apple</button>
+        <a class="btn btn-line" href="/auth/auth/google">${ico('google')}Continue with Google</a>
+        <form class="ios-email" data-email novalidate>
+          <label for="ios-email">Email<input id="ios-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+          <button class="btn btn-blue" type="submit">Email me a sign-in link</button>
+        </form>
+        <p class="note" data-note aria-live="polite">${esc(notice)}</p>
+        <p class="legal">By continuing you agree to the <a href="/terms.html">Terms</a> and you’ve read the <a href="/privacy.html">Privacy policy</a>.</p>
+      </div>
+    </main>`;
+    const form = $('[data-email]'), note = $('[data-note]'), appleBtn = $('[data-apple]');
+    appleBtn.onclick = async () => {
+      appleBtn.disabled = true; note.className = 'note'; note.textContent = '';
+      try {
+        const plugin = nativePlugin();
+        if (!plugin?.signInWithApple) throw new Error('Sign in with Apple isn’t in this build yet.');
+        const result = await plugin.signInWithApple();
+        if (result?.cancelled) { appleBtn.disabled = false; return; }
+        const res = await fetch('/auth/auth/apple', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identityToken: result.identityToken, name: result.name || '' }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'Apple sign-in didn’t work.');
+        location.reload();
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); appleBtn.disabled = false; }
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const email = form.email.value.trim(), btn = form.querySelector('button');
+      note.className = 'note';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note.textContent = 'Enter a valid email address.'; note.classList.add('err'); form.email.focus(); return; }
+      btn.disabled = true; note.textContent = 'Sending your link…';
+      try {
+        const res = await fetch('/auth/auth/email', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'We couldn’t send that email. Try again shortly.');
+        note.textContent = `Check ${email}. The link opens your desk and expires in 15 minutes.`; note.classList.add('ok');
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); btn.disabled = false; }
+    };
+    hideNativeSplash();
   }
 
   /* ---------------- fields ---------------- */
@@ -376,11 +425,12 @@
         else { ui.step++; onboard(); $('h1').focus(); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
+    hideNativeSplash();
   }
 
   async function logout() {
     if (!preview) { try { await fetch('/auth/logout', { method: 'POST' }); } catch { } }
-    location.href = preview ? '/' : '/flight-app.html';
+    location.href = nativeApp() || !preview ? '/flight-app.html' : '/';
   }
 
   /* ---------------- derived numbers ---------------- */
@@ -2816,7 +2866,7 @@
       <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Keep my account</button><button class="btn btn-danger">Delete everything</button></div></footer></form>`;
     sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
     const f = sheet.querySelector('[data-del]'), err = f.querySelector('.form-error');
-    f.onsubmit = async e => { e.preventDefault(); if (f.confirm.value.trim() !== 'DELETE') { err.textContent = 'Type DELETE in capitals to confirm.'; return; } const btn = f.querySelector('.btn-danger:not([data-close])'); btn.disabled = true; try { await api('account/delete', 'POST', { confirm: 'DELETE' }); location.href = '/?deleted=1'; } catch (x) { err.textContent = x.message; btn.disabled = false; } };
+    f.onsubmit = async e => { e.preventDefault(); if (f.confirm.value.trim() !== 'DELETE') { err.textContent = 'Type DELETE in capitals to confirm.'; return; } const btn = f.querySelector('.btn-danger:not([data-close])'); btn.disabled = true; try { await api('account/delete', 'POST', { confirm: 'DELETE' }); location.href = nativeApp() ? '/flight-app.html' : '/?deleted=1'; } catch (x) { err.textContent = x.message; btn.disabled = false; } };
     sheet.showModal();
   }
   /* ================= plan and billing ================= */
@@ -3767,9 +3817,10 @@
   /* ---------------- router ---------------- */
     function render() {
     if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
-    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
+    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    hideNativeSplash();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -3820,7 +3871,13 @@
   }
 
   /* ---------------- start ---------------- */
-  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
+  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:' && !nativeApp()) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
+  if (nativeApp()) document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    let url; try { url = new URL(a.getAttribute('href'), location.origin); } catch { return; }
+    if (url.origin === location.origin && (url.pathname === '/' || url.pathname === '/index.html')) { e.preventDefault(); if (state?.profile?.complete) location.hash = 'overview'; }
+  });
   async function start() {
     const jm = location.hash.match(/^#join=([A-Za-z0-9-]{4,20})$/); if (jm) { try { localStorage.setItem('boplo-join', jm[1]); } catch { } history.replaceState(null, '', location.pathname + location.search + '#school'); }
     if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: false, trialDays: 0, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
@@ -3842,7 +3899,7 @@
     catch (e) {
       const snap = isOffline(e) ? loadSnapshot() : null;
       if (snap?.user) { state = snap; state.billing = snap.billing || null; state.offline = true; const q = outbox(); if (q.length) state.flights = [...q.map(x => ({ ...x.data, id: x.id, pending: true })), ...state.flights.filter(f => !q.some(x => x.id === f.id))]; render(); return; }
-      if (e.status === 401) auth(); else failure(e);
+      if (e.status === 401) { if (nativeApp()) iosAuth(); else auth(); } else failure(e);
     }
   }
   start();

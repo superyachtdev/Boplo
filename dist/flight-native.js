@@ -10,9 +10,7 @@
       Promise.resolve(plugins.StatusBar.setStyle({ style: 'DARK' })).catch(function () {});
       Promise.resolve(plugins.StatusBar.setBackgroundColor({ color: '#020611' })).catch(function () {});
     }
-    if (plugins.SplashScreen && plugins.SplashScreen.hide) {
-      Promise.resolve(plugins.SplashScreen.hide()).catch(function () {});
-    }
+    /* Splash stays up until the flight desk calls SplashScreen.hide() after the first screen is painted. */
     // A magic-link or other https://boplo.app URL that iOS handed back to the app.
     // The WebView has to open it itself, or the session cookie is set in Safari instead.
     if (plugins.App && typeof plugins.App.addListener === 'function') {

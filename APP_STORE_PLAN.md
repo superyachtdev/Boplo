@@ -62,7 +62,9 @@ These are empty on purpose. Do not paste the keys into chat or into git.
 | `support@boplo.app` | A mailbox that receives mail, and the Support URL in App Store Connect | Not created by this branch. |
 | Small Business Program | App Store Connect | Enrol so the commission is the small-business rate. |
 
-Google sign-in inside the WebView will still be refused by Google (`disallowed_useragent`). The button stays, because Google stays as a sign-in method. Sign in with Apple is the one that works in the shell. The magic link opens in Mail and, until an Associated Domains file exists, in Safari rather than in the app.
+Google sign-in inside the WebView will still be refused by Google (`disallowed_useragent`). The button stays, because Google stays as a sign-in method. Sign in with Apple is the one that works in the shell. Error 1004 from `ASAuthorizationController` means the Developer capability is not on yet. The magic link opens in Mail and, until an Associated Domains file exists, in Safari rather than in the app.
+
+The iOS shell does not open the marketing site. A signed-out launch shows an app sign-in screen (Apple, Google, email). A new account then goes through the existing setup (name, country, licence, hours). A signed-in account whose setup is finished opens the desk. The splash hides when that first screen is painted, instead of waiting out the timer. One `Frame load interrupted` line in the simulator log is a cancelled provisional navigation and is harmless if the desk then loads.
 
 ### Why the other approaches lose
 

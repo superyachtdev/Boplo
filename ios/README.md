@@ -2,7 +2,7 @@
 
 The Xcode project is a Capacitor 8 shell. Bundle id `app.boplo.flight`. Home-screen name **Boplo**. It is iPhone only. Nothing here is submitted to Apple.
 
-The WebView opens `https://boplo.app/flight-app.html#overview`. That is the live site, so the session cookie and the flight API keep working. The new iOS screens (Sign in with Apple, App Store subscribe, Restore purchases, hidden school checkout, hidden direct messages) are in this branch’s website code. They show up in the simulator after this branch is what boplo.app serves. Until then, the simulator shows today’s production desk inside the new shell. This repository does not deploy that.
+The WebView opens `https://boplo.app/flight-app.html`. That is the live site, so the session cookie and the flight API keep working. The iOS sign-in screen is in this branch’s website code. It shows up in the simulator after this branch is what boplo.app serves. Until then, the simulator shows today’s production desk. This repository does not deploy that.
 
 ## What you need
 
@@ -34,7 +34,37 @@ In Xcode:
 3. Signing & Capabilities: leave Team empty for a plain simulator run of the shell. If Xcode refuses to build because of Sign in with Apple or Push, choose your Apple ID as the Team. Those two capabilities need the paid program and the App ID `app.boplo.flight` before a signed build succeeds. The entitlements file is `ios/App/App/App.entitlements`.
 4. Press Run.
 
-You should see a night-navy splash (`#020611`) and the glossy blue “b”, then the flight desk. If boplo.app cannot be reached, the screen says “Can’t reach Boplo”.
+You should see a night-navy splash (`#020611`) and the glossy blue “b”, then whatever boplo.app is currently serving. If boplo.app cannot be reached, the screen says “Can’t reach Boplo”.
+
+A single console line `Frame load interrupted` is WebKit cancelling one provisional navigation. It showed up once on the first run and the desk still loaded. It is harmless. The start URL no longer includes `#overview`, which was one way to trip that cancellation.
+
+`ASAuthorizationController` error 1004 means Sign in with Apple has no Developer account or capability yet. The button explains that and leaves email sign-in working. It is expected until the paid account is on.
+
+The splash stays until the first screen is painted, then the page calls `SplashScreen.hide()`. If that call never arrives, it still hides itself after 12 seconds. Rebuild after `npm run ios:sync` so the shell picks up that timing. The hide call itself is in the website, so it runs once this branch is deployed.
+
+## What you should see once this branch is live on boplo.app
+
+Not signed in: a navy sign-in screen with Sign in with Apple, Google, and email. No marketing page, no “back to boplo.app”.
+
+New account, setup not finished: Boplo’s existing setup (name, country, licence, hours), then the desk.
+
+Already signed in, setup finished: the desk, straight away.
+
+## See the sign-in screen again
+
+The session cookie lives in the simulator’s WebView.
+
+- Sign out from the account menu. That returns to the sign-in screen.
+- Or delete the app (long-press the icon on the home screen, Remove App) and run it again from Xcode. That clears the cookie.
+
+## See the setup screens again
+
+Those screens are the account’s saved setup, not a separate intro. They show while setup is unfinished.
+
+- Sign in with an email that has never finished setup.
+- Or, on a finished account, delete the account from Profile and sign up again.
+
+There is no extra “reset onboarding” switch.
 
 ## After this branch is deployed
 

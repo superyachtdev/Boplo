@@ -107,6 +107,24 @@ button:disabled{cursor:progress;opacity:.6}
 .auth-links{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px;color:var(--mist);padding-top:6px;border-top:1px solid var(--hair-d)}
 .auth-links a:hover{color:#fff}
 
+/* iOS shell sign-in. Not used by the website. */
+.ios-auth{min-height:100svh;background:var(--night);color:#F2F6FF;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:calc(env(safe-area-inset-top) + 36px) 24px calc(env(safe-area-inset-bottom) + 28px)}
+.ios-auth h1{margin:28px 0 0;font-size:clamp(44px,12vw,64px);color:#F2F6FF}
+.ios-auth .lead{margin:14px 0 0;max-width:28em;color:var(--mist);font-size:17px;line-height:1.5}
+.ios-auth .ios-actions{display:grid;gap:12px}
+.ios-auth .btn{width:100%;height:52px}
+.ios-auth [data-apple]{background:#fff;color:var(--ink)}
+.ios-auth .btn-line{background:transparent;color:#F2F6FF;border-color:rgba(158,216,255,.35)}
+.ios-auth .ios-email{display:grid;gap:10px}
+.ios-auth label{display:grid;gap:8px;color:rgba(230,240,255,.85);font-size:13.5px}
+.ios-auth input{height:52px;border-radius:999px;border:1px solid rgba(158,216,255,.22);background:rgba(255,255,255,.04);color:#fff;padding:0 18px;font:16px/1.4 Archivo,system-ui,sans-serif}
+.ios-auth input::placeholder{color:rgba(143,160,196,.7)}
+.ios-auth input:focus{outline:none;border-color:var(--electric-hi);box-shadow:0 0 0 3px rgba(10,98,255,.28)}
+.ios-auth .note{min-height:1.3em;margin:0;color:var(--ice);font-size:14px}
+.ios-auth .note.err{color:#FF9BA6}
+.ios-auth .legal{margin:4px 0 0;color:var(--mist);font-size:13px;line-height:1.45}
+.ios-auth .legal a{color:var(--ice)}
+
 /* ---------- onboarding ---------- */
 .onboard{min-height:100svh;display:grid;grid-template-columns:minmax(300px,400px) 1fr;background:var(--cloud)}
 .onboard-side{margin:10px;border-radius:var(--r-frame);padding:36px 32px;display:flex;flex-direction:column;gap:40px;box-shadow:inset 0 0 0 1px var(--hair-d)}

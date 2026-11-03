@@ -132,6 +132,8 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         let code = (error as NSError).code
         if code == ASAuthorizationError.canceled.rawValue {
             appleCall?.resolve(["cancelled": true])
+        } else if code == 1004 {
+            appleCall?.reject("Sign in with Apple isn’t available until the Apple Developer account and the capability are turned on. Use email for now.")
         } else {
             appleCall?.reject(error.localizedDescription)
         }
