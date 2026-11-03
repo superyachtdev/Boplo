@@ -6,11 +6,20 @@
     var cap = window.Capacitor;
     if (!cap || typeof cap.isNativePlatform !== 'function' || !cap.isNativePlatform()) return;
     var plugins = cap.Plugins || {};
-    if (plugins.StatusBar) {
-      Promise.resolve(plugins.StatusBar.setStyle({ style: 'DARK' })).catch(function () {});
-      Promise.resolve(plugins.StatusBar.setBackgroundColor({ color: '#020611' })).catch(function () {});
-    }
-    /* Splash stays up until the flight desk calls SplashScreen.hide() after the first screen is painted. */
+    var unlock = function () {
+      try { if (plugins.SplashScreen && plugins.SplashScreen.hide) Promise.resolve(plugins.SplashScreen.hide({ fadeOutDuration: 0 })).catch(function () {}); } catch (e) {}
+      try { if (plugins.Boplo && plugins.Boplo.unlockInteraction) Promise.resolve(plugins.Boplo.unlockInteraction()).catch(function () {}); } catch (e) {}
+    };
+    try {
+      if (plugins.StatusBar) {
+        Promise.resolve(plugins.StatusBar.setStyle({ style: 'DARK' })).catch(function () {});
+        Promise.resolve(plugins.StatusBar.setBackgroundColor({ color: '#020611' })).catch(function () {});
+      }
+    } catch (e) {}
+    /* The splash plugin turns off touches until its hide animation finishes. Ask again after layout settles. */
+    unlock();
+    setTimeout(unlock, 600);
+    setTimeout(unlock, 1800);
     // A magic-link or other https://boplo.app URL that iOS handed back to the app.
     // The WebView has to open it itself, or the session cookie is set in Safari instead.
     if (plugins.App && typeof plugins.App.addListener === 'function') {

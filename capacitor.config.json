@@ -25,14 +25,14 @@
     ]
   },
   "ios": {
-    "contentInset": "automatic",
+    "contentInset": "never",
     "backgroundColor": "#020611",
     "appendUserAgent": "BoploFlightiOS"
   },
   "plugins": {
     "SplashScreen": {
       "launchAutoHide": true,
-      "launchShowDuration": 12000,
+      "launchShowDuration": 2000,
       "backgroundColor": "#020611",
       "showSpinner": false
     },

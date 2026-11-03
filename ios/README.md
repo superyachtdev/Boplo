@@ -40,11 +40,11 @@ A single console line `Frame load interrupted` is WebKit cancelling one provisio
 
 Tapping Sign in with Apple before the Developer capability is on does not show a system error code. Cancel does nothing. Any other Apple sign-in failure shows “Apple sign-in isn’t available yet. Use email for now.” The ATC radio pill stays off that sign-in screen.
 
-The splash stays until the first screen is painted, then the page calls `SplashScreen.hide()`. If that call never arrives, it still hides itself after 12 seconds. Rebuild after `npm run ios:sync` so the shell picks up that timing. The hide call itself is in the website, so it runs once this branch is deployed.
+The splash plugin used to turn off every touch on the view until its hide animation finished. A layout pass while boplo.app loads cancels that animation, so the desk appeared and nothing responded to taps. The native plugin now turns touches back on and removes a leftover full-screen splash view, and `npm run ios:sync` copies a patched splash plugin that does the same. Rebuild after `npm run ios:sync`. The website also asks the shell to hide the splash again after the first paint; that part goes live with the Cloudflare deploy.
 
 ## What you should see once this branch is live on boplo.app
 
-Not signed in: a navy sign-in screen with Sign in with Apple, Google, and email. No marketing page, no “back to boplo.app”.
+Not signed in: a navy sign-in screen with the Boplo wordmark, one short line, and Continue with Apple, Google, and email. No marketing page, no “back to boplo.app”.
 
 New account, setup not finished: Boplo’s existing setup (name, country, licence, hours), then the desk.
 
