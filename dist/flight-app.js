@@ -29,6 +29,33 @@
   // The Capacitor shell injects this. Browsers and the installed PWA do not, so every check below stays off for them.
   const nativeApp = () => { try { return window.Capacitor?.isNativePlatform?.() === true; } catch { return false; } };
   const nativePlugin = () => nativeApp() ? window.Capacitor?.Plugins?.Boplo : null;
+  if (nativeApp()) {
+    document.body.classList.add('ios-app');
+    const meta = document.querySelector('meta[name=viewport]');
+    if (meta) meta.setAttribute('content', 'width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no');
+  }
+  function haptic(kind) {
+    if (!nativeApp()) return;
+    try {
+      const h = window.Capacitor?.Plugins?.Haptics;
+      if (!h) return;
+      const job = kind === 'success' && h.notification ? h.notification({ type: 'SUCCESS' }) : h.impact?.({ style: kind || 'LIGHT' });
+      if (job) Promise.resolve(job).catch(() => {});
+    } catch (e) {}
+  }
+  function iosStatus(kind) {
+    if (!nativeApp()) return;
+    try {
+      const bar = window.Capacitor?.Plugins?.StatusBar;
+      if (!bar) return;
+      const light = kind === 'light';
+      if (bar.setStyle) Promise.resolve(bar.setStyle({ style: light ? 'LIGHT' : 'DARK' })).catch(() => {});
+      if (bar.setBackgroundColor) Promise.resolve(bar.setBackgroundColor({ color: light ? '#EDF2FA' : '#020611' })).catch(() => {});
+    } catch (e) {}
+  }
+  const waitCard = () => nativeApp()
+    ? '<div class="skel" aria-busy="true" aria-label="Loading"><i></i><i></i><i style="width:62%"></i></div>'
+    : '<div class="tile"><p class="hint">Loading…</p></div>';
   const IAP = { yearly: 'app.boplo.flight.advanced.yearly', monthly: 'app.boplo.flight.advanced.monthly' };
 
   let toastTimer;
@@ -89,6 +116,15 @@
   ];
   if (nativeApp()) { const hub = HUBS.find(h => h[0] === 'community'); if (hub) hub[3] = hub[3].filter(id => id !== 'students'); }
   const SUBLABEL = { logbook: 'Flights' };
+  const IOS_TABS = [
+    { id: 'overview', label: 'Desk', icon: 'overview', root: 'overview', pages: ['overview'] },
+    { id: 'logbook', label: 'Logbook', icon: 'logbook', root: 'logbook', pages: ['logbook', 'map', 'analytics'] },
+    { id: 'study', label: 'Study', icon: 'study', root: 'study', pages: ['study', 'progress', 'prepare', 'budget', 'radio', 'currency', 'ask'] },
+    { id: 'sim', label: 'Fly', icon: 'sim', root: 'sim', pages: ['sim', 'navlog', 'preflight', 'weather'] },
+    { id: 'more', label: 'You', icon: 'profile', root: 'more', pages: ['more', 'profile', 'plan', 'school', 'community', 'leaderboards'] }
+  ];
+  const iosTabFor = page => IOS_TABS.find(t => t.pages.includes(page)) || IOS_TABS[0];
+  const pageLabel = id => ({ more: 'You', profile: 'Profile', plan: 'Plan', school: 'School' })[id] || (PAGES.find(x => x[0] === id) || [, id])[1];
   const hubOf = id => HUBS.find(h => h[3].includes(id));
   ui.lastSub = ui.lastSub || {};
   const hubHref = h => '#' + (ui.lastSub[h[0]] && h[3].includes(ui.lastSub[h[0]]) ? ui.lastSub[h[0]] : h[3][0]);
@@ -216,6 +252,7 @@
   /* iOS shell only. Browsers keep auth() above. After sign-in, the existing setup (onboard) runs for a new account. */
   function iosAuth(notice = '') {
     iosSignedOut(true);
+    iosStatus('dark');
     document.title = 'Sign in · Boplo';
     const appleMark = `<svg class="apple" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 2.9 2.3 1.1 0 1.6-.8 3-.8s1.8.8 3 .7c1.3 0 2.1-1.1 2.9-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.4-.9-2.6-3.8zM14.7 6.5c.6-.8 1.1-1.9.9-3-1 .1-2.1.6-2.8 1.4-.6.7-1.1 1.8-.9 2.9 1.1.1 2.1-.5 2.8-1.3z"/></svg>`;
     root.innerHTML = `<main class="ios-auth">
@@ -378,6 +415,7 @@
   const STEPS = ['About you', 'Your goal', 'Aircraft', 'Hours so far', 'Review'];
   function onboard() {
     document.title = 'Set up your desk · Boplo Flight';
+    iosStatus('light');
     const p = state.profile || {}, s = ui.step;
     const screens = [
       ['Let’s set up your flight desk.', 'A few details keep everything in the right context. You can change any of this later.',
@@ -491,6 +529,7 @@
 
   /* ---------------- shell ---------------- */
   function shell(page, head, body) {
+    if (nativeApp()) { iosShell(page, head, body); return; }
     const p = state.profile;
     document.title = `${head.title.replace(/<[^>]+>/g, '')} · Boplo Flight`;
     root.innerHTML = `<div class="shell">
@@ -518,6 +557,74 @@
     $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
     $$('[data-logout]').forEach(b => b.onclick = logout);
     $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
+  }
+
+  function iosShell(page, head, body) {
+    const tab = iosTabFor(page);
+    const plain = String(head.title || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const drilled = page !== tab.root;
+    const chev = '<svg class="ios-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const chips = tab.pages.length > 1 ? `<nav class="ios-chips" aria-label="${esc(tab.label)}">${tab.pages.map(id => `<a href="#${id}" ${id === page ? 'aria-current="page"' : ''}>${esc(pageLabel(id))}</a>`).join('')}</nav>` : '';
+    const dir = ui.iosDir || '';
+    ui.iosDir = '';
+    ui.iosPage = page;
+    document.title = `${plain} · Boplo`;
+    iosStatus('light');
+    root.innerHTML = `<div class="shell ios-shell${dir ? ' ios-' + dir : ''}">
+      <header class="ios-nav">
+        <div class="ios-nav-row">
+          ${drilled ? `<a class="ios-back" href="#${tab.root}">${chev}<span>${esc(pageLabel(tab.root))}</span></a>` : '<span class="ios-back-spacer"></span>'}
+          <b class="ios-inline">${esc(plain)}</b>
+          <button type="button" class="ios-plus" data-add aria-label="Log a flight"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+        </div>
+      </header>
+      <div class="ios-scroll">
+        <div class="ios-pull" aria-hidden="true"><span></span></div>
+        <h1 class="ios-large display">${head.title}</h1>
+        ${chips}
+        ${head.actions ? `<div class="ios-actions-row">${head.actions}</div>` : ''}
+        ${state.offline ? '<div class="offline-bar"><b>Offline.</b> Showing your last saved desk.</div>' : ''}
+        <div class="ios-body">${body}</div>
+      </div>
+      <nav class="ios-tabs" aria-label="Boplo">${IOS_TABS.map(t => `<a href="#${t.root}" ${t.id === tab.id ? 'aria-current="page"' : ''}>${ico(t.icon)}<span>${t.label}</span></a>`).join('')}</nav>
+    </div>`;
+    $$('[data-add]').forEach(b => b.onclick = () => { haptic('LIGHT'); if (!isAdv() && state.flights.length >= B().limits.flights) return upgradeSheet(`The Free plan holds ${B().limits.flights} flights. Advanced gives you an unlimited logbook.`); flightSheet(); });
+    $$('[data-record]').forEach(b => b.onclick = recorderSheet);
+    $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
+    $$('[data-logout]').forEach(b => b.onclick = logout);
+    $$('[data-flight]').forEach(b => b.onclick = () => flightSheet(state.flights.find(f => f.id === b.dataset.flight)));
+    $$('.ios-tabs a').forEach(a => a.addEventListener('click', () => haptic('LIGHT')));
+    const sc = document.querySelector('.ios-scroll'), shellEl = document.querySelector('.ios-shell');
+    if (sc && shellEl) {
+      sc.addEventListener('scroll', () => shellEl.classList.toggle('compact', sc.scrollTop > 28), { passive: true });
+      let y0 = 0, dy = 0, armed = false;
+      sc.addEventListener('touchstart', e => { armed = sc.scrollTop <= 0; y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
+      sc.addEventListener('touchmove', e => {
+        if (!armed) return;
+        dy = e.touches[0].clientY - y0;
+        const pull = sc.querySelector('.ios-pull');
+        if (dy > 8 && sc.scrollTop <= 0 && pull) { pull.classList.add('on'); pull.style.height = Math.min(dy * .45, 36) + 'px'; }
+      }, { passive: true });
+      sc.addEventListener('touchend', () => {
+        const pull = sc.querySelector('.ios-pull');
+        if (pull) { pull.classList.remove('on'); pull.style.height = ''; }
+        if (armed && dy > 78) { haptic('LIGHT'); iosRefresh(); }
+        armed = false;
+      });
+    }
+  }
+  let iosRefreshing = false;
+  async function iosRefresh() {
+    if (iosRefreshing) return;
+    iosRefreshing = true;
+    try {
+      if (!preview) {
+        const ws = await api('workspace');
+        if (ws?.user) { state = ws; state.billing = ws.billing || null; state.school = ws.school || null; addSchoolNav(); }
+      }
+    } catch (e) {}
+    iosRefreshing = false;
+    render();
   }
 
   // show every section's pages in the sidebar; when the window is too short, fold the other sections (bottom first), then this one, so the sidebar never scrolls (Logbook folds first: its main link already opens Flights; Flight planning, with the simulator, folds last)
@@ -910,6 +1017,23 @@
     $$('[data-chairfly]').forEach(b => b.onclick = chairflySheet);
   }
 
+  function iosGlance() {
+    if (!nativeApp()) return '';
+    const goal = Number(state.profile?.goalHours || 0), total = totalMin() / 60;
+    const pct = goal ? Math.round(Math.min(100, total / goal * 100)) : null;
+    let studyLine = 'Start theory';
+    try { const st = studyOf(state.profile); const seen = window.QB ? QB.questions.filter(q => st[q.id]).length : 0; studyLine = seen ? `${seen} practised` : 'Start theory'; } catch (e) {}
+    return `<section class="ios-glance span-12" aria-label="At a glance">
+      <div class="ios-stats">
+        <div><b class="num">${hrs(totalMin())}</b><span>Hours</span></div>
+        <div><b class="num">${pct == null ? '—' : pct + '%'}</b><span>${goal ? 'Of licence goal' : 'Set a goal'}</span></div>
+        <div><b class="num">${state.flights.length}</b><span>Flights</span></div>
+      </div>
+      <button type="button" class="btn btn-blue ios-log" data-add>Log flight</button>
+      <a class="ios-study-row" href="#study"><span>Study</span><b>${esc(studyLine)}</b></a>
+    </section>`;
+  }
+
   function overview() {
     const p = state.profile, list = sorted(), last30 = inLast(30), checks = parseChecks(p.checklist);
     const done = checks.filter(c => c.done).length, goal = Number(p.goalHours || 0), total = totalMin() / 60;
@@ -921,7 +1045,7 @@
     const hour = new Date().getHours(), greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
     shell('overview', { title: `${greet}, ${esc(firstName(p.name))}.`, sub: list.length ? `${list.length} flight${list.length === 1 ? '' : 's'} logged, ${hrs(totalMin())} hours recorded in total.` : 'Log your first flight and your desk starts filling in.' },
-      `<div class="grid">${lessonDayTile()}${coachTile()}
+      `<div class="grid">${iosGlance()}${lessonDayTile()}${coachTile()}
         <section class="tile dark next span-7" aria-labelledby="next-h">${contours('b')}
           <div class="tile-head"><h2 id="next-h">Up next</h2><span class="chip">${esc(when)}</span></div>
           <h3 class="display">${esc(p.nextLesson || 'Add your next lesson')}</h3>
@@ -2606,7 +2730,7 @@
   }
   async function questionView(id) {
     const st = ui.cq, owner = !!B().owner;
-    shell('community', { title: 'Community', actions: '<button class="btn btn-line" data-cback>All questions</button>' }, '<div data-cq><div class="tile"><p class="hint">Loading…</p></div></div>');
+    shell('community', { title: 'Community', actions: '<button class="btn btn-line" data-cback>All questions</button>' }, `<div data-cq>${waitCard()}</div>`);
     $('[data-cback]').onclick = () => { st.open = null; communityPage(); };
     let d;
     try { d = preview ? { question: { ...DEMO_Q.questions.find(q => q.id === id), body: DEMO_Q.questions.find(q => q.id === id)?.excerpt || '' }, answers: id === 'd1' ? [{ id: 'a1', body: 'Chair-fly the whole circuit the night before, out loud, including the go-around. It made it feel routine.', score: 8, at: Date.now() - 5000e3, my: 0, by: { name: 'Jack', airfield: 'EGHP', licence: 'PPL(A)' } }] : [] } : await cApi('posts/' + id); }
@@ -2811,7 +2935,7 @@
   async function boardsPage() {
     const p = state.profile, home = upper(p.airport).split(/[\s·]/)[0];
     const st = ui.cb || (ui.cb = { ap: home, kind: 'short', period: 'week' });
-    shell('leaderboards', { title: 'Landing leaderboards', sub: 'Your best simulator landing at each airfield, against everyone else’s. A new daily challenge every day.' }, '<div data-cbx><div class="tile"><p class="hint">Loading…</p></div></div>');
+    shell('leaderboards', { title: 'Landing leaderboards', sub: 'Your best simulator landing at each airfield, against everyone else’s. A new daily challenge every day.' }, `<div data-cbx>${waitCard()}</div>`);
     let d;
     try { d = preview ? { challenge: { date: todayISO(), code: 'LPMA', name: 'Madeira', runway: '05', weather: 'gusty', kind: 'short' }, daily: { rows: [{ rank: 1, score: 93, by: { name: 'Lucía', airfield: 'LEVC' }, aircraft: 'Cessna 172S' }, { rank: 2, score: 88, by: { name: 'Tom', airfield: 'EGTF' }, aircraft: 'PA-28' }], me: null }, local: { rows: [{ rank: 1, score: 86, by: { name: 'Priya', airfield: 'EGHP' }, aircraft: 'PA-28' }], me: null }, mine: [], busy: [{ ap: 'LPMA', pilots: 12, best: 93 }, { ap: 'EGHP', pilots: 4, best: 86 }], week: todayISO() }
       : await cApi(`boards?ap=${encodeURIComponent(st.ap || '')}&kind=${st.kind}&period=${st.period}`); }
@@ -2845,7 +2969,7 @@
   async function studentsPage() {
     const p = state.profile, st = ui.cs || (ui.cs = { chat: null });
     if (st.chat) return chatView(st.chat);
-    shell('students', { title: 'Students nearby', sub: 'Find other student pilots at your airfield and nearby: study together, share lifts, swap notes.' }, '<div data-csx><div class="tile"><p class="hint">Loading…</p></div></div>');
+    shell('students', { title: 'Students nearby', sub: 'Find other student pilots at your airfield and nearby: study together, share lifts, swap notes.' }, `<div data-csx>${waitCard()}</div>`);
     let d, t;
     try { [d, t] = preview ? [{ listed: false, located: true, people: [{ pid: 'a'.repeat(16), name: 'Priya', airfield: 'EGHP', licence: 'PPL(A)', school: 'Popham Flying School', bio: 'Theory exams next month. Happy to quiz each other.', km: 0, sameField: true }, { pid: 'b'.repeat(16), name: 'Tom', airfield: 'EGTF', licence: 'PPL(A)', bio: '', km: 48 }] }, { threads: [] }] : await Promise.all([cApi('people'), cApi('msgs')]); }
     catch (x) { $('[data-csx]').innerHTML = `<div class="tile empty center"><h3>This didn’t load.</h3><p>${esc(x.message)}</p></div>`; return; }
@@ -2870,7 +2994,7 @@
     };
   }
   async function chatView(c) {
-    shell('students', { title: esc(c.name || 'Messages'), actions: '<button class="btn btn-line" data-cback>Back</button>' }, '<div data-chat><div class="tile"><p class="hint">Loading…</p></div></div>');
+    shell('students', { title: esc(c.name || 'Messages'), actions: '<button class="btn btn-line" data-cback>Back</button>' }, `<div data-chat>${waitCard()}</div>`);
     $('[data-cback]').onclick = () => { ui.cs.chat = null; studentsPage(); };
     let d; try { d = preview ? { with: { name: c.name }, blocked: false, messages: [] } : await cApi('msgs/' + c.pid); } catch (x) { $('[data-chat]').innerHTML = `<div class="tile empty center"><h3>${esc(x.message)}</h3></div>`; return; }
     $('[data-chat]').innerHTML = `<section class="tile c-chat"><div class="tile-head"><div>${pilotTag(d.with)}</div><button type="button" class="link" data-block>${d.blocked ? 'Unblock' : 'Block'}</button></div>
@@ -3477,7 +3601,7 @@
         try { saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data); }
         catch (x) { if (!editing && isOffline(x)) { saved = { flight: queueFlight(data) }; queued = true; } else throw x; }
         state.flights = [saved.flight, ...state.flights.filter(x => x.id !== saved.flight.id)];
-        sheet.close(); render(); toast(queued ? 'You’re offline: the flight is saved on this device and goes to your account when you reconnect.' : editing ? 'Flight updated.' : 'Flight saved.');
+        sheet.close(); render(); haptic(editing ? 'LIGHT' : 'success'); toast(queued ? 'You’re offline: the flight is saved on this device and goes to your account when you reconnect.' : editing ? 'Flight updated.' : 'Flight saved.');
         if (!editing) { const fresh = milestones().filter(m => !msBefore.has(m.title) && m.title !== 'First flight logged'); if (fresh.length) setTimeout(() => celebrate(fresh.sort((a, b) => (b.title === 'First solo') - (a.title === 'First solo'))[0]), 700); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; err.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' }); }
     };
@@ -3846,7 +3970,17 @@
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
     hideNativeSplash();
   }
-  addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
+  addEventListener('hashchange', () => {
+    if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close();
+    if (nativeApp() && state.profile?.complete) {
+      const next = current();
+      const prev = ui.iosPage || next;
+      if (iosTabFor(next).id !== iosTabFor(prev).id) ui.iosDir = 'fade';
+      else if (next === iosTabFor(next).root) ui.iosDir = 'pop';
+      else ui.iosDir = 'push';
+    }
+    if (state.profile?.complete) { render(); if (!nativeApp()) scrollTo({ top: 0, behavior: 'instant' }); }
+  });
 
   /* ---------------- example desk ---------------- */
   function demo() {
@@ -3902,6 +4036,29 @@
     let url; try { url = new URL(a.getAttribute('href'), location.href); } catch { return; }
     if (url.origin === location.origin && (url.pathname === '/' || url.pathname === '/index.html')) { e.preventDefault(); if (state?.profile?.complete) location.hash = 'overview'; }
   });
+  if (nativeApp()) {
+    let drag = null;
+    document.addEventListener('pointerdown', e => {
+      const sheetEl = document.getElementById('sheet');
+      if (!sheetEl?.open) return;
+      if (!e.target.closest?.('.sheet-head')) return;
+      drag = { y: e.clientY, el: sheetEl, dy: 0 };
+    });
+    document.addEventListener('pointermove', e => {
+      if (!drag) return;
+      drag.dy = Math.max(0, e.clientY - drag.y);
+      drag.el.style.transform = drag.dy ? `translateY(${drag.dy}px)` : '';
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      const d = drag.dy || 0, el = drag.el;
+      el.style.transform = '';
+      if (d > 90) { haptic('LIGHT'); el.close(); }
+      drag = null;
+    };
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', endDrag);
+  }
   async function start() {
     const jm = location.hash.match(/^#join=([A-Za-z0-9-]{4,20})$/); if (jm) { try { localStorage.setItem('boplo-join', jm[1]); } catch { } history.replaceState(null, '', location.pathname + location.search + '#school'); }
     if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: false, trialDays: 0, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
