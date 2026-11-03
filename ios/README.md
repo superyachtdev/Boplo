@@ -32,9 +32,9 @@ In Xcode:
 1. If the project did not open, open `ios/App/App.xcodeproj`.
 2. Select the **App** target. Set the destination to an **iPhone** simulator. There is no iPad target.
 3. Signing & Capabilities: leave Team empty for a plain simulator run of the shell. If Xcode refuses to build because of Sign in with Apple or Push, choose your Apple ID as the Team. Those two capabilities need the paid program and the App ID `app.boplo.flight` before a signed build succeeds. The entitlements file is `ios/App/App/App.entitlements`.
-4. Press Run.
+4. Delete Boplo from the iPhone or simulator first if it was installed before. iOS caches the launch screen, and an old cache keeps the black letterbox even after a correct storyboard is in the new build. Then press Run.
 
-You should see a night-navy splash (`#020611`) and the glossy blue “b”, then whatever boplo.app is currently serving. If boplo.app cannot be reached, the screen says “Can’t reach Boplo”.
+You should see the splash fill the whole screen (no black bars above the clock or below the tab bar), then whatever boplo.app is currently serving. If boplo.app cannot be reached, the screen says “Can’t reach Boplo”.
 
 A single console line `Frame load interrupted` is WebKit cancelling one provisional navigation. It showed up once on the first run and the desk still loaded. It is harmless. The start URL no longer includes `#overview`, which was one way to trip that cancellation.
 

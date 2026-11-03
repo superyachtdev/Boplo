@@ -108,10 +108,11 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
             return
         }
         Task {
+            let outcome: Result<[String: Any], Error>
             do {
                 let products = try await Product.products(for: [requested])
                 guard let product = products.first else {
-                    call.reject("That plan isn’t available in the App Store yet. Create the subscription in App Store Connect first.")
+                    DispatchQueue.main.async { call.reject("That plan isn’t available in the App Store yet. Create the subscription in App Store Connect first.") }
                     return
                 }
                 let result = try await product.purchase()
@@ -119,16 +120,24 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
                 case .success(let verification):
                     let transaction = try Self.check(verification)
                     await transaction.finish()
-                    call.resolve(["signedTransaction": verification.jwsRepresentation, "productId": transaction.productID])
+                    outcome = .success(["signedTransaction": verification.jwsRepresentation, "productId": transaction.productID])
                 case .userCancelled:
-                    call.resolve(["cancelled": true])
+                    outcome = .success(["cancelled": true])
                 case .pending:
-                    call.resolve(["pending": true])
+                    outcome = .success(["pending": true])
                 @unknown default:
-                    call.reject("The App Store didn’t finish that purchase.")
+                    outcome = .failure(NSError(domain: "Boplo", code: 3, userInfo: [NSLocalizedDescriptionKey: "The App Store didn’t finish that purchase."]))
                 }
             } catch {
-                call.reject(error.localizedDescription)
+                outcome = .failure(error)
+            }
+            // Resolve on the main queue. Calling the bridge from the StoreKit task
+            // makes Swift take a forced synchronous hop and logs unsafeForcedSync.
+            DispatchQueue.main.async {
+                switch outcome {
+                case .success(let data): call.resolve(data)
+                case .failure(let error): call.reject(error.localizedDescription)
+                }
             }
         }
     }
@@ -142,7 +151,10 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
                     signed.append(result.jwsRepresentation)
                 }
             }
-            call.resolve(["signedTransactions": signed])
+            let payload = signed
+            DispatchQueue.main.async {
+                call.resolve(["signedTransactions": payload])
+            }
         }
     }
 
