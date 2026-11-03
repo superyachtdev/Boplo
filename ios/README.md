@@ -38,7 +38,7 @@ You should see a night-navy splash (`#020611`) and the glossy blue “b”, then
 
 A single console line `Frame load interrupted` is WebKit cancelling one provisional navigation. It showed up once on the first run and the desk still loaded. It is harmless. The start URL no longer includes `#overview`, which was one way to trip that cancellation.
 
-`ASAuthorizationController` error 1004 means Sign in with Apple has no Developer account or capability yet. The button explains that and leaves email sign-in working. It is expected until the paid account is on.
+Tapping Sign in with Apple before the Developer capability is on does not show a system error code. Cancel does nothing. Any other Apple sign-in failure shows “Apple sign-in isn’t available yet. Use email for now.” The ATC radio pill stays off that sign-in screen.
 
 The splash stays until the first screen is painted, then the page calls `SplashScreen.hide()`. If that call never arrives, it still hides itself after 12 seconds. Rebuild after `npm run ios:sync` so the shell picks up that timing. The hide call itself is in the website, so it runs once this branch is deployed.
 

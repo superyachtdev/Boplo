@@ -124,6 +124,7 @@ button:disabled{cursor:progress;opacity:.6}
 .ios-auth .note.err{color:#FF9BA6}
 .ios-auth .legal{margin:4px 0 0;color:var(--mist);font-size:13px;line-height:1.45}
 .ios-auth .legal a{color:var(--ice)}
+body.ios-signed-out .bradio,body.ios-signed-out .dock{display:none !important}
 
 /* ---------- onboarding ---------- */
 .onboard{min-height:100svh;display:grid;grid-template-columns:minmax(300px,400px) 1fr;background:var(--cloud)}
