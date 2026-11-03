@@ -282,3 +282,13 @@ Built from market research: students quit over cost overruns, lost momentum and 
 ## No free trials (2026-10-24, Claude)
 
 - Free trials removed everywhere at the user's request: individual Advanced and school plans charge at checkout. `BILLING_TRIAL_DAYS` / `SCHOOL_TRIAL_DAYS` are no longer read. `publicBilling.trialAvailable` is always false, so the app shows "Upgrade for $…" and the Payment Element takes the payment straight away. Code for the `trialing` status stays for anyone who started a trial before. Landing, schools page, terms and refunds copy updated; the 14-day money-back guarantee is unchanged.
+
+## iOS shell (2026-11-03)
+
+Not submitted to Apple and not a production deploy. Read `APP_STORE_PLAN.md` and `ios/README.md`.
+
+- Capacitor 8.6 project, bundle id `app.boplo.flight`, display name Boplo, icon and splash from the maskable navy “b” on `#020611`.
+- The WebView loads `https://boplo.app/flight-app.html#overview`. The flight desk is not copied into the app. `native/www` is only the offline error page.
+- Reason: `boplo_session` is host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, and `functions/flight/[[path]].js` rejects any non-GET whose `Origin` is not the function’s own origin. A `capacitor://localhost` bundle would fail sign-in and every save.
+- `dist/flight-native.js` is loaded by `flight-app.html`. With no Capacitor bridge (every browser) it returns immediately. In the shell it sets the status bar and, later, follows a `https://boplo.app` link iOS opened back into the app.
+- No payment, price or auth change. No Sign in with Apple, APNs or background GPS yet. Those are decisions in the plan. Scout, Darts, Wingman and Move are untouched.
