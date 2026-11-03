@@ -136,6 +136,14 @@
     if (nativeApp() && home) return `<span class="brand" aria-label="Boplo"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></span>`;
     return `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
   };
+  const APPLE_SIGNIN_LATER = 'Apple sign-in isn’t available yet. Use email for now.';
+  function appleSignInLine(err) {
+    const raw = String(err?.message || err || '');
+    if (!raw || /\b1001\b/.test(raw) || /authoriz\w*.*cancel|cancel.*authoriz/i.test(raw)) return '';
+    if (/com\.apple\.|AuthorizationError|ASAuthorization|NSError|couldn.t be completed|error \d{3,}/i.test(raw)) return APPLE_SIGNIN_LATER;
+    return raw;
+  }
+  function iosSignedOut(on) { if (nativeApp()) document.body.classList.toggle('ios-signed-out', !!on); }
   function hideNativeSplash() {
     if (!nativeApp()) return;
     const hide = () => { try { const splash = window.Capacitor?.Plugins?.SplashScreen; if (splash?.hide) Promise.resolve(splash.hide()).catch(() => {}); } catch (e) {} };
@@ -186,6 +194,7 @@
 
   function failure(err) {
     if (nativeApp()) {
+      iosSignedOut(true);
       root.innerHTML = `<main class="ios-auth"><div>${brand()}<h1 class="display">Couldn’t open</h1><p class="lead">${esc(err.message)}</p></div><div class="ios-actions"><button type="button" class="btn btn-blue" data-retry>Try again</button></div></main>`;
     } else {
       root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
@@ -201,6 +210,7 @@
 
   /* iOS shell only. Browsers keep auth() above. After sign-in, the existing setup (onboard) runs for a new account. */
   function iosAuth(notice = '') {
+    iosSignedOut(true);
     document.title = 'Sign in · Boplo';
     root.innerHTML = `<main class="ios-auth">
       <div>
@@ -226,12 +236,18 @@
         const plugin = nativePlugin();
         if (!plugin?.signInWithApple) throw new Error('Sign in with Apple isn’t in this build yet.');
         const result = await plugin.signInWithApple();
-        if (result?.cancelled) { appleBtn.disabled = false; return; }
+        if (result?.cancelled) { appleBtn.disabled = false; note.textContent = ''; note.className = 'note'; return; }
+        if (result?.unavailable) { appleBtn.disabled = false; note.textContent = APPLE_SIGNIN_LATER; note.className = 'note err'; return; }
         const res = await fetch('/auth/auth/apple', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identityToken: result.identityToken, name: result.name || '' }) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(out.error || 'Apple sign-in didn’t work.');
         location.reload();
-      } catch (err) { note.textContent = err.message; note.classList.add('err'); appleBtn.disabled = false; }
+      } catch (err) {
+        appleBtn.disabled = false;
+        const line = appleSignInLine(err);
+        note.className = 'note' + (line ? ' err' : '');
+        note.textContent = line;
+      }
     };
     form.onsubmit = async e => {
       e.preventDefault();
@@ -3816,6 +3832,7 @@
   }
   /* ---------------- router ---------------- */
     function render() {
+    iosSignedOut(false);
     if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
     if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
     const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; } if (k !== 'study') quiz = null;

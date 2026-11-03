@@ -130,12 +130,12 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
 
     public func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         let code = (error as NSError).code
-        if code == ASAuthorizationError.canceled.rawValue {
+        // 1000 unknown, 1001 canceled, 1002 invalid response, 1003 not handled, 1004 failed.
+        // Cancel stays silent. Every other code is a calm line. The system string includes the error domain, so it is never sent.
+        if code == ASAuthorizationError.canceled.rawValue || code == 1001 {
             appleCall?.resolve(["cancelled": true])
-        } else if code == 1004 {
-            appleCall?.reject("Sign in with Apple isn’t available until the Apple Developer account and the capability are turned on. Use email for now.")
         } else {
-            appleCall?.reject(error.localizedDescription)
+            appleCall?.resolve(["unavailable": true])
         }
         appleCall = nil
         appleController = nil
