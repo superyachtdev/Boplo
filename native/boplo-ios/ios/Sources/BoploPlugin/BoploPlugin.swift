@@ -4,6 +4,7 @@ import StoreKit
 import AuthenticationServices
 import CoreLocation
 import UserNotifications
+import WebKit
 
 @objc(BoploPlugin)
 public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding, CLLocationManagerDelegate {
@@ -17,7 +18,8 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         CAPPluginMethod(name: "stopRecording", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPoints", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "registerPush", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getPushToken", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getPushToken", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "unlockInteraction", returnType: CAPPluginReturnPromise)
     ]
 
     private let yearly = "app.boplo.flight.advanced.yearly"
@@ -37,13 +39,40 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         location.distanceFilter = 15
         location.activityType = .otherNavigation
         location.pausesLocationUpdatesAutomatically = false
-        location.allowsBackgroundLocationUpdates = true
-        location.showsBackgroundLocationIndicator = true
+        // allowsBackgroundLocationUpdates throws if it is set before a recording is allowed.
+        // That exception aborts plugin load. It is enabled in startRecording instead.
         tokenObserver = NotificationCenter.default.addObserver(forName: Notification.Name("boploPushToken"), object: nil, queue: .main) { [weak self] note in
             guard let self = self, let token = note.object as? String else { return }
             self.pushToken = token
             self.pushCall?.resolve(["token": token, "environment": self.pushEnvironment()])
             self.pushCall = nil
+        }
+        // The splash plugin disables the view controller until its hide animation finishes.
+        // A layout pass during page load cancels that animation, so the desk is visible and untappable.
+        for delay in [0.5, 1.5, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                Self.releaseTouches(bridge: self?.bridge)
+            }
+        }
+    }
+
+    @objc func unlockInteraction(_ call: CAPPluginCall) {
+        Self.releaseTouches(bridge: bridge)
+        call.resolve()
+    }
+
+    /// Turns touches back on and drops a full-screen splash view left above the web view.
+    static func releaseTouches(bridge: CAPBridgeProtocol?) {
+        guard let root = bridge?.viewController?.view else { return }
+        root.isUserInteractionEnabled = true
+        bridge?.webView?.isUserInteractionEnabled = true
+        let web = bridge?.webView
+        for sub in root.subviews where sub !== web {
+            let covers = sub.frame.width >= root.bounds.width - 2 && sub.frame.height >= root.bounds.height * 0.85
+            if covers {
+                sub.isUserInteractionEnabled = false
+                sub.removeFromSuperview()
+            }
         }
     }
 
@@ -149,6 +178,11 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         }
         points = []
         recording = true
+        let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+        if modes.contains("location") {
+            location.allowsBackgroundLocationUpdates = true
+            location.showsBackgroundLocationIndicator = true
+        }
         location.requestAlwaysAuthorization()
         location.startUpdatingLocation()
         call.resolve(["started": true])

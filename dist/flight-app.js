@@ -146,8 +146,13 @@
   function iosSignedOut(on) { if (nativeApp()) document.body.classList.toggle('ios-signed-out', !!on); }
   function hideNativeSplash() {
     if (!nativeApp()) return;
-    const hide = () => { try { const splash = window.Capacitor?.Plugins?.SplashScreen; if (splash?.hide) Promise.resolve(splash.hide()).catch(() => {}); } catch (e) {} };
-    requestAnimationFrame(() => requestAnimationFrame(hide));
+    const kick = () => {
+      try { const splash = window.Capacitor?.Plugins?.SplashScreen; if (splash?.hide) Promise.resolve(splash.hide({ fadeOutDuration: 0 })).catch(() => {}); } catch (e) {}
+      try { const boplo = window.Capacitor?.Plugins?.Boplo; if (boplo?.unlockInteraction) Promise.resolve(boplo.unlockInteraction()).catch(() => {}); } catch (e) {}
+    };
+    requestAnimationFrame(() => requestAnimationFrame(kick));
+    setTimeout(kick, 400);
+    setTimeout(kick, 1500);
   }
 
   /* ---------------- sign in ---------------- */
@@ -195,7 +200,7 @@
   function failure(err) {
     if (nativeApp()) {
       iosSignedOut(true);
-      root.innerHTML = `<main class="ios-auth"><div>${brand()}<h1 class="display">Couldn’t open</h1><p class="lead">${esc(err.message)}</p></div><div class="ios-actions"><button type="button" class="btn btn-blue" data-retry>Try again</button></div></main>`;
+      root.innerHTML = `<main class="ios-auth"><div class="ios-hero">${brand()}<p class="tagline">Couldn’t open your desk.</p><p class="note err">${esc(err.message)}</p></div><div class="ios-actions"><button type="button" class="btn btn-blue" data-retry>Try again</button></div></main>`;
     } else {
       root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
         <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
@@ -212,24 +217,26 @@
   function iosAuth(notice = '') {
     iosSignedOut(true);
     document.title = 'Sign in · Boplo';
+    const appleMark = `<svg class="apple" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.3 2.9 2.3 1.1 0 1.6-.8 3-.8s1.8.8 3 .7c1.3 0 2.1-1.1 2.9-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.4-.9-2.6-3.8zM14.7 6.5c.6-.8 1.1-1.9.9-3-1 .1-2.1.6-2.8 1.4-.6.7-1.1 1.8-.9 2.9 1.1.1 2.1-.5 2.8-1.3z"/></svg>`;
     root.innerHTML = `<main class="ios-auth">
-      <div>
+      <div class="ios-hero">
         ${brand()}
-        <h1 class="display">Your flight desk</h1>
-        <p class="lead">Sign in to pick up between lessons. Boplo keeps your logbook, your study and your next lesson together. It doesn’t replace your instructor, your official logbook, or the official sources.</p>
+        <p class="tagline">Your flying, in one place.</p>
       </div>
       <div class="ios-actions">
-        <button type="button" class="btn btn-light" data-apple>Sign in with Apple</button>
-        <a class="btn btn-line" href="/auth/auth/google">${ico('google')}Continue with Google</a>
-        <form class="ios-email" data-email novalidate>
-          <label for="ios-email">Email<input id="ios-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+        <button type="button" class="btn ios-apple" data-apple>${appleMark}Continue with Apple</button>
+        <a class="btn ios-google" href="/auth/auth/google">${ico('google')}Continue with Google</a>
+        <button type="button" class="btn ios-mail" data-email-open>Continue with email</button>
+        <form class="ios-email" data-email hidden novalidate>
+          <label for="ios-email"><span class="sr">Email</span><input id="ios-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
           <button class="btn btn-blue" type="submit">Email me a sign-in link</button>
         </form>
         <p class="note" data-note aria-live="polite">${esc(notice)}</p>
-        <p class="legal">By continuing you agree to the <a href="/terms.html">Terms</a> and you’ve read the <a href="/privacy.html">Privacy policy</a>.</p>
       </div>
+      <p class="legal">By continuing you agree to the <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy policy</a>.</p>
     </main>`;
     const form = $('[data-email]'), note = $('[data-note]'), appleBtn = $('[data-apple]');
+    $('[data-email-open]').onclick = () => { $('[data-email-open]').hidden = true; form.hidden = false; form.email.focus(); };
     appleBtn.onclick = async () => {
       appleBtn.disabled = true; note.className = 'note'; note.textContent = '';
       try {
@@ -3892,7 +3899,7 @@
   if (nativeApp()) document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('a[href]');
     if (!a) return;
-    let url; try { url = new URL(a.getAttribute('href'), location.origin); } catch { return; }
+    let url; try { url = new URL(a.getAttribute('href'), location.href); } catch { return; }
     if (url.origin === location.origin && (url.pathname === '/' || url.pathname === '/index.html')) { e.preventDefault(); if (state?.profile?.complete) location.hash = 'overview'; }
   });
   async function start() {
