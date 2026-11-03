@@ -26,6 +26,10 @@
   const firstName = n => String(n || '').trim().split(/\s+/)[0] || 'pilot';
   const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
   const sum = (a, f) => a.reduce((n, x) => n + f(x), 0);
+  // The Capacitor shell injects this. Browsers and the installed PWA do not, so every check below stays off for them.
+  const nativeApp = () => { try { return window.Capacitor?.isNativePlatform?.() === true; } catch { return false; } };
+  const nativePlugin = () => nativeApp() ? window.Capacitor?.Plugins?.Boplo : null;
+  const IAP = { yearly: 'app.boplo.flight.advanced.yearly', monthly: 'app.boplo.flight.advanced.monthly' };
 
   let toastTimer;
   function toast(msg) {
@@ -83,6 +87,7 @@
     ['sim', 'Simulator', 'sim', ['sim'], 'Fly'],
     ['community', 'Community', 'community', ['community', 'leaderboards', 'students'], 'Community']
   ];
+  if (nativeApp()) { const hub = HUBS.find(h => h[0] === 'community'); if (hub) hub[3] = hub[3].filter(id => id !== 'students'); }
   const SUBLABEL = { logbook: 'Flights' };
   const hubOf = id => HUBS.find(h => h[3].includes(id));
   ui.lastSub = ui.lastSub || {};
@@ -126,7 +131,16 @@
   const CONTOURS = { a: null, b: null };
   const contours = k => CONTOURS[k] || (CONTOURS[k] = contourSVG(k === 'a' ? 1200 : 500, k === 'a' ? 800 : 1000, k === 'a' ? 0 : 3.7));
 
-  const brand = (href = '/') => `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
+  const brand = (href = '/') => {
+    const home = href === '/' || href === '/index.html';
+    if (nativeApp() && home) return `<span class="brand" aria-label="Boplo"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></span>`;
+    return `<a class="brand" href="${href}" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a>`;
+  };
+  function hideNativeSplash() {
+    if (!nativeApp()) return;
+    const hide = () => { try { const splash = window.Capacitor?.Plugins?.SplashScreen; if (splash?.hide) Promise.resolve(splash.hide()).catch(() => {}); } catch (e) {} };
+    requestAnimationFrame(() => requestAnimationFrame(hide));
+  }
 
   /* ---------------- sign in ---------------- */
   function auth(notice = '') {
@@ -171,13 +185,68 @@
   }
 
   function failure(err) {
-    root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
-      <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
-      <section class="auth-card"><h2>Try again</h2><p>Your records are safe. This is usually a connection problem.</p>
-        <button class="btn btn-blue" data-retry>Reload my desk</button>
-        <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div></section>
-    </div></main>`;
+    if (nativeApp()) {
+      root.innerHTML = `<main class="ios-auth"><div>${brand()}<h1 class="display">Couldn’t open</h1><p class="lead">${esc(err.message)}</p></div><div class="ios-actions"><button type="button" class="btn btn-blue" data-retry>Try again</button></div></main>`;
+    } else {
+      root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
+        <div class="auth-copy">${brand()}<div><h1 class="display">Your desk didn’t open.</h1><p>${esc(err.message)}</p></div><small></small></div>
+        <section class="auth-card"><h2>Try again</h2><p>Your records are safe. This is usually a connection problem.</p>
+          <button class="btn btn-blue" data-retry>Reload my desk</button>
+          <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div></section>
+      </div></main>`;
+    }
     $('[data-retry]').onclick = start;
+    hideNativeSplash();
+  }
+
+  /* iOS shell only. Browsers keep auth() above. After sign-in, the existing setup (onboard) runs for a new account. */
+  function iosAuth(notice = '') {
+    document.title = 'Sign in · Boplo';
+    root.innerHTML = `<main class="ios-auth">
+      <div>
+        ${brand()}
+        <h1 class="display">Your flight desk</h1>
+        <p class="lead">Sign in to pick up between lessons. Boplo keeps your logbook, your study and your next lesson together. It doesn’t replace your instructor, your official logbook, or the official sources.</p>
+      </div>
+      <div class="ios-actions">
+        <button type="button" class="btn btn-light" data-apple>Sign in with Apple</button>
+        <a class="btn btn-line" href="/auth/auth/google">${ico('google')}Continue with Google</a>
+        <form class="ios-email" data-email novalidate>
+          <label for="ios-email">Email<input id="ios-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
+          <button class="btn btn-blue" type="submit">Email me a sign-in link</button>
+        </form>
+        <p class="note" data-note aria-live="polite">${esc(notice)}</p>
+        <p class="legal">By continuing you agree to the <a href="/terms.html">Terms</a> and you’ve read the <a href="/privacy.html">Privacy policy</a>.</p>
+      </div>
+    </main>`;
+    const form = $('[data-email]'), note = $('[data-note]'), appleBtn = $('[data-apple]');
+    appleBtn.onclick = async () => {
+      appleBtn.disabled = true; note.className = 'note'; note.textContent = '';
+      try {
+        const plugin = nativePlugin();
+        if (!plugin?.signInWithApple) throw new Error('Sign in with Apple isn’t in this build yet.');
+        const result = await plugin.signInWithApple();
+        if (result?.cancelled) { appleBtn.disabled = false; return; }
+        const res = await fetch('/auth/auth/apple', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ identityToken: result.identityToken, name: result.name || '' }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'Apple sign-in didn’t work.');
+        location.reload();
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); appleBtn.disabled = false; }
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const email = form.email.value.trim(), btn = form.querySelector('button');
+      note.className = 'note';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note.textContent = 'Enter a valid email address.'; note.classList.add('err'); form.email.focus(); return; }
+      btn.disabled = true; note.textContent = 'Sending your link…';
+      try {
+        const res = await fetch('/auth/auth/email', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'We couldn’t send that email. Try again shortly.');
+        note.textContent = `Check ${email}. The link opens your desk and expires in 15 minutes.`; note.classList.add('ok');
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); btn.disabled = false; }
+    };
+    hideNativeSplash();
   }
 
   /* ---------------- fields ---------------- */
@@ -356,11 +425,12 @@
         else { ui.step++; onboard(); $('h1').focus(); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
+    hideNativeSplash();
   }
 
   async function logout() {
     if (!preview) { try { await fetch('/auth/logout', { method: 'POST' }); } catch { } }
-    location.href = preview ? '/' : '/flight-app.html';
+    location.href = nativeApp() || !preview ? '/flight-app.html' : '/';
   }
 
   /* ---------------- derived numbers ---------------- */
@@ -1364,7 +1434,7 @@
       <div class="mo-actions">
         <label class="switch"><input type="checkbox" data-reminders ${p.reminders ? 'checked' : ''} ${preview ? 'disabled' : ''}><span></span>Email reminders</label>
         ${pushOK() || iOS ? '<label class="switch"><input type="checkbox" data-pushsw><span></span>Phone notifications</label>' : ''}
-        ${standalone() ? '' : `<button type="button" class="btn btn-line btn-sm" data-install ${installEvt || iOS ? '' : 'hidden'}>Install the app</button>`}
+        ${nativeApp() || standalone() ? '' : `<button type="button" class="btn btn-line btn-sm" data-install ${installEvt || iOS ? '' : 'hidden'}>Install the app</button>`}
       </div>
     </section>`;
   }
@@ -2287,7 +2357,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=4', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=10', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=73', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=74', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2578,7 +2648,7 @@
       <div class="sheet-body rec">
         <div class="rec-big"><div><span>Time</span><b data-rt>0:00</b></div><div><span>Groundspeed</span><b data-rgs>—</b></div><div><span>Altitude</span><b data-ralt>—</b></div><div><span>Landings</span><b data-rld>0</b></div></div>
         <p class="rec-state" data-rstate>Ready. Start when you’re strapped in; Boplo works out the take-off, the landings and your times.</p>
-        <p class="hint">Keep Boplo open with the screen on (it stays awake while recording), and the phone somewhere it can see the sky. Recording uses your location only on this device until you save the flight. Never let it distract you: set it up before engine start.</p>
+        <p class="hint">${nativeApp() ? 'You can lock the phone. Boplo keeps the GPS track while the screen is off, and stops when you tap Stop. The track stays on this device until you save the flight. Set it up before engine start, and never let it distract you.' : 'Keep Boplo open with the screen on (it stays awake while recording), and the phone somewhere it can see the sky. Recording uses your location only on this device until you save the flight. Never let it distract you: set it up before engine start.'}</p>
         <p class="form-error" role="alert"></p></div>
       <footer class="sheet-foot"><button type="button" class="btn btn-line" data-rdiscard ${r.pts.length ? '' : 'hidden'}>Discard</button><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-blue btn-has-spark" data-rgo>${r.running ? 'Stop and log it' : r.pts.length ? 'Resume' : 'Start recording'} ${spark}</button></div></footer>`;
     sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = () => sheet.close()); sheet.showModal();
@@ -2604,17 +2674,29 @@
       if (!r.saveT || t - r.saveT > 15000) { r.saveT = t; recSave(r); }
       paint();
     };
+    const takeNative = list => { for (const p of list || []) { const last = r.pts[r.pts.length - 1]; if (last && p.t <= last.t) continue; if (last && distM(last, p) < 8 && p.t - last.t < 15000) continue; r.pts.push({ lat: p.lat, lng: p.lng, alt: p.alt, t: p.t, gs: p.gs }); } if (r.pts.length > 9000) r.pts = r.pts.filter((_, i) => i % 2 === 0); recSave(r); paint(); };
     const startRec = async () => {
       err.textContent = ''; r.running = true; if (!r.pts.length) r.startedAt = Date.now(); recSave(r);
-      recWatch = navigator.geolocation.watchPosition(onPos, e => { err.textContent = e.code === 1 ? 'Allow location access for Boplo to record the flight.' : 'No GPS signal yet. Keep the phone where it can see the sky.'; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
-      try { recWake = await navigator.wakeLock?.request('screen'); } catch { }
-      clearInterval(recTick); recTick = setInterval(paint, 1000);
+      const plugin = nativePlugin();
+      if (plugin?.startRecording) {
+        try { await plugin.startRecording(); } catch (e) { r.running = false; err.textContent = e.message || 'Allow location access for Boplo to record the flight.'; return; }
+        const pull = async () => { if (!r.running) return; try { takeNative((await plugin.getPoints()).points); } catch { } };
+        clearInterval(recTick); recTick = setInterval(() => { pull(); }, 2000); pull();
+      } else {
+        recWatch = navigator.geolocation.watchPosition(onPos, e => { err.textContent = e.code === 1 ? 'Allow location access for Boplo to record the flight.' : 'No GPS signal yet. Keep the phone where it can see the sky.'; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+        try { recWake = await navigator.wakeLock?.request('screen'); } catch { }
+        clearInterval(recTick); recTick = setInterval(paint, 1000);
+      }
       $s('[data-rgo]').innerHTML = `Stop and log it ${spark}`; $s('[data-rdiscard]').hidden = false; paint();
     };
-    const stopRec = () => { if (recWatch != null) navigator.geolocation.clearWatch(recWatch); recWatch = null; try { recWake?.release(); } catch { } recWake = null; clearInterval(recTick); r.running = false; recSave(r); };
+    const stopRec = async () => {
+      const plugin = nativePlugin();
+      if (plugin?.stopRecording) { try { takeNative((await plugin.stopRecording()).points); } catch { } }
+      if (recWatch != null) navigator.geolocation.clearWatch(recWatch); recWatch = null; try { recWake?.release(); } catch { } recWake = null; clearInterval(recTick); r.running = false; recSave(r);
+    };
     $s('[data-rgo]').onclick = async () => {
       if (!r.running) return startRec();
-      stopRec();
+      await stopRec();
       if (r.pts.length < 3) { err.textContent = 'Not enough GPS points were recorded to log a flight.'; return; }
       const draft = await draftFromTrack(r.pts);
       try { localStorage.removeItem(REC); } catch { }
@@ -2671,9 +2753,18 @@
   addEventListener('offline', () => { toast('You’re offline. Your desk keeps working, and flights you log are saved when you reconnect.'); });
 
   // ---- phone notifications (web push) ----
-  const pushOK = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && !preview;
+  const pushOK = () => !preview && (nativeApp() || ('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window));
   const b64ToU8 = s => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; const b = atob(s); return Uint8Array.from(b, c => c.charCodeAt(0)); };
   async function setPush(on) {
+    const plugin = nativePlugin();
+    if (plugin?.registerPush) {
+      if (!on) { const cur = await plugin.getPushToken().catch(() => ({})); if (cur?.token) await api('push/apns', 'DELETE', { token: cur.token }); return false; }
+      const reg = await plugin.registerPush();
+      if (!reg?.token) throw new Error('Notifications are blocked for Boplo. Allow them in Settings.');
+      await api('push/apns', 'POST', { token: reg.token, environment: reg.environment || 'sandbox' });
+      await api('push/test', 'POST').catch(() => { });
+      return true;
+    }
     if (!pushOK()) throw new Error('This browser can’t show notifications.');
     if (iOS && !standalone()) throw new Error('On iPhone, add Boplo to your Home Screen first (Share → Add to Home Screen), then turn notifications on from the app.');
     const reg = await navigator.serviceWorker.ready;
@@ -2685,7 +2776,11 @@
     await api('push/test', 'POST').catch(() => { });
     return true;
   }
-  async function pushState() { if (!pushOK()) return false; try { const reg = await navigator.serviceWorker.getRegistration(); const s = reg && await reg.pushManager.getSubscription(); return !!s && Notification.permission === 'granted'; } catch { return false; } }
+  async function pushState() {
+    const plugin = nativePlugin();
+    if (plugin?.getPushToken) { try { const cur = await plugin.getPushToken(); return !!cur?.token; } catch { return false; } }
+    if (!pushOK()) return false; try { const reg = await navigator.serviceWorker.getRegistration(); const s = reg && await reg.pushManager.getSubscription(); return !!s && Notification.permission === 'granted'; } catch { return false; }
+  }
 
   const confirmInline = (b, label) => { if (b.dataset.armed) return true; b.dataset.armed = '1'; const t = b.textContent; b.textContent = label; setTimeout(() => { delete b.dataset.armed; b.textContent = t; }, 3000); return false; };
 
@@ -2771,7 +2866,7 @@
       <footer class="sheet-foot"><span></span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Keep my account</button><button class="btn btn-danger">Delete everything</button></div></footer></form>`;
     sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
     const f = sheet.querySelector('[data-del]'), err = f.querySelector('.form-error');
-    f.onsubmit = async e => { e.preventDefault(); if (f.confirm.value.trim() !== 'DELETE') { err.textContent = 'Type DELETE in capitals to confirm.'; return; } const btn = f.querySelector('.btn-danger:not([data-close])'); btn.disabled = true; try { await api('account/delete', 'POST', { confirm: 'DELETE' }); location.href = '/?deleted=1'; } catch (x) { err.textContent = x.message; btn.disabled = false; } };
+    f.onsubmit = async e => { e.preventDefault(); if (f.confirm.value.trim() !== 'DELETE') { err.textContent = 'Type DELETE in capitals to confirm.'; return; } const btn = f.querySelector('.btn-danger:not([data-close])'); btn.disabled = true; try { await api('account/delete', 'POST', { confirm: 'DELETE' }); location.href = nativeApp() ? '/flight-app.html' : '/?deleted=1'; } catch (x) { err.textContent = x.message; btn.disabled = false; } };
     sheet.showModal();
   }
   /* ================= plan and billing ================= */
@@ -2808,6 +2903,32 @@
     sheet.showModal();
   }
   const gateOr = (what, fn) => (...a) => { if (isAdv()) return fn(...a); upgradeSheet(`${what} is part of Advanced.`); };
+  async function iosPurchase(interval) {
+    const plugin = nativePlugin();
+    if (!plugin?.purchase) { toast('App Store purchases aren’t available in this build yet.'); return; }
+    const productId = B().products?.[interval] || IAP[interval];
+    try {
+      const result = await plugin.purchase({ productId });
+      if (result?.cancelled) return;
+      if (result?.pending) { toast('The App Store is still approving that purchase.'); return; }
+      if (!result?.signedTransaction) throw new Error('The App Store didn’t return a receipt.');
+      state.billing = await api('billing/apple', 'POST', { signedTransaction: result.signedTransaction });
+      toast('You’re on Advanced.');
+      planPage();
+    } catch (x) { toast(x.message || 'The purchase didn’t go through.'); }
+  }
+  async function iosRestore() {
+    const plugin = nativePlugin();
+    if (!plugin?.restore) { toast('Restore isn’t available in this build yet.'); return; }
+    try {
+      const result = await plugin.restore();
+      const signed = result?.signedTransactions || [];
+      if (!signed.length) { toast('No App Store subscription was found for this Apple ID.'); return; }
+      state.billing = await api('billing/apple', 'POST', { signedTransactions: signed });
+      toast(state.billing.plan === 'advanced' ? 'Purchases restored. You’re on Advanced.' : 'No active Boplo subscription was found.');
+      planPage();
+    } catch (x) { toast(x.message || 'Restore didn’t work.'); }
+  }
 
   function planPage() {
     const b = B(), adv = b.plan === 'advanced' && !preview && b.enforced !== false;
@@ -2817,7 +2938,7 @@
       : b.cancelAtPeriodEnd ? `Cancelled. You keep Advanced until ${longDate(b.periodEnd)}.` : b.status === 'past_due' ? 'Your last payment didn’t go through. Update your card to keep Advanced.' : `Renews on ${longDate(b.periodEnd)}.`;
     shell('plan', { title: 'Plan & billing', sub: adv ? 'Your subscription and payment details.' : 'Start free. Go Advanced when the hours add up.' },
       `${preview ? '<p class="callout">The example desk shows every Advanced feature. Sign in to see your own plan.</p>' : ''}
-      ${!b.ready && !preview ? '<p class="callout warn">Payments are being set up. You can keep using the Free plan in the meantime.</p>' : ''}
+      ${!b.ready && !preview && !nativeApp() ? '<p class="callout warn">Payments are being set up. You can keep using the Free plan in the meantime.</p>' : ''}
       ${adv && b.owner ? `<section class="tile dark plan-now">${contours('a')}
           <div><span class="kicker">Your plan</span><h2 class="display">Advanced · owner</h2><p>Complimentary owner access. It never expires and nothing is billed.</p></div>
         </section>` : adv && b.school && !['active', 'trialing', 'past_due'].includes(b.status) ? `<section class="tile dark plan-now">${contours('a')}
@@ -2826,11 +2947,10 @@
         </section>` : adv ? `<section class="tile dark plan-now">${contours('a')}
           <div><span class="kicker">Your plan</span><h2 class="display">Advanced${b.interval ? ` · ${b.interval === 'monthly' ? 'monthly' : 'yearly'}` : ''}</h2><p>${esc(statusLine)}</p></div>
           <div class="plan-now-actions">
-            <button class="btn btn-light" data-portal>Payment method and invoices</button>
-            ${b.cancelAtPeriodEnd ? '<button class="btn btn-ghost" data-resume>Keep my subscription</button>' : '<button class="btn btn-ghost" data-cancel>Cancel subscription</button>'}
+            ${nativeApp() && b.store === 'apple' ? '<p>Billed by Apple. Manage or cancel it in Settings → Apple ID → Subscriptions.</p><button type="button" class="btn btn-light" data-restore>Restore purchases</button>' : nativeApp() ? '<p>This plan is billed on the website. It stays active in the app.</p>' : `<button class="btn btn-light" data-portal>Payment method and invoices</button>${b.cancelAtPeriodEnd ? '<button class="btn btn-ghost" data-resume>Keep my subscription</button>' : '<button class="btn btn-ghost" data-cancel>Cancel subscription</button>'}`}
           </div>
         </section>
-        ${b.interval === 'monthly' && !b.cancelAtPeriodEnd && b.status !== 'past_due' ? `<section class="tile plan-upsell"><div><h3>Switch to yearly and save ${saveAmt}</h3><p>${money2(Math.round(b.prices.yearly.amount / 12))} a month instead of ${money2(b.prices.monthly.amount)}, billed ${money2(b.prices.yearly.amount)} once a year.${b.status === 'trialing' ? ' Your free trial carries on.' : ' What’s left of this month is credited.'}</p></div><button class="btn btn-blue" data-toyearly>Switch to yearly</button></section>` : ''}` : `
+        ${!nativeApp() && b.interval === 'monthly' && !b.cancelAtPeriodEnd && b.status !== 'past_due' ? `<section class="tile plan-upsell"><div><h3>Switch to yearly and save ${saveAmt}</h3><p>${money2(Math.round(b.prices.yearly.amount / 12))} a month instead of ${money2(b.prices.monthly.amount)}, billed ${money2(b.prices.yearly.amount)} once a year.${b.status === 'trialing' ? ' Your free trial carries on.' : ' What’s left of this month is credited.'}</p></div><button class="btn btn-blue" data-toyearly>Switch to yearly</button></section>` : ''}` : `
         <div class="bill-toggle" role="group" aria-label="Billing period">
           <button type="button" data-iv="yearly" aria-pressed="${iv === 'yearly'}">Yearly <span>Save ${save}%</span></button>
           <button type="button" data-iv="monthly" aria-pressed="${iv === 'monthly'}">Monthly</button>
@@ -2846,14 +2966,16 @@
             <p class="plan-price"><b>${money2(iv === 'yearly' ? Math.round(pr.amount / 12) : pr.amount, pr.currency)}</b><span>${iv === 'yearly' ? `a month, billed ${money2(pr.amount, pr.currency)} yearly` : 'a month'}</span></p>
             <p class="plan-save">${iv === 'yearly' ? `You save ${saveAmt} a year compared with monthly. One payment covers a full year of training.` : `That’s ${money2(pr.amount * 12, pr.currency)} a year. <button type="button" class="link" data-iv="yearly">Switch to yearly and save ${saveAmt}</button>`}</p>
             <ul class="feat-list">${ADV_FEATURES.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
-            <button class="btn btn-light btn-has-spark" data-checkout ${preview || !b.ready ? 'disabled' : ''}>${b.trialAvailable ? `Start ${b.trialDays}-day free trial` : `Upgrade for ${money2(pr.amount, pr.currency)}`} ${spark}</button>
-            <p class="plan-small">${b.trialAvailable ? `Free for ${b.trialDays} days, then ${money2(pr.amount, pr.currency)} ${iv === 'yearly' ? 'a year' : 'a month'}${b.tax ? ' plus any tax' : ''}. Cancel before the trial ends and you won’t be charged.` : `Billed ${iv === 'yearly' ? 'yearly' : 'monthly'}${b.tax ? ', plus any tax' : ''}. Cancel any time.`} <a class="link" href="/refunds.html" target="_blank" style="color:var(--ice)">Refunds</a></p>
+            <button class="btn btn-light btn-has-spark" data-checkout ${preview || (!nativeApp() && !b.ready) ? 'disabled' : ''}>${nativeApp() ? `Subscribe for ${money2(pr.amount, pr.currency)}` : b.trialAvailable ? `Start ${b.trialDays}-day free trial` : `Upgrade for ${money2(pr.amount, pr.currency)}`} ${spark}</button>
+            ${nativeApp() ? '<button type="button" class="btn btn-line" data-restore>Restore purchases</button>' : ''}
+            <p class="plan-small">${nativeApp() ? `Billed by Apple, ${iv === 'yearly' ? 'once a year' : 'every month'}. Cancel any time in Settings → Subscriptions. Apple handles refunds.` : b.trialAvailable ? `Free for ${b.trialDays} days, then ${money2(pr.amount, pr.currency)} ${iv === 'yearly' ? 'a year' : 'a month'}${b.tax ? ' plus any tax' : ''}. Cancel before the trial ends and you won’t be charged.` : `Billed ${iv === 'yearly' ? 'yearly' : 'monthly'}${b.tax ? ', plus any tax' : ''}. Cancel any time.`} ${nativeApp() ? '' : '<a class="link" href="/refunds.html" target="_blank" style="color:var(--ice)">Refunds</a>'}</p>
           </section>
         </div>`}
-      ${!adv && !preview ? `<section class="tile plan-school"><div><h3>Training at a flight school?</h3><p>If your school is on Boplo, join with its code and Advanced is covered. Running a school? One plan covers every student, with a dashboard for your instructors.</p></div><div class="plan-school-actions"><a class="btn btn-line" href="#school">Enter a school code</a><a class="link" href="/schools.html">Plans for schools</a></div></section>` : ''}
-      <p class="footnote" style="margin-top:16px">Payments are processed securely by Stripe. Boplo never sees or stores your card number. Prices in US dollars. <a class="link" href="/terms.html" target="_blank">Terms</a> · <a class="link" href="/privacy.html" target="_blank">Privacy</a> · <a class="link" href="/refunds.html" target="_blank">Refunds and cancellation</a></p>`);
+      ${!adv && !preview ? `<section class="tile plan-school"><div><h3>Training at a flight school?</h3><p>${nativeApp() ? 'If your school is on Boplo, join with its code and Advanced is covered. School plans are bought on the website, not in this app.' : 'If your school is on Boplo, join with its code and Advanced is covered. Running a school? One plan covers every student, with a dashboard for your instructors.'}</p></div><div class="plan-school-actions"><a class="btn btn-line" href="#school">Enter a school code</a>${nativeApp() ? '' : '<a class="link" href="/schools.html">Plans for schools</a>'}</div></section>` : ''}
+      <p class="footnote" style="margin-top:16px">${nativeApp() ? 'Subscriptions in the app are billed by Apple. The prices match the website: $99.99 a year or $11.99 a month.' : 'Payments are processed securely by Stripe. Boplo never sees or stores your card number. Prices in US dollars.'} <a class="link" href="/terms.html" target="_blank">Terms</a> · <a class="link" href="/privacy.html" target="_blank">Privacy</a>${nativeApp() ? '' : ' · <a class="link" href="/refunds.html" target="_blank">Refunds and cancellation</a>'}</p>`);
     $$('[data-iv]').forEach(x => x.onclick = () => { ui.billInterval = x.dataset.iv; planPage(); });
-    const co = $('[data-checkout]'); if (co) co.onclick = () => checkoutSheet(ui.billInterval);
+    const co = $('[data-checkout]'); if (co) co.onclick = () => nativeApp() ? iosPurchase(ui.billInterval) : checkoutSheet(ui.billInterval);
+    $$('[data-restore]').forEach(b => b.onclick = () => iosRestore());
     const pt = $('[data-portal]'); if (pt) pt.onclick = async () => { pt.disabled = true; try { location.href = (await api('billing/portal', 'POST', {})).url; } catch (x) { toast(x.message); pt.disabled = false; } };
     const cn = $('[data-cancel]'); if (cn) cn.onclick = () => confirmCancel();
     const ty = $('[data-toyearly]'); if (ty) ty.onclick = () => confirmYearly(saveAmt);
@@ -3363,7 +3485,7 @@
     if (state.profile?.complete) return shell('school', head, body);
     document.title = `${head.title.replace(/<[^>]+>/g, '')} · Boplo Flight`;
     root.innerHTML = `<div class="solo-shell"><header class="solo-top">${brand('/')}<div class="solo-acct">${state.user?.email ? `<span>${esc(state.user.email)}</span>` : ''}<button type="button" class="btn btn-line btn-sm" data-logout>${preview ? 'Leave example' : 'Sign out'}</button></div></header>
-      <main class="solo-main"><div class="page">${preview ? `<div class="preview-bar"><span><b>Example school.</b> Sample students; nothing is saved.</span><a class="btn btn-light btn-sm" href="/schools.html">Back to school plans</a></div>` : ''}<header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>${body}
+      <main class="solo-main"><div class="page">${preview ? `<div class="preview-bar"><span><b>Example school.</b> Sample students; nothing is saved.</span>${nativeApp() ? '' : '<a class="btn btn-light btn-sm" href="/schools.html">Back to school plans</a>'}</div>` : ''}<header class="page-head"><div><h1 class="display">${head.title}</h1>${head.sub ? `<p>${head.sub}</p>` : ''}</div>${head.actions ? `<div class="head-actions">${head.actions}</div>` : ''}</header>${body}
       <p class="footnote" style="margin-top:32px">Learning to fly yourself? <a class="link" href="#overview">Set up your own flight desk</a>.</p></div></main></div>`;
     $$('[data-logout]').forEach(b => b.onclick = logout);
   }
@@ -3398,19 +3520,20 @@
     };
   }
   function schoolSetup() {
-    schoolFrame({ title: 'Flight school', sub: 'Join your school with its code, or set Boplo up for your whole school.' },
+    const ios = nativeApp();
+    schoolFrame({ title: 'Flight school', sub: ios ? 'Join your school with its code.' : 'Join your school with its code, or set Boplo up for your whole school.' },
       `<div class="grid">
-        <section class="tile span-5"><div class="tile-head"><h2>Join your school</h2></div>
-          <p class="hint" style="margin-bottom:14px">Your school gives you a code. Joining gives you Advanced, paid for by your school.</p>
+        <section class="tile ${ios ? 'span-12' : 'span-5'}"><div class="tile-head"><h2>Join your school</h2></div>
+          <p class="hint" style="margin-bottom:14px">Your school gives you a code. Joining gives you Advanced, paid for by your school.${ios ? ' School plans are bought on the website, not in this app.' : ''}</p>
           <form class="sch-join" data-joinform>${input('School code', 'code', '', 'text', 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="e.g. K7PX4M2Q"')}<p class="form-error" role="alert"></p><button class="btn btn-line">Join school</button></form>
         </section>
-        <section class="tile span-7"><div class="tile-head"><h2>Set up your school</h2></div>
+        ${ios ? '' : `<section class="tile span-7"><div class="tile-head"><h2>Set up your school</h2></div>
           <p class="hint" style="margin-bottom:14px">One yearly plan covers every student and instructor. Instructors get a dashboard of each student’s hours, progress and next lesson.</p>
           ${setupForm()}
-        </section>
+        </section>`}
       </div>`);
     const jf = $('[data-joinform]'); jf.onsubmit = e => { e.preventDefault(); const c = jf.querySelector('[name=code]').value.trim(); if (!c) { jf.querySelector('.form-error').textContent = 'Enter the code your school gave you.'; return; } joinSheet(c); };
-    wireSetup();
+    if (!ios) wireSetup();
   }
   const SHARED = 'your name and email, flights and hours, lesson notes and debriefs, syllabus progress, exam dates and scores, and your next lesson. They can debrief your flights, set your next lesson and sign off syllabus lessons, but they can’t change your flights or notes';
   function schoolStudent() {
@@ -3475,8 +3598,8 @@
     const active14 = students.filter(r => r.quiet != null && r.quiet <= 14).length, flagged = students.filter(r => r.flag), hours30 = students.reduce((n, r) => n + r.recentMinutes, 0), waiting = students.filter(r => r.waiting), nMsg = students.reduce((n, r) => n + (r.unread || 0), 0), nDeb = students.reduce((n, r) => n + (r.toDebrief || 0), 0);
     const f = ui.rosterFilter, list = (f === 'staff' ? staff : f === 'attention' ? flagged : f === 'waiting' ? waiting : students).slice().sort((a, b) => f === 'staff' ? a.name.localeCompare(b.name) : (!!b.waiting - !!a.waiting) || (!!b.flag - !!a.flag) || ((b.quiet ?? 9999) - (a.quiet ?? 9999)));
     const status = !admin ? '' : s.status === 'trialing' ? `Free trial until ${longDate(s.trialEnd)}. ${s.cancelAtPeriodEnd ? 'It won’t renew.' : `Then ${money0(s.amount, s.currency)} a year.`}` : s.cancelAtPeriodEnd ? `Cancelled. Your school keeps Boplo until ${longDate(s.periodEnd)}.` : s.status === 'past_due' ? 'The last payment didn’t go through. Update the card to keep your school on Boplo.' : `Renews on ${longDate(s.periodEnd)}.`;
-    schoolFrame({ title: esc(s.name), sub: `${esc(s.planLabel)} plan${status ? ' · ' + esc(status) : ''}`, actions: admin ? `<button class="btn btn-line" data-rename>Rename</button><button class="btn btn-line" data-billing ${preview ? 'disabled' : ''}>Billing and invoices</button>` : '' },
-      `${s.status === 'past_due' && admin ? '<p class="callout warn" style="margin-bottom:16px">Payment failed. Update the card under Billing and invoices so your students keep Advanced.</p>' : ''}
+    schoolFrame({ title: esc(s.name), sub: `${esc(s.planLabel)} plan${status ? ' · ' + esc(status) : ''}`, actions: admin ? `<button class="btn btn-line" data-rename>Rename</button>${nativeApp() ? '' : `<button class="btn btn-line" data-billing ${preview ? 'disabled' : ''}>Billing and invoices</button>`}` : '' },
+      `${s.status === 'past_due' && admin ? `<p class="callout warn" style="margin-bottom:16px">${nativeApp() ? 'The school’s last payment didn’t go through. It can be updated on the Boplo website.' : 'Payment failed. Update the card under Billing and invoices so your students keep Advanced.'}</p>` : ''}
       <section class="stats" aria-label="School at a glance" style="margin-bottom:16px">
         <div class="stat"><span>Students</span><b>${s.students}<small>of ${s.seats}</small></b><em>${s.staff} instructor${s.staff === 1 ? '' : 's'}</em></div>
         <div class="stat"><span>Flew in the last 14 days</span><b>${active14}</b><em>${students.length ? Math.round(active14 / students.length * 100) + '% of students' : 'No students yet'}</em></div>
@@ -3692,10 +3815,12 @@
     toast('Payment is still being confirmed. Refresh in a minute.'); render();
   }
   /* ---------------- router ---------------- */
-  function render() {
-    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
-    const k = current(); if (k !== 'study') quiz = null;
+    function render() {
+    if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
+    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
+    const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
+    hideNativeSplash();
   }
   addEventListener('hashchange', () => { if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close(); if (state.profile?.complete) { render(); scrollTo({ top: 0, behavior: 'instant' }); } });
 
@@ -3746,7 +3871,13 @@
   }
 
   /* ---------------- start ---------------- */
-  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:') addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
+  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:' && !nativeApp()) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
+  if (nativeApp()) document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    let url; try { url = new URL(a.getAttribute('href'), location.origin); } catch { return; }
+    if (url.origin === location.origin && (url.pathname === '/' || url.pathname === '/index.html')) { e.preventDefault(); if (state?.profile?.complete) location.hash = 'overview'; }
+  });
   async function start() {
     const jm = location.hash.match(/^#join=([A-Za-z0-9-]{4,20})$/); if (jm) { try { localStorage.setItem('boplo-join', jm[1]); } catch { } history.replaceState(null, '', location.pathname + location.search + '#school'); }
     if (preview) { demo(); if (current() === 'school') state.school = { role: 'admin', id: 'demo', name: 'Popham Flying School', plan: 'school', planLabel: 'School', seats: 25, staffSeats: 10, students: 7, staff: 2, active: true, status: 'active', studentCode: 'K7PX4M2Q', staffCode: 'T9HW3RCE', studentLink: location.origin + '/flight-app.html#join=K7PX4M2Q', staffLink: location.origin + '/flight-app.html#join=T9HW3RCE', periodEnd: Date.now() + 200 * 864e5, amount: 99900, currency: 'usd' }; addSchoolNav(); state.billing = { plan: 'advanced', status: 'active', interval: 'yearly', trialAvailable: false, trialDays: 0, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, ready: false }; render(); return; }
@@ -3768,7 +3899,7 @@
     catch (e) {
       const snap = isOffline(e) ? loadSnapshot() : null;
       if (snap?.user) { state = snap; state.billing = snap.billing || null; state.offline = true; const q = outbox(); if (q.length) state.flights = [...q.map(x => ({ ...x.data, id: x.id, pending: true })), ...state.flights.filter(f => !q.some(x => x.id === f.id))]; render(); return; }
-      if (e.status === 401) auth(); else failure(e);
+      if (e.status === 401) { if (nativeApp()) iosAuth(); else auth(); } else failure(e);
     }
   }
   start();

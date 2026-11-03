@@ -1,0 +1,15 @@
+{
+  "name": "boplo-ios",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Boplo Flight native iOS: App Store purchases, Sign in with Apple, background flight recording and push.",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "files": [
+    "ios",
+    "Package.swift"
+  ]
+}

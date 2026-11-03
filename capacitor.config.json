@@ -1,0 +1,44 @@
+{
+  "appId": "app.boplo.flight",
+  "appName": "Boplo",
+  "webDir": "native/www",
+  "backgroundColor": "#020611",
+  "server": {
+    "url": "https://boplo.app/flight-app.html",
+    "cleartext": false,
+    "errorPath": "/error.html",
+    "allowNavigation": [
+      "boplo.app",
+      "*.boplo.app",
+      "accounts.google.com",
+      "*.google.com",
+      "*.googleapis.com",
+      "*.gstatic.com",
+      "js.stripe.com",
+      "*.stripe.com",
+      "*.stripe.network",
+      "cdn.jsdelivr.net",
+      "unpkg.com",
+      "fonts.googleapis.com",
+      "fonts.gstatic.com",
+      "*.amazonaws.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#020611",
+    "appendUserAgent": "BoploFlightiOS"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 12000,
+      "backgroundColor": "#020611",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#020611"
+    }
+  }
+}

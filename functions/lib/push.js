@@ -1,3 +1,4 @@
+import { sendApns, registerApns, unregisterApns } from './apns.js';
 // Web push for Boplo Flight: VAPID (RFC 8292) and aes128gcm payload encryption (RFC 8291) with WebCrypto.
 // The VAPID key pair is generated on first use and kept in D1, so no secret has to be set by hand.
 const enc = new TextEncoder();
@@ -65,7 +66,7 @@ export async function pushTo(env, userId, payload, fetcher = fetch) {
       else console.error('push failed', r.status);
     } catch (e) { console.error('push error', e.message); }
   }
-  return sent;
+  return sent + await sendApns(env, userId, payload, fetcher).catch(() => 0);
 }
 export const hasPush = async (env, userId) => { await ensure(env); return !!(await env.DB.prepare('SELECT 1 FROM flight_push WHERE user_id=? LIMIT 1').bind(userId).first()); };
 export async function pushRoutes(env, path, method, user, readBody) {
@@ -78,6 +79,8 @@ export async function pushRoutes(env, path, method, user, readBody) {
     return { ok: true };
   }
   if (path === 'push/subscribe' && method === 'DELETE') { const b = await readBody().catch(() => ({})); if (b?.endpoint) await env.DB.prepare('DELETE FROM flight_push WHERE endpoint=? AND user_id=?').bind(String(b.endpoint), user.id).run(); else await env.DB.prepare('DELETE FROM flight_push WHERE user_id=?').bind(user.id).run(); return { ok: true }; }
+  if (path === 'push/apns' && method === 'POST') return registerApns(env, user.id, await readBody());
+  if (path === 'push/apns' && method === 'DELETE') return unregisterApns(env, user.id, await readBody().catch(() => ({})));
   if (path === 'push/test' && method === 'POST') return { sent: await pushTo(env, user.id, { title: 'Boplo Flight', body: 'Notifications are working. You’ll hear about lessons, forecasts and messages here.', url: '/flight-app.html#overview' }) };
   return null;
 }

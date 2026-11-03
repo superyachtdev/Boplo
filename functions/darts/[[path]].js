@@ -1,3 +1,4 @@
+import { appleSignIn } from '../lib/apple-auth.js';
 const encoder = new TextEncoder();
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers } });
 const fail = (status, error) => { const e = new Error(error); e.status = status; throw e; };
@@ -292,6 +293,7 @@ export async function onRequest(context) {
       const userId = await upsertUser(env, { email: cleanEmail(profile.email), name: profile.name || null, googleSubject: profile.sub });
       return new Response(null, { status: 302, headers: { Location: `${env.APP_ORIGIN || url.origin}/#move`, 'Set-Cookie': await createSession(env, userId, secure) } });
     }
+    if ((path === 'auth/apple' || path === 'apple') && request.method === 'POST') return appleSignIn(env, request, { secure, createSession, upsertUser });
     if ((path === 'auth/logout' || path === 'logout') && request.method === 'POST') {
       const response = json({ ok: true }, 200, { 'Set-Cookie': cookie('boplo_session', '', 0, secure) });
       response.headers.append('Set-Cookie', cookie('boplo_darts', '', 0, secure));
