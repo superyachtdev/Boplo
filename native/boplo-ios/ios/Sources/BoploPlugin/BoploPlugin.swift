@@ -49,15 +49,36 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         }
         // The splash plugin disables the view controller until its hide animation finishes.
         // A layout pass during page load cancels that animation, so the desk is visible and untappable.
-        for delay in [0.5, 1.5, 3.0] {
+        for delay in [0.05, 0.4, 1.0, 2.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 Self.releaseTouches(bridge: self?.bridge)
+                Self.paintEdgeToEdge(bridge: self?.bridge)
             }
+        }
+    }
+
+    /// The status-bar plugin shrinks the web view and the scroll view insets itself, so the window’s old navy shows as black bands.
+    static func paintEdgeToEdge(bridge: CAPBridgeProtocol?) {
+        let cloud = UIColor(red: 237 / 255, green: 242 / 255, blue: 250 / 255, alpha: 1)
+        guard let root = bridge?.viewController?.view else { return }
+        root.backgroundColor = cloud
+        root.window?.backgroundColor = cloud
+        guard let web = bridge?.webView else { return }
+        web.isOpaque = true
+        web.backgroundColor = cloud
+        web.scrollView.backgroundColor = cloud
+        web.scrollView.contentInsetAdjustmentBehavior = .never
+        web.scrollView.contentInset = .zero
+        web.scrollView.scrollIndicatorInsets = .zero
+        if let parent = web.superview {
+            parent.backgroundColor = cloud
+            web.frame = parent.bounds
         }
     }
 
     @objc func unlockInteraction(_ call: CAPPluginCall) {
         Self.releaseTouches(bridge: bridge)
+        Self.paintEdgeToEdge(bridge: bridge)
         call.resolve()
     }
 

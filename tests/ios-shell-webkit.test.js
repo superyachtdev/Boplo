@@ -149,6 +149,16 @@ test('iOS sign-in is minimal and the flight desk still receives taps when native
       assert.equal(info.radioClears, true, label + ' radio ' + JSON.stringify(info));
     };
     await tabBar('loaded');
+    const edge = await page.evaluate(() => {
+      const meta = document.querySelector('meta[name=viewport]')?.content || '';
+      const bg = getComputedStyle(document.body).backgroundColor;
+      const title = document.querySelector('.ios-large')?.getBoundingClientRect();
+      const plus = document.querySelector('.ios-plus')?.getBoundingClientRect();
+      return { meta, bg, gap: title && plus ? Math.abs(title.top - plus.top) : 999 };
+    });
+    assert.match(edge.meta, /viewport-fit=cover/);
+    assert.equal(edge.bg, 'rgb(237, 242, 250)');
+    assert.equal(edge.gap < 28, true, 'plus sits apart from the title ' + edge.gap);
     await page.evaluate(() => { const s = document.querySelector('.ios-scroll'); if (s) s.scrollTop = Math.max(400, s.scrollHeight); });
     await tabBar('scrolled');
     for (const d of hit.dialogs) {

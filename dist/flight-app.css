@@ -1445,12 +1445,18 @@ dialog.rp .maplibregl-ctrl-top-right{top:4px}
 body.ios-app{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 body.ios-app input,body.ios-app textarea,body.ios-app select{font-size:16px}
 body.ios-app button:active,body.ios-app .btn:active,body.ios-app .ios-tabs a:active,body.ios-app .ios-chips a:active{transform:scale(.97);opacity:.72}
-html:has(body.ios-app .ios-shell),body.ios-app:has(.ios-shell){height:100%;overflow:hidden;overscroll-behavior:none;background:var(--cloud)}
+html:has(body.ios-app),body.ios-app{background:#EDF2FA}
+html:has(body.ios-app .ios-shell),body.ios-app:has(.ios-shell){height:100%;overflow:hidden;overscroll-behavior:none;background:#EDF2FA}
 body.ios-app{--ios-tab:calc(56px + env(safe-area-inset-bottom,0px));--ios-radio:48px}
 /* Fixed to the viewport. A percentage height doesn't resolve through #app, and 100dvh on device can be taller than the web view, so the bar was laid out below the screen. */
 body.ios-app .ios-shell{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;min-height:0;height:auto;width:auto;background:var(--cloud);color:var(--ink)}
 body.ios-app .ios-nav,body.ios-app .ios-tabs,body.ios-app .ios-chips,body.ios-app .btn,body.ios-app .ios-large{-webkit-user-select:none;user-select:none}
-body.ios-app .ios-nav{flex:none;z-index:6;padding:calc(env(safe-area-inset-top) + 2px) 8px 0 4px;background:rgba(237,242,250,.84);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+body.ios-app .ios-nav{flex:none;z-index:6;padding:calc(env(safe-area-inset-top) + 2px) 8px 0 4px;background:rgba(237,242,250,.94);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+/* Home: the + shares the large-title row. A separate 44px bar left a blank gap under the status bar. */
+body.ios-app .ios-shell:not(.compact) .ios-nav:not(:has(.ios-back)){position:absolute;left:0;right:0;top:0;min-height:0;padding:0;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none;pointer-events:none}
+body.ios-app .ios-shell:not(.compact) .ios-nav:not(:has(.ios-back)) .ios-nav-row{min-height:0;height:0}
+body.ios-app .ios-shell:not(.compact) .ios-nav:not(:has(.ios-back)) .ios-plus{position:absolute;top:calc(env(safe-area-inset-top) + 6px);right:8px;pointer-events:auto}
+body.ios-app .ios-shell:not(.compact) .ios-nav:not(:has(.ios-back)) ~ .ios-scroll .ios-large{padding-top:calc(env(safe-area-inset-top) + 10px);padding-right:64px}
 body.ios-app .ios-nav-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:44px}
 body.ios-app .ios-inline{justify-self:center;max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:17px;font-weight:650;letter-spacing:-.02em;opacity:0;transition:opacity .2s var(--ease)}
 body.ios-app .ios-shell.compact .ios-inline{opacity:1}
