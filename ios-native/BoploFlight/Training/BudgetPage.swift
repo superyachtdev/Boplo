@@ -78,7 +78,12 @@ struct BudgetPage: View {
         let factor = perWeekFl >= 1.8 ? 1.4 : perWeekFl >= 0.9 ? 1.65 : 1.9
         let typical = minH.map { Int((Double($0) * factor).rounded()) }
         let goal = p?.goalHours ?? 0
-        let target: Double? = basis == "min" && minH != nil ? Double(minH!) : basis == "goal" && goal > 0 ? goal : (typical.map(Double.init) ?? (goal > 0 ? goal : nil))
+        let target: Double?
+        if basis == "min", let m = minH { target = Double(m) }
+        else if basis == "goal", goal > 0 { target = goal }
+        else if let t = typical { target = Double(t) }
+        else if goal > 0 { target = goal }
+        else { target = nil }
         let extrasPaid = extras.filter(\.paid).reduce(0) { $0 + num($1.amount) }
         let extrasDue = extras.filter { !$0.paid }.reduce(0) { $0 + num($1.amount) }
         let totalH = Double(model.totalMinutes) / 60
