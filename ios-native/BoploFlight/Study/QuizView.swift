@@ -28,6 +28,10 @@ struct QuizView: View {
                 .padding(16)
             }
             .background(Theme.cloud.ignoresSafeArea())
+            .sensoryFeedback(trigger: picked) { _, new in
+                guard let new, let q else { return nil }
+                return new == q.answer ? .success : .error
+            }
             .navigationTitle(finished ? "" : session.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

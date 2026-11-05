@@ -40,8 +40,40 @@ enum Appearance {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    /// The cold-launch intro is showing.
+    @State private var intro = true
+    /// The app under the intro is mounted (it appears as the intro lifts away).
+    @State private var revealed = false
+    /// The take-off has reached white-out, so the desk can mount underneath.
+    @State private var aboveCloud = false
 
     var body: some View {
+        ZStack {
+            if revealed {
+                content
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+            } else {
+                Theme.night.ignoresSafeArea()
+            }
+            if model.takeoff {
+                TakeoffSequence(name: model.profile?.firstName ?? "", firstTime: model.takeoffFirstTime,
+                                onCovered: { aboveCloud = true },
+                                onFinish: { model.takeoff = false; aboveCloud = false })
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
+            if intro {
+                LaunchIntro(ready: model.phase != .loading,
+                            onReveal: { withAnimation(.spring(response: 0.75, dampingFraction: 0.9)) { revealed = true } },
+                            onFinish: { intro = false })
+                    .zIndex(3)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: model.takeoff)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         Group {
             switch model.phase {
             case .loading:
@@ -51,7 +83,13 @@ struct RootView: View {
             case .setup:
                 SetupView()
             case .ready:
-                MainTabs()
+                if model.takeoff && !aboveCloud {
+                    // Hold the desk back until the climb reaches cloud, so it arrives fresh (the ring fills as you break out).
+                    Theme.night.ignoresSafeArea()
+                } else {
+                    MainTabs()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: model.phase)
@@ -93,6 +131,16 @@ struct MainTabs: View {
                 .tag(AppModel.Tab.you)
         }
         .minimizingTabBar()
+        .sensoryFeedback(.selection, trigger: model.tab)
+        .overlay(alignment: .top) {
+            if let toast = model.toast {
+                ToastView(toast: toast)
+                    .padding(.top, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onTapGesture { model.toast = nil }
+            }
+        }
+        .animation(.spring(response: 0.45, dampingFraction: 0.82), value: model.toast)
         .sheet(isPresented: $model.showNewFlight) {
             FlightFormView()
         }
@@ -102,5 +150,26 @@ struct MainTabs: View {
         .sheet(item: $model.openedFlight) { flight in
             NavigationStack { FlightDetailView(flight: flight) }
         }
+    }
+}
+
+/// The confirmation that floats in under the status bar. It is transient chrome, so it is glass.
+struct ToastView: View {
+    let toast: AppModel.Toast
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: toast.symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.ok)
+                .symbolEffect(.bounce, value: toast.id)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(toast.title).font(.archivo(15, .semibold)).foregroundStyle(Theme.ink)
+                if let d = toast.detail { Text(d).font(.archivo(13)).foregroundStyle(Theme.ink3).monospacedDigit() }
+            }
+        }
+        .padding(.leading, 14).padding(.trailing, 20).padding(.vertical, 10)
+        .glassSurface(Capsule())
+        .shadow(color: Theme.ink.opacity(0.08), radius: 16, y: 8)
+        .accessibilityElement(children: .combine)
     }
 }

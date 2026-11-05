@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Observation
 
 /// The app's state: who is signed in and their desk (profile, flights, plan).
@@ -10,6 +11,27 @@ final class AppModel {
     enum Tab: Hashable { case desk, logbook, study, fly, you }
 
     var phase: Phase = .loading
+    /// Set when someone arrives at the desk straight from signing in or setting up, to play the take-off.
+    var takeoff = false
+    var takeoffFirstTime = false
+    /// A short confirmation that floats in at the top ("Flight logged").
+    var toast: Toast?
+
+    struct Toast: Identifiable, Equatable {
+        let id = UUID()
+        var symbol = "checkmark.circle.fill"
+        var title: String
+        var detail: String? = nil
+    }
+
+    func show(_ toast: Toast) {
+        self.toast = toast
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Task {
+            try? await Task.sleep(for: .seconds(2.8))
+            if self.toast?.id == toast.id { self.toast = nil }
+        }
+    }
     var tab: Tab = .desk
     /// App-wide sheets, so any screen (including embedded web pages) can open them.
     var showPaywall = false
@@ -47,7 +69,12 @@ final class AppModel {
             rawProfile = (json["profile"] as? [String: Any]) ?? [:]
             workspace = ws
             lastError = nil
-            phase = ws.profile?.isComplete == true ? .ready : .setup
+            let next: Phase = ws.profile?.isComplete == true ? .ready : .setup
+            if next == .ready && (phase == .signedOut || phase == .setup) {
+                takeoffFirstTime = phase == .setup
+                takeoff = true
+            }
+            phase = next
         } catch let error as APIError where error.status == 401 {
             handleSignedOut()
         } catch {

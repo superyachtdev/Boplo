@@ -44,7 +44,7 @@ struct PrepareView: View {
                 }
                 ForEach($checks) { $item in
                     HStack(spacing: 12) {
-                        Button { withAnimation(.snappy) { item.done.toggle() } } label: {
+                        Button { Haptic.tap(.light, 0.6); withAnimation(.snappy) { item.done.toggle() } } label: {
                             Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
                                 .font(.system(size: 22))
                                 .foregroundStyle(item.done ? Theme.electric : Theme.mist)

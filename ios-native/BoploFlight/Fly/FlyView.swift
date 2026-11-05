@@ -103,6 +103,7 @@ struct FlyView: View {
             if recorder.isRecording {
                 Button {
                     recorder.stop()
+                    Haptic.tap(.heavy)
                     saving = true
                 } label: {
                     Label("Stop and save", systemImage: "stop.fill")
@@ -111,6 +112,7 @@ struct FlyView: View {
             } else {
                 Button {
                     recorder.start()
+                    Haptic.tap(.medium)
                 } label: {
                     Label("Start recording", systemImage: "record.circle")
                 }

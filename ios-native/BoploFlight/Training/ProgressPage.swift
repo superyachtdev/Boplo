@@ -135,7 +135,7 @@ struct TrainingProgressPage: View {
                     Chip(text: "\(rq.doneCount) of \(rq.items.count) done", tone: rq.doneCount == rq.items.count ? .ok : .plain)
                 }
                 ForEach(rq.items) { item in
-                    ChecklistRow(item: item) { Task { await toggle(item.id) } }
+                    ChecklistRow(item: item) { Haptic.tap(.light, 0.6); Task { await toggle(item.id) } }
                     if item.id != rq.items.last?.id { Divider().overlay(Theme.hair) }
                 }
                 Footnote(text: "Worked out from your logbook: dual and solo time come from each flight’s role, and cross-country counts flights that land somewhere other than where they started. Hours from before Boplo count toward the total only. Your instructor and authority decide what counts.")

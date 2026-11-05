@@ -6,6 +6,11 @@
 	<string>Boplo listens when you practise radio calls or answer the mock checkride out loud.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Boplo turns your spoken radio calls and checkride answers into text so it can check them.</string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

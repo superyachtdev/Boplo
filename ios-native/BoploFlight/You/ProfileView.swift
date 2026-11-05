@@ -162,6 +162,7 @@ struct ProfileView: View {
         do {
             try await model.saveProfile(changes)
             withAnimation { saved = true }
+            model.show(.init(title: "Profile saved"))
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             withAnimation { saved = false }
