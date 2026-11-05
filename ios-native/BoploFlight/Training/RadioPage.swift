@@ -81,11 +81,9 @@ struct RadioScenarios {
 
     init(_ model: AppModel) {
         let p = model.profile
-        faa = model.regime == "faa"
+        let faa = model.regime == "faa"
         let r = (p?.registration?.isEmpty == false ? p!.registration! : (faa ? "N123AB" : "G-ABCD")).uppercased().replacingOccurrences(of: " ", with: "")
-        reg = r
         let cs = Self.spell(r), csC = Self.compact(cs)
-        callsign = cs
         let type = p?.aircraft?.isEmpty == false ? p!.aircraft! : (faa ? "Cessna 172" : "PA-28")
         let letters = r.filter { $0.isLetter || $0.isNumber }
         let abbr = faa ? "\(type.split(separator: " ").first.map(String.init) ?? type) \(Self.spell(String(letters.suffix(3))))" : "\(Self.spell(String(letters.prefix(1)))) \(Self.spell(String(letters.suffix(2))))"
@@ -142,6 +140,9 @@ struct RadioScenarios {
                               elements: [may, re("Station you’re calling", [pc, "radio", "information", "centre", "approach", "tower"]), csEl, re("Nature of the emergency", ["engine", "failure", "fire", "fuel"]), re("Intentions", ["forcedlanding", "landing", "land"]), re("Position", ["miles", "north", "south", "east", "west", "overhead"]), re("Level or altitude", ["feet", "altitude", "flightlevel", "2500"]), re("Heading", ["heading"]), re("Pilot qualification", ["studentpilot", "student", "ppl", "qualif"]), re("People on board", ["onboard", "pob"])])
             ]
         }
+        self.faa = faa
+        reg = r
+        callsign = cs
         scenarios = list
     }
 }
