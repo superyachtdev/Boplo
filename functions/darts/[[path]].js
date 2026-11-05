@@ -5,6 +5,14 @@ const fail = (status, error) => { const e = new Error(error); e.status = status;
 const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))].map(v => v.toString(16).padStart(2, '0')).join('');
 const cookie = (name, value, maxAge = 0, secure = true) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; ${maxAge ? `Max-Age=${maxAge}; ` : 'Max-Age=0; '}${secure ? 'Secure;' : ''}`;
 const token = () => crypto.randomUUID() + crypto.randomUUID();
+// App Review sign-in: REVIEW_EMAIL and REVIEW_CODE (6 digits) live in Cloudflare only; both must be set
+function reviewLogin(env, email, code) {
+  const e = String(env.REVIEW_EMAIL || '').trim().toLowerCase(), c = String(env.REVIEW_CODE || '').trim();
+  if (!e || !/^\d{6}$/.test(c) || email !== e) return false;
+  if (code === undefined) return true;
+  let diff = 0; for (let i = 0; i < 6; i++) diff |= c.charCodeAt(i) ^ String(code).charCodeAt(i);
+  return diff === 0 && String(code).length === 6;
+}
 async function fetchWithTimeout(url, options, timeout = 25000) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
   try { return await fetch(url, { ...options, signal: controller.signal }); }
@@ -261,12 +269,35 @@ export async function onRequest(context) {
     if ((path === 'auth/email' || path === 'email') && request.method === 'POST') {
       if (!env.RESEND_API_KEY || !env.EMAIL_FROM) fail(503, 'Email sign-in is not configured yet.');
       const email = cleanEmail((await body(request)).email), raw = token(), expires = Date.now() + 15 * 60000;
-      await env.DB.prepare('DELETE FROM darts_magic_links WHERE email=? OR expires_at<?').bind(email, Date.now()).run();
+      // App Review account: signs in with a fixed code from Cloudflare (REVIEW_EMAIL + REVIEW_CODE), no email sent
+      if (reviewLogin(env, email)) return json({ ok: true, code: true });
+      // a 6-digit code goes out with the link, for the iOS app, where the link would open Safari instead
+      const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+      await env.DB.prepare('DELETE FROM darts_magic_links WHERE email IN (?,?) OR expires_at<?').bind(email, 'fail:' + email, Date.now()).run();
       await env.DB.prepare('INSERT INTO darts_magic_links(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(await hash(raw), email, expires, Date.now()).run();
+      await env.DB.prepare('INSERT INTO darts_magic_links(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(await hash(`code:${email}:${code}`), email, expires, Date.now()).run();
       const link = `${env.APP_ORIGIN || url.origin}${routePrefix}/auth/verify?token=${encodeURIComponent(raw)}`;
-      const send = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject: 'Your Boplo sign-in link', html: `<main style="font-family:Arial,sans-serif;color:#102b45"><p style="font-size:20px;font-weight:700">Your Boplo sign-in link is ready.</p><p>Use the secure link below to open your workspace. It expires in 15 minutes.</p><p><a href="${link}" style="display:inline-block;padding:12px 18px;background:#123a61;color:#fff;border-radius:10px;text-decoration:none;font-weight:700">Open Boplo</a></p><p>If you did not request this, you can safely ignore this email.</p></main>` }) });
+      const send = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject: 'Your Boplo sign-in link', html: `<main style="font-family:Arial,sans-serif;color:#102b45"><p style="font-size:20px;font-weight:700">Your Boplo sign-in link is ready.</p><p>Use the secure link below to open your workspace, or enter this code in the Boplo app. Both expire in 15 minutes.</p><p style="font-size:28px;font-weight:700;letter-spacing:6px;margin:8px 0 16px">${code}</p><p><a href="${link}" style="display:inline-block;padding:12px 18px;background:#123a61;color:#fff;border-radius:10px;text-decoration:none;font-weight:700">Open Boplo</a></p><p>If you did not request this, you can safely ignore this email.</p></main>` }) });
       if (!send.ok) fail(502, 'We could not send that email. Try again shortly.');
       return json({ ok: true });
+    }
+    if ((path === 'auth/code' || path === 'code') && request.method === 'POST') {
+      const input = await body(request), email = cleanEmail(input.email), code = String(input.code || '').replace(/\D/g, '');
+      if (code.length !== 6) fail(400, 'Enter the 6-digit code from the email.');
+      let ok = reviewLogin(env, email, code);
+      if (!ok) {
+        const tries = await env.DB.prepare('SELECT COUNT(*) AS n FROM darts_magic_links WHERE email=? AND expires_at>?').bind('fail:' + email, Date.now()).first();
+        if ((tries?.n || 0) >= 5) fail(429, 'Too many tries. Ask for a new code.');
+        const key = await hash(`code:${email}:${code}`), row = await env.DB.prepare('SELECT email,expires_at,used_at FROM darts_magic_links WHERE token_hash=?').bind(key).first();
+        if (!row || row.used_at || row.expires_at < Date.now() || row.email !== email) {
+          await env.DB.prepare('INSERT INTO darts_magic_links(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)').bind(await hash(token()), 'fail:' + email, Date.now() + 15 * 60000, Date.now()).run();
+          fail(400, 'That code didn’t work. Check it, or ask for a new one.');
+        }
+        await env.DB.prepare('DELETE FROM darts_magic_links WHERE email IN (?,?)').bind(email, 'fail:' + email).run();
+        ok = true;
+      }
+      const userId = await upsertUser(env, { email, name: email.split('@')[0] });
+      return json({ ok: true }, 200, { 'Set-Cookie': await createSession(env, userId, secure) });
     }
     if ((path === 'auth/verify' || path === 'verify') && request.method === 'GET') {
       const raw = url.searchParams.get('token') || '', row = await env.DB.prepare('SELECT email,expires_at,used_at FROM darts_magic_links WHERE token_hash=?').bind(await hash(raw)).first();

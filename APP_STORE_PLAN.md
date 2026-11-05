@@ -287,3 +287,9 @@ Recorded at the top of this file, on 3 November 2026. They are no longer open. W
 - No copy of the GPL models into the app binary.
 - No deletion of Scout, Darts, Wingman or Move.
 - Merging deploys the website changes (the iOS-only gates, the Apple sign-in route, the receipt route). It does not submit an app. The simulator keeps loading production until that deploy, so the new buttons appear in the app only after boplo.app is serving this branch.
+
+## Update, 5 November 2026: sign-in that works inside the app
+
+- **Google is gone from the iOS sign-in screen.** Google refuses sign-in inside an app's web view (`disallowed_useragent`), so the button could only fail, and a broken button is a common App Review rejection. Google stays on the website. People who signed up with Google use Apple or email in the app; an email that matches their account signs them into the same account.
+- **Email sign-in in the app uses a 6-digit code.** The sign-in email now carries the link and a code. The app asks for the code (`POST /auth/auth/code`), so nothing has to open Safari. Codes expire in 15 minutes, and 5 wrong tries lock that email until a new code is requested. Browsers still use the link.
+- **App Review account.** Set two Cloudflare secrets: `REVIEW_EMAIL` (for example `review@boplo.app`) and `REVIEW_CODE` (any 6 digits). That email then signs in with that code and no email is sent. Put both in the App Review notes. Remove or change them after approval.

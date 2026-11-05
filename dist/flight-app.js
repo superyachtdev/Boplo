@@ -266,11 +266,14 @@
       </div>
       <div class="ios-actions">
         <button type="button" class="btn ios-apple" data-apple>${appleMark}Continue with Apple</button>
-        <a class="btn ios-google" href="/auth/auth/google">${ico('google')}Continue with Google</a>
         <button type="button" class="btn ios-mail" data-email-open>Continue with email</button>
         <form class="ios-email" data-email hidden novalidate>
           <label for="ios-email"><span class="sr">Email</span><input id="ios-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
-          <button class="btn btn-blue" type="submit">Email me a sign-in link</button>
+          <button class="btn btn-blue" type="submit">Email me a sign-in code</button>
+        </form>
+        <form class="ios-email" data-code hidden novalidate>
+          <label for="ios-code"><span class="sr">6-digit code</span><input id="ios-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="6-digit code" required></label>
+          <button class="btn btn-blue" type="submit">Sign in</button>
         </form>
         <p class="note" data-note aria-live="polite">${esc(notice)}</p>
       </div>
@@ -307,8 +310,24 @@
         const res = await fetch('/auth/auth/email', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(out.error || 'We couldn’t send that email. Try again shortly.');
-        note.textContent = `Check ${email}. The link opens your desk and expires in 15 minutes.`; note.classList.add('ok');
+        note.textContent = `We sent a 6-digit code to ${email}. It expires in 15 minutes.`; note.classList.add('ok');
+        form.hidden = true; codeForm.hidden = false; codeForm.dataset.email = email; codeForm.code.focus();
       } catch (err) { note.textContent = err.message; note.classList.add('err'); btn.disabled = false; }
+    };
+    // Google refuses sign-in inside an app's web view, so the iOS app offers Apple and an emailed code instead
+    const codeForm = $('[data-code]');
+    codeForm.onsubmit = async e => {
+      e.preventDefault();
+      const code = codeForm.code.value.replace(/\D/g, ''), btn = codeForm.querySelector('button');
+      note.className = 'note';
+      if (code.length !== 6) { note.textContent = 'Enter the 6-digit code from the email.'; note.classList.add('err'); codeForm.code.focus(); return; }
+      btn.disabled = true; note.textContent = 'Signing you in…';
+      try {
+        const res = await fetch('/auth/auth/code', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: codeForm.dataset.email, code }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || 'That code didn’t work. Try again.');
+        location.reload();
+      } catch (err) { note.textContent = err.message; note.classList.add('err'); btn.disabled = false; codeForm.code.select(); }
     };
     hideNativeSplash();
   }
