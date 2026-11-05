@@ -121,8 +121,7 @@ struct FlightFormView: View {
         TextField(prompt, text: text)
             .textInputAutocapitalization(.characters)
             .autocorrectionDisabled()
-            .font(.archivo(17, .semibold))
-            .boploField()
+            .boploField(font: .archivo(17, .semibold))
     }
 
     private func counter(_ label: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {

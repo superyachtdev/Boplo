@@ -107,8 +107,7 @@ struct SignInView: View {
                 .focused($focused)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .boploField(dark: true)
-                .font(.archivo(24, .semibold).monospacedDigit())
+                .boploField(dark: true, font: .archivo(24, .semibold).monospacedDigit())
                 .onChange(of: code) { _, value in
                     let digits = String(value.filter(\.isNumber).prefix(6))
                     if digits != value { code = digits }

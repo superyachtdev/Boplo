@@ -44,22 +44,22 @@ enum Day {
         return isoString(d.addingTimeInterval(Double(days) * 86400))
     }
 
-    private static let short = make("EEE d MMM")
-    private static let shortNoDay = make("d MMM")
-    private static let long = make("EEEE d MMMM")
-    private static let full = make("d MMM yyyy")
-    private static let monthYear = make("MMMM yyyy")
+    private static let shortF = make("EEE d MMM")
+    private static let shortNoDayF = make("d MMM")
+    private static let longF = make("EEEE d MMMM")
+    private static let fullF = make("d MMM yyyy")
+    private static let monthYearF = make("MMMM yyyy")
 
     /// "Wed 28 Oct"
-    static func short(_ s: String?) -> String { date(s).map { short.string(from: $0) } ?? "" }
+    static func short(_ s: String?) -> String { date(s).map { shortF.string(from: $0) } ?? "" }
     /// "28 Oct"
-    static func dayMonth(_ s: String?) -> String { date(s).map { shortNoDay.string(from: $0) } ?? "" }
+    static func dayMonth(_ s: String?) -> String { date(s).map { shortNoDayF.string(from: $0) } ?? "" }
     /// "Saturday 24 October"
-    static func long(_ s: String?) -> String { date(s).map { long.string(from: $0) } ?? "" }
+    static func long(_ s: String?) -> String { date(s).map { longF.string(from: $0) } ?? "" }
     /// "28 Oct 2026"
-    static func full(_ s: String?) -> String { date(s).map { full.string(from: $0) } ?? "" }
+    static func full(_ s: String?) -> String { date(s).map { fullF.string(from: $0) } ?? "" }
     /// "July 2027"
-    static func monthYear(_ s: String?) -> String { date(s).map { monthYear.string(from: $0) } ?? "" }
+    static func monthYear(_ s: String?) -> String { date(s).map { monthYearF.string(from: $0) } ?? "" }
 }
 
 /// "1:25" style hours and minutes, like a logbook.

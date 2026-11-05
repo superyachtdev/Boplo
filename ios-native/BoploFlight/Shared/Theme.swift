@@ -459,11 +459,12 @@ struct MenuRow: View {
 }
 
 /// Text field styled like the web's inputs: white, hairline, rounded.
-struct FieldStyle: ViewModifier {
+struct BoploFieldStyle: ViewModifier {
     var dark = false
+    var font: Font = .archivo(16)
     func body(content: Content) -> some View {
         content
-            .font(.archivo(16))
+            .font(font)
             .padding(.horizontal, 16)
             .frame(minHeight: 50)
             .background(dark ? Color.white.opacity(0.06) : Color.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -472,7 +473,7 @@ struct FieldStyle: ViewModifier {
 }
 
 extension View {
-    func boploField(dark: Bool = false) -> some View { modifier(FieldStyle(dark: dark)) }
+    func boploField(dark: Bool = false, font: Font = .archivo(16)) -> some View { modifier(BoploFieldStyle(dark: dark, font: font)) }
 }
 
 /// Labeled field block: small label above the control.

@@ -237,7 +237,7 @@ struct DeskView: View {
                 if m.streak > 1 { Chip(text: "\(m.streak)-week streak", tone: .ok) }
             }
             HStack(alignment: .lastTextBaseline, spacing: 10) {
-                Text(m.gap.map(String.init) ?? "—").font(Theme.display(52)).tracking(-1.5)
+                Text(m.gap.map { String($0) } ?? "—").font(Theme.display(52)).tracking(-1.5)
                 Text(m.gap == nil ? "no flights yet" : m.gap == 1 ? "day since your last flight" : "days since your last flight")
                     .font(.archivo(14.5)).foregroundStyle(Theme.ink2)
             }
@@ -255,7 +255,7 @@ struct DeskView: View {
             }
             .frame(height: 84, alignment: .bottom)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Flights per week over the last 8 weeks: \(m.weeks.map(String.init).joined(separator: ", "))")
+            .accessibilityLabel("Flights per week over the last 8 weeks: \(m.weeks.map { String($0) }.joined(separator: ", "))")
             Footnote(text: String(format: "%.1f flights a week lately · target %@ (from your profile)", m.lately, m.target < 1 ? String(format: "%.2g", m.target) : String(Int(m.target))))
         }
     }

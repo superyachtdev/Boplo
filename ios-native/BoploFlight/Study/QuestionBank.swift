@@ -55,7 +55,7 @@ struct StudyState {
             if k == "_mocks", let list = v as? [[String: Any]] {
                 mocks = list.compactMap { m in
                     guard let d = m["d"] as? String, let s = (m["s"] as? NSNumber)?.intValue else { return nil }
-                    return (d, s)
+                    return (d: d, s: s)
                 }
             } else if let arr = v as? [NSNumber], arr.count >= 2 {
                 records[k] = arr.map { $0.intValue }
@@ -68,7 +68,7 @@ struct StudyState {
     func json() -> String {
         var obj = extra
         for (k, v) in records { obj[k] = v }
-        if !mocks.isEmpty { obj["_mocks"] = mocks.suffix(20).map { ["d": $0.d, "s": $0.s] } }
+        if !mocks.isEmpty { obj["_mocks"] = mocks.suffix(20).map { m -> [String: Any] in ["d": m.d, "s": m.s] } }
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data("{}".utf8)
         return String(data: data, encoding: .utf8) ?? "{}"
     }
