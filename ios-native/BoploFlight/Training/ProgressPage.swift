@@ -37,7 +37,7 @@ struct LicenceChecklist {
         let docs = model.json("docs")
         let medical = docs["medical"] as? String ?? ""
         let fl = model.flights
-        func h(_ pred: (Flight) -> Bool) -> Double { Double(fl.filter(pred).reduce(0) { $0 + $1.mins }) / 60 }
+        let h: ((Flight) -> Bool) -> Double = { pred in Double(fl.filter(pred).reduce(0) { $0 + $1.mins }) / 60 }
         items = list.enumerated().map { i, q in
             var o = Item(id: q.id ?? "\(q.k)\(i)", req: q, have: 0, need: q.need, done: false, auto: true, unit: "h")
             switch q.k {
