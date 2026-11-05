@@ -90,7 +90,7 @@ test('iOS sign-in is minimal and the flight desk still receives taps when native
     });
     assert.equal(signin.words <= 6, true, signin.tag);
     assert.equal(signin.apple, 'Continue with Apple');
-    assert.equal(signin.google, 'Continue with Google');
+    assert.equal(signin.google, undefined, 'Google sign-in is not offered inside the iOS app (Google blocks embedded web views)');
     assert.equal(signin.email, 'Continue with email');
     assert.equal(signin.formHidden, true);
     assert.equal(signin.hasLead, false);
