@@ -69,7 +69,7 @@ final class StoreModel {
         try? await AppStore.sync()
         var signed: [String] = []
         for await result in Transaction.currentEntitlements {
-            if case .verified(let t) = result, [Self.yearlyID, Self.monthlyID].contains(t.productID) {
+            if case .verified(let t) = result, (Self.yearlyIDs + Self.monthlyIDs).contains(t.productID) {
                 signed.append(result.jwsRepresentation)
             }
         }
