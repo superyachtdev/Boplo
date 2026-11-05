@@ -69,7 +69,7 @@ struct StudyView: View {
         let pm = model.passMark
 
         Button { start(.mock, bank) } label: { Text("Start a mock exam") }
-            .buttonStyle(.pill(.blue, height: 48, spark: true))
+            .primaryStyle(full: false)
 
         let reviewer: String? = QuestionBank.shared?.reviewed?.by
         Text(reviewer != nil ? "Reviewed by \(reviewer!). " : "Early-access question bank. Original questions written for Boplo, awaiting review by a flight instructor. ")

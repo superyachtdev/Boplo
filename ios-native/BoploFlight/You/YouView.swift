@@ -155,8 +155,6 @@ struct PlanView: View {
                 PlansContent(message: nil)
             }
         }
-        .navigationTitle("Plan")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -241,7 +239,7 @@ struct PlansContent: View {
             } label: {
                 HStack { if store.busy { ProgressView().tint(.white) }; Text("Continue") }
             }
-            .buttonStyle(.pill(.blue, height: 54, full: true, spark: true))
+            .primaryStyle()
             .disabled(store.busy)
         }
         ErrorText(text: store.message)

@@ -91,7 +91,7 @@ struct SignInView: View {
             Button { Task { await sendCode() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text("Email me a sign-in code") }
             }
-            .buttonStyle(.pill(.blue, height: 52, full: true))
+            .primaryStyle()
             .disabled(busy)
             Button("Back") { step = .choose; error = nil; note = nil }
                 .font(.archivo(14.5, .medium))
@@ -116,7 +116,7 @@ struct SignInView: View {
             Button { Task { await verifyCode() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text("Sign in") }
             }
-            .buttonStyle(.pill(.blue, height: 52, full: true))
+            .primaryStyle()
             .disabled(busy || code.count != 6)
             Button("Use a different email") { step = .email; code = ""; error = nil; note = nil }
                 .font(.archivo(14.5, .medium))

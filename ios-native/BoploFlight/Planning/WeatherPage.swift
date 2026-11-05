@@ -64,8 +64,6 @@ struct WeatherPage: View {
                 Footnote(text: "Live data from \(source).")
             }
         }
-        .navigationTitle("Weather")
-        .navigationBarTitleDisplayMode(.inline)
         .task { if searched.isEmpty { await load(initial ?? model.homeCode) } }
     }
 

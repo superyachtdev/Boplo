@@ -27,8 +27,6 @@ struct SchoolPage: View {
             }
             ErrorText(text: error)
         }
-        .navigationTitle("Flight school")
-        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
         .alert("Leave \(school?["name"] as? String ?? "your school")?", isPresented: $confirmLeave) {
@@ -76,7 +74,7 @@ struct SchoolPage: View {
                     }
                     ErrorText(text: error)
                     Button { Task { await join() } } label: { HStack { if busy { ProgressView().tint(.white) }; Text("Join school") } }
-                        .buttonStyle(.pill(.blue, height: 50, full: true)).disabled(!active || busy)
+                        .primaryStyle().disabled(!active || busy)
                 }
                 .padding(20)
             }

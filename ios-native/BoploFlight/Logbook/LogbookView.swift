@@ -45,54 +45,20 @@ struct FlightListView: View {
     var body: some View {
         Page(title: "Logbook") {
             chips
-            HStack(spacing: 8) {
-                Button { model.tab = .fly } label: { Label("Record", systemImage: "map") }
-                    .buttonStyle(.pill(.line, height: 46))
-                Button { model.logFlight() } label: { Text("Log a flight") }
-                    .buttonStyle(.pill(.blue, height: 46, spark: true))
-                Spacer(minLength: 0)
-                if !model.flights.isEmpty, let url = CSVExport.file(model.sortedFlights) {
-                    ShareLink(item: url) { Image(systemName: "square.and.arrow.up").font(.system(size: 16, weight: .semibold)) }
-                        .buttonStyle(.pill(.line, height: 46))
-                        .accessibilityLabel("Export CSV")
-                }
-            }
             if model.flights.isEmpty {
                 Tile {
                     Text("Your logbook is empty.").font(.archivo(18, .semibold))
                     Text("Each flight you log keeps its time, role, landings and debrief together.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
-                    Button { model.logFlight() } label: { Text("Log your first flight") }.buttonStyle(.pill(.blue, height: 46, spark: true))
+                    Button { model.logFlight() } label: { Text("Log your first flight") }.primaryStyle(full: false)
                 }
             } else {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(Theme.ink3)
-                    TextField("Search airfield, lesson, aircraft…", text: $search)
-                        .font(.archivo(15.5))
-                        .autocorrectionDisabled()
-                    if !search.isEmpty {
-                        Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.mist) }.buttonStyle(.plain)
-                    }
+                Picker("Role", selection: $role.animation(.snappy)) {
+                    Text("All").tag("all")
+                    Text("Dual").tag("dual")
+                    Text("Solo").tag("solo")
+                    Text("PIC").tag("pic")
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 48)
-                .background(Theme.paper, in: Capsule())
-                .overlay(Capsule().strokeBorder(Theme.hair))
-                HStack(spacing: 4) {
-                    ForEach([("all", "All"), ("dual", "Dual"), ("solo", "Solo"), ("pic", "PIC")], id: \.0) { id, label in
-                        Button { withAnimation(.snappy) { role = id } } label: {
-                            Text(label)
-                                .font(.archivo(14, .semibold))
-                                .padding(.horizontal, 14)
-                                .frame(height: 34)
-                                .foregroundStyle(role == id ? .white : Theme.ink2)
-                                .background(role == id ? Theme.ink : .clear, in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(4)
-                .background(Theme.paper, in: Capsule())
-                .overlay(Capsule().strokeBorder(Theme.hair))
+                .pickerStyle(.segmented)
                 countLine
                 if list.isEmpty {
                     Tile {
@@ -103,13 +69,23 @@ struct FlightListView: View {
                 } else {
                     LazyVStack(spacing: 8) {
                         ForEach(list) { f in
-                            NavigationLink(value: Route.flight(f)) { FlightCard(flight: f) }.buttonStyle(.plain)
+                            NavigationLink(value: Route.flight(f)) { FlightCard(flight: f) }.buttonStyle(.pressable)
                         }
                     }
                 }
             }
         }
         .refreshable { await model.refresh() }
+        .searchable(text: $search, prompt: "Airfield, lesson, aircraft…")
+        .minimizedSearch()
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarLeading) {
+                Button { model.tab = .fly } label: { Label("Record", systemImage: "record.circle") }
+                if !model.flights.isEmpty, let url = CSVExport.file(model.sortedFlights) {
+                    ShareLink(item: url) { Label("Export CSV", systemImage: "square.and.arrow.up") }
+                }
+            }
+        }
     }
 
     private var countLine: some View {
@@ -162,7 +138,7 @@ struct TrackMapView: View {
                 Tile {
                     Text("No tracks yet.").font(.archivo(17, .semibold))
                     Text("Record a flight with GPS, or add a route to a flight, and it’s drawn here.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
-                    Button { model.tab = .fly } label: { Text("Record a flight") }.buttonStyle(.pill(.blue, height: 46, spark: true))
+                    Button { model.tab = .fly } label: { Text("Record a flight") }.primaryStyle(full: false)
                 }
             } else {
                 Map(position: $camera) {
@@ -174,7 +150,7 @@ struct TrackMapView: View {
                             .stroke(on ? Theme.ice : Theme.ice.opacity(0.35), lineWidth: on ? 2.5 : 1.4)
                     }
                 }
-                .mapStyle(.imagery(elevation: .realistic))
+                .mapStyle(.hybrid(elevation: .realistic))
                 .frame(height: 380)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous))
                 LazyVStack(spacing: 8) {

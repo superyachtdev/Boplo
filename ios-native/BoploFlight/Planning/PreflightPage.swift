@@ -70,8 +70,6 @@ struct PreflightPage: View {
             perfTile
             goTile
         }
-        .navigationTitle("Preflight")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: load)
         .onChange(of: snapshot) { _, _ in scheduleSave() }
     }

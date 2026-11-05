@@ -15,7 +15,6 @@ struct CommunityPage: View {
 
     var body: some View {
         Page(title: "Q&A", subtitle: "Ask other student pilots, share what worked, and help the next person.") {
-            Button { asking = true } label: { Text("Ask a question") }.buttonStyle(.pill(.blue, height: 46, spark: true))
             Text("Be kind and specific. Answers here are from other students, not instructors: check anything that matters with your school.")
                 .font(.archivo(13.5)).padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.electric.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -43,8 +42,6 @@ struct CommunityPage: View {
                 }
             }
         }
-        .navigationTitle("Q&A")
-        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load() }
         .onChange(of: sort) { _, _ in Task { await load() } }
@@ -52,6 +49,11 @@ struct CommunityPage: View {
         .onChange(of: search) { _, _ in
             searchTask?.cancel()
             searchTask = Task { try? await Task.sleep(nanoseconds: 350_000_000); if !Task.isCancelled { await load() } }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { asking = true } label: { Label("Ask a question", systemImage: "square.and.pencil") }
+            }
         }
         .sheet(isPresented: $asking) { AskQuestionSheet(topics: topics) { Task { await load() } } }
     }
@@ -167,7 +169,7 @@ struct QuestionPage: View {
     @State private var reported: Set<String> = []
 
     var body: some View {
-        Page(title: "Q&A") {
+        Page(title: "Question", inline: true) {
             if let q = question {
                 post(q, isQuestion: true)
                 Text(plural(answers.count, "answer")).font(.archivo(16, .semibold)).padding(.top, 6)
@@ -186,8 +188,6 @@ struct QuestionPage: View {
                 Tile { ProgressView().frame(maxWidth: .infinity) }
             }
         }
-        .navigationTitle("Question")
-        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
 

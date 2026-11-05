@@ -30,7 +30,7 @@ struct FlightDetailView: View {
                         if let first = f.track.first { Marker(f.dep.isEmpty ? "Start" : f.dep, coordinate: first.coordinate).tint(Theme.electric) }
                         if let last = f.track.last, f.track.count > 2 { Marker(f.arr.isEmpty ? "End" : f.arr, coordinate: last.coordinate).tint(Theme.ink) }
                     }
-                    .mapStyle(.imagery(elevation: .realistic))
+                    .mapStyle(.hybrid(elevation: .realistic))
                     .frame(height: 260)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous))
                 }

@@ -171,8 +171,6 @@ struct BudgetPage: View {
             extrasTile
             Footnote(text: "How this works: published minimums are the floor, not the norm. Typical private pilots finish at about 1.8× the minimum, and those who fly twice a week finish nearer 1.4×. Boplo uses your recent pace (or the frequency in your profile) to pick a figure. It’s an estimate from your own records, not a quote.")
         }
-        .navigationTitle("Budget")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: load)
         .onChange(of: total) { _, _ in scheduleSave() }
         .onChange(of: rateAircraft) { _, _ in scheduleSave() }

@@ -137,8 +137,7 @@ struct AskView: View {
                 .lineLimit(1...6)
                 .focused($focused)
                 .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(Theme.paper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.hair))
+                .composerField()
             Button { Task { await send() } } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 16, weight: .bold))
@@ -151,7 +150,7 @@ struct AskView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .composerBar()
     }
 
     // MARK: - Actions

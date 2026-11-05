@@ -89,11 +89,9 @@ struct ProfileView: View {
             Button { Task { await save() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text(saved ? "Saved" : "Save profile") }
             }
-            .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+            .primaryStyle()
             .disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
-        .navigationTitle("Profile")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: load)
     }
 

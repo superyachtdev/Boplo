@@ -87,7 +87,7 @@ struct PrepareView: View {
             Button { Task { await save() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text(saved ? "Saved" : "Save preparation") }
             }
-            .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+            .primaryStyle()
             .disabled(busy)
             recent
             HStack(spacing: 10) {
@@ -95,8 +95,6 @@ struct PrepareView: View {
                 NavigationLink(value: Route.web(.radio)) { Text("Practise radio") }.buttonStyle(.pill(.line, height: 42))
             }
         }
-        .navigationTitle("Prepare")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: load)
     }
 

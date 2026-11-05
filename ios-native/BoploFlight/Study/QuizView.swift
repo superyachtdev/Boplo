@@ -117,7 +117,7 @@ struct QuizView: View {
                         Task { await finish(early: false) }
                     }
                 } label: { Text(index + 1 < session.questions.count ? "Next question" : "See results") }
-                    .buttonStyle(.pill(.blue, height: 48, spark: true))
+                    .primaryStyle(full: false)
             }
         }
     }
@@ -205,7 +205,7 @@ struct QuizView: View {
             }
         }
         Button { dismiss() } label: { Text("Back to subjects") }
-            .buttonStyle(.pill(.blue, height: 50, full: true, spark: true))
+            .primaryStyle()
     }
 
     private func finish(early: Bool) async {

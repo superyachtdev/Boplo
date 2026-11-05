@@ -105,7 +105,6 @@ struct WebFeatureView: View {
         }
         .navigationTitle(title ?? feature.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.cloud, for: .navigationBar)
         .onDisappear { Task { await model.refresh() } }
     }
 

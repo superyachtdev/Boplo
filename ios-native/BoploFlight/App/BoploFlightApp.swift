@@ -28,24 +28,13 @@ struct BoploFlightApp: App {
 
 /// UIKit chrome in the web app's type and colours.
 enum Appearance {
+    /// Only the title fonts are set. Bar backgrounds stay the system's (Liquid Glass on iOS 26, with its
+    /// scroll edge effect), so the bars keep adapting to the content behind them.
     static func apply() {
         let ink = UIColor(Theme.ink)
-        let nav = UINavigationBarAppearance()
-        nav.configureWithTransparentBackground()
-        nav.backgroundColor = UIColor(Theme.cloud).withAlphaComponent(0.92)
-        nav.backgroundEffect = UIBlurEffect(style: .systemThinMaterialLight)
-        if let f = UIFont(name: "Archivo-SemiBold", size: 17) { nav.titleTextAttributes = [.font: f, .foregroundColor: ink] }
-        if let f = UIFont(name: "ArchivoDisplay-Italic", size: 34) { nav.largeTitleTextAttributes = [.font: f, .foregroundColor: ink] }
-        UINavigationBar.appearance().standardAppearance = nav
-        UINavigationBar.appearance().compactAppearance = nav
-        let edge = UINavigationBarAppearance()
-        edge.configureWithTransparentBackground()
-        edge.titleTextAttributes = nav.titleTextAttributes
-        edge.largeTitleTextAttributes = nav.largeTitleTextAttributes
-        UINavigationBar.appearance().scrollEdgeAppearance = edge
-        if let f = UIFont(name: "Archivo-Medium", size: 10.5) {
-            UITabBarItem.appearance().setTitleTextAttributes([.font: f], for: .normal)
-        }
+        let bar = UINavigationBar.appearance()
+        if let f = UIFont(name: "Archivo-SemiBold", size: 17) { bar.titleTextAttributes = [.font: f, .foregroundColor: ink] }
+        if let f = UIFont(name: "ArchivoDisplay-Italic", size: 36) { bar.largeTitleTextAttributes = [.font: f, .foregroundColor: ink, .kern: -1.0] }
     }
 }
 
@@ -103,6 +92,7 @@ struct MainTabs: View {
                 .tabItem { Label("You", systemImage: "person") }
                 .tag(AppModel.Tab.you)
         }
+        .minimizingTabBar()
         .sheet(isPresented: $model.showNewFlight) {
             FlightFormView()
         }

@@ -44,7 +44,7 @@ struct CheckrideView: View {
                     } else {
                         ForEach(messages.dropFirst()) { m in bubble(m).id(m.id) }
                         if debriefed {
-                            Button { messages = []; save() } label: { Text("Start another checkride") }.buttonStyle(.pill(.blue, height: 48, spark: true))
+                            Button { messages = []; save() } label: { Text("Start another checkride") }.primaryStyle(full: false)
                         }
                     }
                     Text("Practice only. A real examiner and your instructor decide when you’re ready.").font(.archivo(12)).foregroundStyle(Theme.ink3).id("foot")
@@ -145,8 +145,7 @@ struct CheckrideView: View {
                 }
                 TextField("Answer the examiner…", text: $draft, axis: .vertical).font(.archivo(15.5)).lineLimit(1...6)
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background(Theme.paper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.hair))
+                    .composerField()
                 Button { Task { await send() } } label: {
                     Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundStyle(.white).frame(width: 44, height: 44)
                         .background(draft.trimmingCharacters(in: .whitespaces).isEmpty || busy ? Theme.mist : Theme.electric, in: Circle())
@@ -154,7 +153,7 @@ struct CheckrideView: View {
                 .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || busy)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8).background(.ultraThinMaterial)
+        .padding(.horizontal, 12).padding(.vertical, 8).composerBar()
     }
 
     // MARK: Actions

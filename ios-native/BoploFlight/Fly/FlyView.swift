@@ -56,8 +56,33 @@ struct FlyView: View {
                         .stroke(Theme.electric, lineWidth: 4)
                 }
             }
-            .mapStyle(.imagery(elevation: .realistic))
-            .frame(height: 220)
+            .mapStyle(.hybrid(elevation: .realistic))
+            .mapControlVisibility(.hidden)
+            .frame(height: 260)
+            .overlay(alignment: .topTrailing) {
+                Button { camera = .userLocation(followsHeading: false, fallback: .automatic) } label: {
+                    Image(systemName: "location.fill").font(.system(size: 15, weight: .semibold))
+                }
+                .floatingIcon()
+                .accessibilityLabel("Centre on me")
+                .padding(10)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if recorder.isRecording {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        HStack(spacing: 8) {
+                            Circle().fill(Theme.danger).frame(width: 8, height: 8)
+                            Text(hoursText(recorder.elapsedMinutes)).monospacedDigit()
+                            Text("·").foregroundStyle(.secondary)
+                            Text("\(Int(recorder.speedKnots)) kt").monospacedDigit()
+                        }
+                        .font(.archivo(14, .semibold))
+                        .padding(.horizontal, 14).frame(height: 36)
+                        .glassSurface(Capsule())
+                    }
+                    .padding(10)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             if recorder.isRecording || !recorder.points.isEmpty {
@@ -82,14 +107,14 @@ struct FlyView: View {
                 } label: {
                     Label("Stop and save", systemImage: "stop.fill")
                 }
-                .buttonStyle(.pill(.ink, height: 50, full: true))
+                .primaryStyle(tint: Theme.danger)
             } else {
                 Button {
                     recorder.start()
                 } label: {
                     Label("Start recording", systemImage: "record.circle")
                 }
-                .buttonStyle(.pill(.blue, height: 50, full: true))
+                .primaryStyle()
             }
             Footnote(text: "GPS altitude is approximate. Use your instruments, not your phone, to fly.")
         }

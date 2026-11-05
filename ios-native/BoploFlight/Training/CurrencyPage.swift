@@ -90,8 +90,6 @@ struct CurrencyPage: View {
                 ErrorText(text: error)
             }
         }
-        .navigationTitle("Currency")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func itemTile(_ it: Item) -> some View {

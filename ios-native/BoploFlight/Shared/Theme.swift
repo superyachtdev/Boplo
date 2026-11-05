@@ -64,36 +64,35 @@ enum BoploFonts {
 
 // MARK: - Page scaffold
 
-/// A scrolling page on the cloud background with the big italic title, like the web app's iOS layout.
+/// A scrolling page on the cloud background. The title is the system navigation title (large, in the
+/// Archivo display italic), so it collapses into the glass bar on scroll with the system scroll edge effect.
 struct Page<Content: View>: View {
     let title: String
     var subtitle: String? = nil
+    /// Long titles (a radio scenario) sit inline in the bar instead of large.
+    var inline: Bool = false
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(Theme.display(38))
-                        .tracking(-1.2)
-                        .foregroundStyle(Theme.ink)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.archivo(15))
+                        .foregroundStyle(Theme.ink2)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let subtitle, !subtitle.isEmpty {
-                        Text(subtitle).font(.archivo(14.5)).foregroundStyle(Theme.ink3)
-                    }
+                        .padding(.bottom, 4)
                 }
-                .padding(.top, 4)
-                .padding(.bottom, 4)
                 content
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 28)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.cloud.ignoresSafeArea())
-        // The big title is in the page, so the bar stays empty (the title still names the back button).
-        .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) } }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(inline ? .inline : .large)
     }
 }
 

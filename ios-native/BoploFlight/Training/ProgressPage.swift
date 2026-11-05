@@ -122,8 +122,6 @@ struct TrainingProgressPage: View {
             milestones
             ErrorText(text: error)
         }
-        .navigationTitle("Progress")
-        .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $shareItem) { m in MilestoneShareSheet(milestone: m) }
     }
 
@@ -348,7 +346,7 @@ struct MilestoneShareSheet: View {
                     ShareLink(item: Image(uiImage: image), preview: SharePreview(milestone.title, image: Image(uiImage: image))) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
-                    .buttonStyle(.pill(.blue, height: 50, full: true))
+                    .primaryStyle()
                 } else {
                     ProgressView()
                 }

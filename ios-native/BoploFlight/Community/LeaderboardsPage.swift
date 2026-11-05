@@ -27,8 +27,6 @@ struct LeaderboardsPage: View {
                 Tile { ProgressView().frame(maxWidth: .infinity) }
             }
         }
-        .navigationTitle("Leaderboards")
-        .navigationBarTitleDisplayMode(.inline)
         .task { if ap.isEmpty { ap = model.homeCode }; postOn = model.rawProfile["boardsOff"] as? Bool != true; await load() }
         .refreshable { await load() }
         .onChange(of: kind) { _, _ in Task { await load() } }

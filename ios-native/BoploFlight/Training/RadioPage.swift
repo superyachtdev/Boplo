@@ -31,8 +31,6 @@ struct RadioPage: View {
                 }
             }
         }
-        .navigationTitle("Radio practice")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -161,7 +159,7 @@ struct RadioDrill: View {
     }
 
     var body: some View {
-        Page(title: scenario.title, subtitle: scenario.situation) {
+        Page(title: scenario.title, subtitle: scenario.situation, inline: true) {
             if scenario.atc.isEmpty {
                 DarkTile(spacing: 8) {
                     Text("Your call").font(.archivo(13, .semibold)).foregroundStyle(Theme.ice)
@@ -217,8 +215,6 @@ struct RadioDrill: View {
                 }
             }
         }
-        .navigationTitle("Radio practice")
-        .navigationBarTitleDisplayMode(.inline)
         .onDisappear { listener.stop(); synth.stopSpeaking(at: .immediate) }
     }
 

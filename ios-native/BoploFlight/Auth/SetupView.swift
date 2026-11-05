@@ -90,7 +90,7 @@ struct SetupView: View {
             } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text("Open my desk") }
             }
-            .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+            .primaryStyle()
             .disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
             .padding(.top, 4)
         }

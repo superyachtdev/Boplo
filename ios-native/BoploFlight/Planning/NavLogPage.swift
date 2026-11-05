@@ -118,8 +118,6 @@ struct NavLogPage: View {
             savedTile
             ErrorText(text: error)
         }
-        .navigationTitle("Nav log")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if points.isEmpty, let ac = model.profile?.aircraft, !ac.isEmpty, tas == "95" {
                 let a = ac.lowercased()

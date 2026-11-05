@@ -7,16 +7,16 @@ struct DeskView: View {
 
     var body: some View {
         NavigationStack {
-            Page(title: greeting, subtitle: subtitle) {
-                glance
+            Page(title: title) {
+                hero
+                actions
                 upNext
-                licence
-                totals
-                momentum
                 checklistLink
+                momentum
                 theory
                 recent
                 latestTrack
+                totals
             }
             .refreshable { await model.refresh() }
             .logFlightButton(model)
@@ -26,17 +26,87 @@ struct DeskView: View {
 
     private var p: Profile? { model.profile }
 
+    private var title: String {
+        let first = p?.firstName ?? ""
+        return first.isEmpty ? "Your desk" : "Hi, \(first)."
+    }
+
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
-        let g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
-        let first = p?.firstName ?? ""
-        return "\(g), \(first.isEmpty ? "pilot" : first)."
+        return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
     }
 
     private var subtitle: String {
         let n = model.flights.count
         return n == 0 ? "Log your first flight and your desk starts filling in."
             : "\(plural(n, "flight")) logged, \(decimalHours(model.totalMinutes)) hours recorded in total."
+    }
+
+    // MARK: Hero
+
+    /// The one bold moment on the desk: hours toward the licence, on the navy contour field.
+    private var hero: some View {
+        let total = Double(model.totalMinutes) / 60
+        let goal = p?.goalHours ?? 0
+        let last30 = model.flights(inLast: 30)
+        return DarkTile(spacing: 18, seed: 0.6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(greeting).font(.archivo(14, .semibold)).foregroundStyle(Theme.ice)
+                Spacer()
+                NavigationLink(value: Route.profile) {
+                    Text([p?.licence, shortAuthority == "—" ? nil : shortAuthority].compactMap { $0 }.joined(separator: " · "))
+                        .font(.archivo(12.5, .semibold))
+                        .padding(.horizontal, 10).frame(height: 26)
+                        .background(Theme.ice.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Theme.ice)
+                }
+                .buttonStyle(.plain)
+            }
+            HStack(alignment: .center, spacing: 20) {
+                Ring(progress: model.progress, size: 132, lineWidth: 11, track: Theme.ice.opacity(0.14), fill: Theme.ice) {
+                    VStack(spacing: 0) {
+                        Text(String(format: "%.1f", total))
+                            .font(Theme.display(36, bold: true)).tracking(-1.2).monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text(goal > 0 ? "of \(Int(goal)) h" : "hours").font(.archivo(12.5)).foregroundStyle(Theme.mist)
+                    }
+                    .foregroundStyle(.white)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(goal > 0 ? "\(String(format: "%.1f", total)) of \(Int(goal)) hours" : "\(String(format: "%.1f", total)) hours")
+                VStack(alignment: .leading, spacing: 12) {
+                    heroStat("\(model.flights.count)", model.flights.count == 1 ? "flight logged" : "flights logged")
+                    heroStat(decimalHours(last30.reduce(0) { $0 + $1.mins }) + " h", "in the last 30 days")
+                    heroStat(goal > 0 ? "\(Int((model.progress * 100).rounded()))%" : "—", goal > 0 ? "of the minimum" : "set an hours goal")
+                }
+            }
+            if let t = p?.target, !t.isEmpty {
+                Text("Aiming for \(Day.monthYear(t)). Your instructor and authority decide what counts.")
+                    .font(.archivo(12.5)).foregroundStyle(Theme.mist)
+            } else {
+                Text(goal > 0 ? "Published minimum \(Int(goal)) h. Your instructor and authority decide what counts." : "Set an hours goal in your profile to see progress here.")
+                    .font(.archivo(12.5)).foregroundStyle(Theme.mist)
+            }
+        }
+    }
+
+    private func heroStat(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(.archivo(20, .semibold)).foregroundStyle(.white).monospacedDigit().contentTransition(.numericText())
+            Text(label).font(.archivo(12)).foregroundStyle(Theme.mist)
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 10) {
+            PrimaryButton(action: { model.logFlight() }) {
+                Label("Log a flight", systemImage: "plus")
+            }
+            Button { model.tab = .fly } label: {
+                Label("Record", systemImage: "record.circle")
+            }
+            .buttonStyle(.pill(.line, height: 52))
+        }
     }
 
     // MARK: Glance
@@ -49,7 +119,7 @@ struct DeskView: View {
                 statTile("\(model.flights.count)", "Flights")
             }
             Button { model.logFlight() } label: { Text("Log flight") }
-                .buttonStyle(.pill(.blue, height: 54, full: true))
+                .primaryStyle()
             Button { model.tab = .study } label: {
                 HStack {
                     Text("Study").font(.archivo(15)).foregroundStyle(Theme.ink3)
@@ -99,52 +169,50 @@ struct DeskView: View {
             default: return "\(-d) days ago"
             }
         }()
-        return DarkTile(spacing: 12) {
+        return Tile(spacing: 12) {
             HStack {
-                Text("Up next").font(.archivo(17, .semibold))
+                Label("Up next", systemImage: "calendar").font(.archivo(15, .semibold)).foregroundStyle(Theme.electric)
                 Spacer()
-                Chip(text: when, tone: .dark)
+                Chip(text: when, tone: d.map { $0 >= 0 && $0 <= 2 } == true ? .blue : .plain)
             }
             Text(p?.nextLesson?.isEmpty == false ? p!.nextLesson! : "Add your next lesson")
-                .font(Theme.display(32))
-                .tracking(-1)
-                .foregroundStyle(.white)
+                .font(Theme.display(30))
+                .tracking(-0.9)
+                .foregroundStyle(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             let meta = [p?.airport, p?.aircraft].compactMap { $0 }.filter { !$0.isEmpty }
             if p?.lessonDate?.isEmpty == false || !meta.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     if p?.lessonDate?.isEmpty == false {
                         Text(Day.long(p?.lessonDate) + (p?.lessonTime?.isEmpty == false ? " · \(p!.lessonTime!)" : ""))
-                            .font(.archivo(15, .semibold))
+                            .font(.archivo(15, .semibold)).foregroundStyle(Theme.ink)
                     }
                     if !meta.isEmpty {
-                        Text(meta.joined(separator: " · ")).font(.archivo(14.5)).foregroundStyle(Theme.mist)
+                        Text(meta.joined(separator: " · ")).font(.archivo(14)).foregroundStyle(Theme.ink3)
                     }
                 }
             }
             if let q = p?.questionList.first {
-                Text(q)
-                    .font(.archivo(14.5))
-                    .foregroundStyle(Color(hex: 0xE6F0FF).opacity(0.9))
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.ice.opacity(0.06), in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 12, topTrailingRadius: 12))
-                    .overlay(alignment: .leading) { Rectangle().fill(Theme.ice).frame(width: 2) }
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "questionmark.bubble.fill").foregroundStyle(Theme.electric)
+                    Text(q).font(.archivo(14.5)).foregroundStyle(Theme.ink2)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.electric.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             HStack(spacing: 12) {
                 if checks.isEmpty {
-                    Text("No preparation checklist yet").font(.archivo(13.5)).foregroundStyle(Theme.mist)
+                    Text("No preparation checklist yet").font(.archivo(13.5)).foregroundStyle(Theme.ink3)
                 } else {
-                    Bar(value: Double(done) / Double(checks.count), height: 5, track: Theme.ice.opacity(0.16), fill: Theme.electricHi)
+                    Bar(value: Double(done) / Double(checks.count), height: 6)
                         .frame(width: 90)
-                    Text("\(done) of \(checks.count) prepared").font(.archivo(13.5)).foregroundStyle(Theme.mist)
+                    Text("\(done) of \(checks.count) prepared").font(.archivo(13.5)).foregroundStyle(Theme.ink3)
                 }
                 Spacer(minLength: 0)
+                NavigationLink(value: Route.prepare) { Text("Prepare") }
+                    .buttonStyle(.pill(.ink, height: 40))
             }
-            NavigationLink(value: Route.prepare) { Text("Prepare") }
-                .buttonStyle(.pill(.light, height: 46, spark: true))
-                .padding(.top, 2)
         }
     }
 
@@ -324,7 +392,7 @@ struct DeskView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Your first flight goes here.").font(.archivo(17, .semibold))
                     Text("Log the time, role, landings and what you learned while it’s fresh.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
-                    Button { model.logFlight() } label: { Text("Log a flight") }.buttonStyle(.pill(.blue, height: 46, spark: true))
+                    Button { model.logFlight() } label: { Text("Log a flight") }.primaryStyle(full: false)
                 }
             } else {
                 VStack(spacing: 0) {

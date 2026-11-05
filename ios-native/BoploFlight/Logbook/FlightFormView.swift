@@ -98,7 +98,7 @@ struct FlightFormView: View {
                     Button { Task { await save() } } label: {
                         HStack { if busy { ProgressView().tint(.white) }; Text(editing == nil ? "Save flight" : "Save changes") }
                     }
-                    .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+                    .primaryStyle()
                     .disabled(busy)
                 }
                 .padding(16)
