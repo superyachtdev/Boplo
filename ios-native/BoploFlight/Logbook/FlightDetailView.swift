@@ -77,6 +77,9 @@ struct FlightDetailView: View {
                 ErrorText(text: error)
                 Button("Delete flight", role: .destructive) { confirmDelete = true }
                     .buttonStyle(.pill(.danger, height: 46, full: true))
+                    .confirmationDialog("Delete this flight?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                        Button("Delete", role: .destructive) { Task { await delete() } }
+                    } message: { Text("This removes it from your logbook and totals.") }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 28)
@@ -86,9 +89,6 @@ struct FlightDetailView: View {
         .toolbar { Button("Edit") { editing = true }.fontWeight(.semibold) }
         .sheet(isPresented: $editing) { FlightFormView(editing: f) }
         .fullScreenCover(isPresented: $showSim) { SimulatorView() }
-        .confirmationDialog("Delete this flight?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) { Task { await delete() } }
-        } message: { Text("This removes it from your logbook and totals.") }
     }
 
     private func big(_ label: String, _ value: String) -> some View {

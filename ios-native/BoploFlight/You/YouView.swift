@@ -51,6 +51,10 @@ struct YouView: View {
                 }
                 group {
                     Button { confirmSignOut = true } label: { plainRow("Sign out", color: Theme.ink) }
+                        // Attached to the row itself, so on iOS 26 the dialog grows out of this button, not the top of the page.
+                        .confirmationDialog("Sign out of Boplo?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                            Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+                        }
                     divider
                     Button { confirmDelete = true } label: { plainRow("Delete account", color: Theme.danger) }
                 }
@@ -60,9 +64,6 @@ struct YouView: View {
             .refreshable { await model.refresh() }
             .logFlightButton(model)
             .boploDestinations()
-            .confirmationDialog("Sign out of Boplo?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-            }
             .alert("Delete your account?", isPresented: $confirmDelete) {
                 Button("Delete", role: .destructive) {
                     Task {
