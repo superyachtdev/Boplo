@@ -20,10 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Install WebKit for the iOS-shell test
-        run: npx playwright install --with-deps webkit
       - name: Tests
-        run: npm test
+        run: node --test $(ls tests/*.test.js | grep -v ios-shell-webkit)
       - name: Functions build
         run: npx wrangler pages functions build functions --outdir=work/functions-build
       - name: No secrets committed
@@ -31,3 +29,19 @@ jobs:
           if git grep -nE '(sk-ant-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|re_[A-Za-z0-9]{20,}_)' -- ':!package-lock.json'; then
             echo "A key-shaped string is committed. Remove it and rotate the key."; exit 1
           fi
+
+  # The browser test is slow to set up (WebKit and its system libraries), so it runs on its own and
+  # doesn't hold up the main check.
+  webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps webkit
+      - run: node --test tests/ios-shell-webkit.test.js
