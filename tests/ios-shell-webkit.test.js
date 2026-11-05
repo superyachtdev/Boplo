@@ -10,7 +10,7 @@ const workspace = {
   user: { id: 'u1', email: 'pilot@example.com', display_name: 'Alex' },
   profile: { name: 'Alex Morgan', country: 'United Kingdom', countryCode: 'GB', regime: 'uk', authority: 'UK CAA', licence: 'PPL(A)', complete: true, step: 4, openingMinutes: 0, goalHours: 45 },
   flights: [],
-  billing: { plan: 'free', status: 'none', enforced: true, ready: true, prices: { monthly: { amount: 1199, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, trialAvailable: false, trialDays: 0 },
+  billing: { plan: 'free', status: 'none', enforced: true, ready: true, prices: { monthly: { amount: 1299, currency: 'usd' }, yearly: { amount: 9999, currency: 'usd' } }, limits: { flights: 15, navPlans: 1 }, trialAvailable: false, trialDays: 0 },
   school: null
 };
 

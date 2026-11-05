@@ -5,7 +5,7 @@ import { appleGrants, storeOf, publicApple, PRODUCTS as APPLE_PRODUCTS } from '.
 // There are no free trials (removed 2026-10-24); subscribers pay at checkout. The 'trialing' handling stays for anyone who started one before.
 
 export const PLANS = {
-  monthly: { lookup: 'boplo_flight_advanced_monthly', amount: 1199, currency: 'usd', interval: 'month', label: 'Advanced monthly' },
+  monthly: { lookup: 'boplo_flight_advanced_monthly', amount: 1299, currency: 'usd', interval: 'month', label: 'Advanced monthly' },
   yearly: { lookup: 'boplo_flight_advanced_yearly', amount: 9999, currency: 'usd', interval: 'year', label: 'Advanced yearly' }
 };
 export const FREE_LIMITS = { flights: 15, navPlans: 1, shortFinals: 2 };
@@ -47,7 +47,8 @@ export async function stripe(env, method, path, params, fetcher = fetch) {
 export async function ensurePrice(env, key, fetcher = fetch) {
   const plan = PLANS[key]; if (!plan) throw Object.assign(new Error('Choose monthly or yearly.'), { status: 400 });
   const found = await stripe(env, 'GET', 'prices', { lookup_keys: [plan.lookup], active: true, limit: 1 }, fetcher);
-  if (found.data?.[0]) return found.data[0];
+  // a price change creates a new Stripe price and moves the lookup key to it; existing subscribers keep theirs
+  if (found.data?.[0] && found.data[0].unit_amount === plan.amount) return found.data[0];
   const products = await stripe(env, 'GET', 'products/search', { query: "metadata['boplo']:'flight_advanced'" }, fetcher).catch(() => ({ data: [] }));
   const product = products.data?.[0] || await stripe(env, 'POST', 'products', { name: 'Boplo Flight Advanced', description: 'The full Boplo Flight desk for student pilots.', metadata: { boplo: 'flight_advanced' } }, fetcher);
   return stripe(env, 'POST', 'prices', { product: product.id, unit_amount: plan.amount, currency: plan.currency, recurring: { interval: plan.interval }, lookup_key: plan.lookup, transfer_lookup_key: true, tax_behavior: 'exclusive', nickname: plan.label }, fetcher);
@@ -103,7 +104,7 @@ export async function syncCustomer(env, customerId, fetcher = fetch) {
   const item = best.items?.data?.[0], lk = item?.price?.lookup_key;
   // a trial only counts once Stripe has a card for it; an abandoned checkout stays free
   const status = best.status === 'trialing' && !best.default_payment_method && !(await hasCard(env, customerId, fetcher)) ? 'incomplete' : best.status;
-  const key = Object.keys(PLANS).find(k => PLANS[k].lookup === lk) || null;
+  const key = Object.keys(PLANS).find(k => PLANS[k].lookup === lk) || Object.keys(PLANS).find(k => PLANS[k].interval === item?.price?.recurring?.interval) || null;
   return saveRow(env, row.user_id, {
     subscription_id: best.id, status, price_key: key,
     current_period_end: (best.current_period_end ?? item?.current_period_end ?? null) && (best.current_period_end ?? item.current_period_end) * 1000,

@@ -73,7 +73,7 @@ Shared notes for whoever picks this up next (ChatGPT/Codex or Claude). Update th
 
 ## Payments, plans and legal (2026-10-21, Claude)
 
-- **Stripe subscriptions** via REST in `functions/lib/billing.js` (no SDK). Stripe API version pinned to `2024-06-20`. Prices are created on first use by lookup key: `boplo_flight_advanced_monthly` ($11.99) and `boplo_flight_advanced_yearly` ($99.99), product metadata `boplo=flight_advanced`.
+- **Stripe subscriptions** via REST in `functions/lib/billing.js` (no SDK). Stripe API version pinned to `2024-06-20`. Prices are created on first use by lookup key: `boplo_flight_advanced_monthly` ($12.99) and `boplo_flight_advanced_yearly` ($99.99), product metadata `boplo=flight_advanced`.
 - **Env (Cloudflare Pages):** `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_FLIGHT_WEBHOOK_SECRET` (the Flight endpoint's own signing secret; the old `/api` product uses `STRIPE_WEBHOOK_SECRET`). Optional: `STRIPE_TAX=on` (collects billing address and enables Stripe Tax), `BILLING_TRIAL_DAYS` (default 7, `0` disables).
 - **Migration 0010** creates `flight_billing` (one row per user: customer, subscription, status, interval, period end, cancel flag, trial).
 - **Routes:** `GET /flight/billing`, `POST /flight/billing/subscribe|sync|cancel|resume|portal`, `POST /flight/billing/webhook` (public, signature checked, runs before the origin check), `GET /flight/account/export`, `POST /flight/account/delete` (`{confirm:'DELETE'}`; cancels any subscription, deletes data, clears cookie). Workspace includes `billing`.
@@ -243,7 +243,7 @@ Built from market research: students quit over cost overruns, lost momentum and 
   - the licence ring fills (`@property --p`) and counts to 23.4
   - the minimap route draws itself with an aircraft flying it
   - the hour bars show their values on hover or keyboard focus
-- **Pricing:** the billing toggle has a sliding thumb, and the Advanced price is an altimeter-style rolling drum ($8.33 ↔ $11.99). The original price elements stay for no-JS.
+- **Pricing:** the billing toggle has a sliding thumb, and the Advanced price is an altimeter-style rolling drum ($8.33 ↔ $12.99). The original price elements stay for no-JS.
 - **Smaller touches:**
   - FAQ answers open and close smoothly
   - the final card catches pointer light
@@ -291,6 +291,6 @@ Not submitted to Apple and not a production deploy. Read `APP_STORE_PLAN.md` and
 - The WebView loads `https://boplo.app/flight-app.html#overview`. The flight desk is not copied into the app. `native/www` is only the offline error page.
 - Reason: `boplo_session` is host-only, `HttpOnly`, `Secure`, `SameSite=Lax`, and `functions/flight/[[path]].js` rejects any non-GET whose `Origin` is not the function’s own origin. A `capacitor://localhost` bundle would fail sign-in and every save.
 - `dist/flight-native.js` is loaded by `flight-app.html`. With no Capacitor bridge (every browser) it returns immediately. In the shell it sets the status bar and, later, follows a `https://boplo.app` link iOS opened back into the app.
-- Decisions recorded in `APP_STORE_PLAN.md` (3 Nov): IAP worldwide at $99.99/$11.99, Stripe stays on the web, school purchase hidden in the app, Sign in with Apple, Individual developer account, no Students nearby or DMs in the app, iPhone only, background GPS, Google 3D tiles kept, APNs. Entitlement is `publicBilling` plus `flight_apple`. Tests in `tests/apple.test.js`.
+- Decisions recorded in `APP_STORE_PLAN.md` (3 Nov): IAP worldwide at $99.99/$12.99, Stripe stays on the web, school purchase hidden in the app, Sign in with Apple, Individual developer account, no Students nearby or DMs in the app, iPhone only, background GPS, Google 3D tiles kept, APNs. Entitlement is `publicBilling` plus `flight_apple`. Tests in `tests/apple.test.js`.
 - iOS launch, once this branch is on boplo.app: navy sign-in screen (Apple, Google, email), then the existing setup for a new account, then the desk. Signed-in finished accounts skip sign-in. No marketing landing in the shell. Splash hides when that first screen is painted.
 - Scout, Darts, Wingman and Move are untouched.

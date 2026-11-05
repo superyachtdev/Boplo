@@ -45,7 +45,7 @@ test('an App Store subscription cannot move onto a second Boplo account', () => 
   assert.equal(tx.status, 'active');
   assert.equal(readTransaction({ bundleId: 'other.app', productId: 'app.boplo.flight.advanced.monthly', originalTransactionId: '9', expiresDate: 1 }).ok, false);
   assert.equal(readTransaction({ bundleId: 'app.boplo.flight', productId: 'unknown', originalTransactionId: '9', expiresDate: 1 }).ok, false);
-  assert.equal(PRODUCTS['app.boplo.flight.advanced.monthly'].amount, 1199);
+  assert.equal(PRODUCTS['app.boplo.flight.advanced.monthly'].amount, 1299);
   assert.equal(PRODUCTS['app.boplo.flight.advanced.yearly'].amount, 9999);
 });
 
