@@ -1,0 +1,59 @@
+{
+  "identifier" : "B0F1A0C0",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "B0F1A0C1",
+      "localizations" : [],
+      "name" : "Boplo Advanced",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "B0F1A0C2",
+          "introductoryOffer" : null,
+          "localizations" : [
+            { "description" : "Every Boplo feature, billed yearly.", "displayName" : "Advanced, yearly", "locale" : "en_US" }
+          ],
+          "productID" : "app.boplo.flight.advanced.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Advanced yearly",
+          "subscriptionGroupID" : "B0F1A0C1",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "11.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "B0F1A0C3",
+          "introductoryOffer" : null,
+          "localizations" : [
+            { "description" : "Every Boplo feature, billed monthly.", "displayName" : "Advanced, monthly", "locale" : "en_US" }
+          ],
+          "productID" : "app.boplo.flight.advanced.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Advanced monthly",
+          "subscriptionGroupID" : "B0F1A0C1",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : { "major" : 4, "minor" : 0 }
+}
