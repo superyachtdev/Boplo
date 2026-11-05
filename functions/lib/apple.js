@@ -7,7 +7,10 @@
 export const BUNDLE_ID = 'app.boplo.flight';
 export const PRODUCTS = {
   'app.boplo.flight.advanced.yearly': { interval: 'yearly', amount: 9999, currency: 'usd' },
-  'app.boplo.flight.advanced.monthly': { interval: 'monthly', amount: 1299, currency: 'usd' }
+  'app.boplo.flight.advanced.monthly': { interval: 'monthly', amount: 1299, currency: 'usd' },
+  // the product IDs in App Store Connect
+  'advancedyearly': { interval: 'yearly', amount: 9999, currency: 'usd' },
+  'advancedmonthly': { interval: 'monthly', amount: 1299, currency: 'usd' }
 };
 // Apple Root CA - G3. Public certificate. Fingerprint checked before it is trusted.
 const APPLE_ROOT_FINGERPRINT = '63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179';

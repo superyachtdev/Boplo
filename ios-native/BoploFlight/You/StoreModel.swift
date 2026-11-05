@@ -17,8 +17,11 @@ final class StoreModel {
     private weak var model: AppModel?
     private var updates: Task<Void, Never>?
 
-    var yearly: Product? { products.first { $0.id == Self.yearlyID } }
-    var monthly: Product? { products.first { $0.id == Self.monthlyID } }
+    /// The App Store Connect record uses the short IDs; the long ones are kept so either set works.
+    static let yearlyIDs = [yearlyID, "advancedyearly"]
+    static let monthlyIDs = [monthlyID, "advancedmonthly"]
+    var yearly: Product? { products.first { Self.yearlyIDs.contains($0.id) } }
+    var monthly: Product? { products.first { Self.monthlyIDs.contains($0.id) } }
 
     func start(model: AppModel) async {
         self.model = model
@@ -34,8 +37,8 @@ final class StoreModel {
 
     func loadProducts() async {
         do {
-            products = try await Product.products(for: [Self.yearlyID, Self.monthlyID])
-                .sorted { $0.id == Self.yearlyID && $1.id != Self.yearlyID }
+            products = try await Product.products(for: Self.yearlyIDs + Self.monthlyIDs)
+                .sorted { Self.yearlyIDs.contains($0.id) && !Self.yearlyIDs.contains($1.id) }
         } catch {
             products = []
         }
