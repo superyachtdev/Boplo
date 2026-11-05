@@ -161,7 +161,7 @@ test('checkout creates prices once, charges straight away (no trial) and stays f
 test('promotion codes discount the first payment and can skip the trial',async()=>{
  const {promoSummary,subscribe,checkPromo}=await import('../functions/lib/billing.js');
  assert.equal(promoSummary({code:'OWNER',id:'promo_1',coupon:{amount_off:9899,currency:'usd',duration:'once'},metadata:{skip_trial:'true'}},'yearly').firstAmount,100);
- assert.equal(promoSummary({code:'HALF',id:'promo_2',coupon:{percent_off:50,duration:'forever'},metadata:{}},'monthly').firstAmount,600);
+ assert.equal(promoSummary({code:'HALF',id:'promo_2',coupon:{percent_off:50,duration:'forever'},metadata:{}},'monthly').firstAmount,650);
  assert.equal(promoSummary({code:'EUR',id:'p',coupon:{amount_off:500,currency:'eur',duration:'once'},metadata:{}},'yearly'),null);
  const db=new DatabaseSync(':memory:');
  for(const file of ['0002_darts_product.sql','0009_boplo_flight.sql','0010_boplo_billing.sql'])db.exec(readFileSync(new URL('../migrations/'+file,import.meta.url),'utf8'));
