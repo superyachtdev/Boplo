@@ -196,3 +196,30 @@ extension AppModel {
         return String(lines.joined(separator: "\n").prefix(3400))
     }
 }
+
+extension AppModel {
+    var countryCode: String { profile?.countryCode ?? "" }
+    var homeCode: String { AirfieldStore.code(profile?.airport) }
+
+    /// A profile field that holds JSON text (syllabus, reqs, docs, budget, navlogs, radio, preflight), parsed.
+    func json(_ key: String) -> [String: Any] {
+        guard let s = rawProfile[key] as? String, let data = s.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [:] }
+        return obj
+    }
+
+    func jsonList(_ key: String) -> [[String: Any]] {
+        guard let s = rawProfile[key] as? String, let data = s.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else { return [] }
+        return obj
+    }
+
+    func saveJSON(_ key: String, _ value: Any, extra: [String: Any] = [:]) async throws {
+        let data = try JSONSerialization.data(withJSONObject: value)
+        var changes = extra
+        changes[key] = String(data: data, encoding: .utf8) ?? "{}"
+        try await saveProfile(changes)
+    }
+
+    func number(_ key: String) -> Double { (rawProfile[key] as? NSNumber)?.doubleValue ?? Double(rawProfile[key] as? String ?? "") ?? 0 }
+}

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Boplo listens when you practise radio calls or answer the mock checkride out loud.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Boplo turns your spoken radio calls and checkride answers into text so it can check them.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

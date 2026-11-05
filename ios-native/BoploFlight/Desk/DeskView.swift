@@ -264,14 +264,31 @@ struct DeskView: View {
 
     private var checklistLink: some View {
         NavigationLink(value: Route.web(.progress)) {
-            Tile(spacing: 6) {
-                HStack {
-                    Text("Licence checklist").font(.archivo(17, .semibold)).foregroundStyle(Theme.ink)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.mist)
+            Tile(spacing: 10) {
+                if let rq = LicenceChecklist(model) {
+                    TileHead(title: "Licence checklist") {
+                        Chip(text: "\(rq.doneCount) of \(rq.items.count) done", tone: rq.doneCount == rq.items.count ? .ok : .plain)
+                    }
+                    if let next = rq.next {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Next milestone").font(.archivo(12, .semibold)).foregroundStyle(Theme.electric)
+                            Text(next.req.label).font(.archivo(15.5, .semibold)).foregroundStyle(Theme.ink).multilineTextAlignment(.leading)
+                            if next.unit == "h" {
+                                Text(String(format: "%.1f h to go", max(0, next.need - next.have))).font(.archivo(13)).foregroundStyle(Theme.ink3)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.electric.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    ForEach(rq.items.filter { !$0.done }.prefix(4)) { item in
+                        ChecklistRow(item: item, interactive: false)
+                    }
+                    Text("See the full checklist").font(.archivo(14, .semibold)).foregroundStyle(Theme.electric)
+                } else {
+                    TileHead("Licence checklist")
+                    Text("Choose a licence in your profile to see what it needs.").font(.archivo(14)).foregroundStyle(Theme.ink3)
                 }
-                Text("What \(p?.licence ?? "your licence") needs, your syllabus and the next milestone.")
-                    .font(.archivo(14)).foregroundStyle(Theme.ink3).multilineTextAlignment(.leading)
             }
         }
         .buttonStyle(.plain)

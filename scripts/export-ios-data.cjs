@@ -1,5 +1,5 @@
 // Writes the theory question bank for the native iPhone app (ios-native/BoploFlight/Resources/questions.json).
-// Run after editing dist/flight-questions.js: node scripts/export-ios-questions.cjs
+// Run after editing dist/flight-questions.js: node scripts/export-ios-data.cjs
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '../dist/flight-questions.js'), 'utf8');
 const ctx = { window: {} }; vm.createContext(ctx); vm.runInContext(src, ctx);
@@ -10,3 +10,9 @@ const dest = path.join(__dirname, '../ios-native/BoploFlight/Resources/questions
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, JSON.stringify(out));
 console.log('questions:', out.icao.questions.length, 'icao,', out.faa.questions.length, 'faa');
+
+// The licence rules and preflight maths run natively in the app through JavaScriptCore, from the same files as the web.
+const jsDir = path.join(__dirname, '../ios-native/BoploFlight/Resources/js');
+fs.mkdirSync(jsDir, { recursive: true });
+for (const f of ['flight-rules.js', 'flight-preflight.js']) fs.copyFileSync(path.join(__dirname, '../dist', f), path.join(jsDir, f));
+console.log('copied rules and preflight scripts');

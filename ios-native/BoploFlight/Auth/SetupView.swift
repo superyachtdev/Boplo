@@ -11,33 +11,28 @@ struct SetupView: View {
     }
     struct Licence: Hashable { let id: String, label: String, hours: Int }
 
-    static let countries: [Country] = [
-        .init(code: "US", name: "United States", regime: "faa", authority: "FAA"),
-        .init(code: "GB", name: "United Kingdom", regime: "uk", authority: "UK CAA"),
-        .init(code: "IE", name: "Ireland", regime: "easa", authority: "Irish Aviation Authority (EASA)"),
-        .init(code: "ES", name: "Spain", regime: "easa", authority: "AESA (EASA)"),
-        .init(code: "FR", name: "France", regime: "easa", authority: "DGAC (EASA)"),
-        .init(code: "DE", name: "Germany", regime: "easa", authority: "Luftfahrt-Bundesamt (LBA) (EASA)"),
-        .init(code: "IT", name: "Italy", regime: "easa", authority: "ENAC (EASA)"),
-        .init(code: "NL", name: "Netherlands", regime: "easa", authority: "ILT (EASA)"),
-        .init(code: "PT", name: "Portugal", regime: "easa", authority: "ANAC (EASA)"),
-        .init(code: "SE", name: "Sweden", regime: "easa", authority: "Swedish Transport Agency (EASA)")
-    ]
-
-    static func licences(for regime: String) -> [Licence] {
-        switch regime {
-        case "faa": return [.init(id: "Private Pilot", label: "Private Pilot certificate", hours: 40),
-                            .init(id: "Sport Pilot", label: "Sport Pilot certificate", hours: 20)]
-        case "uk": return [.init(id: "PPL(A)", label: "PPL(A) · Private Pilot Licence", hours: 40),
-                           .init(id: "NPPL(A)", label: "NPPL(A) · National Private Pilot Licence", hours: 32)]
-        default: return [.init(id: "PPL(A)", label: "PPL(A) · Private Pilot Licence", hours: 45),
-                          .init(id: "LAPL(A)", label: "LAPL(A) · Light Aircraft Pilot Licence", hours: 30)]
+    /// Every country, popular ones first, with the licensing system and authority from the shared rules.
+    static var countries: [Country] {
+        let all = Rules.countries
+        let popular = Rules.popular
+        let top = popular.compactMap { code in all.first { $0.code == code } }
+        let rest = all.filter { !popular.contains($0.code) }
+        return (top + rest).map { c in
+            let auth = Rules.authorityFor(c.code)
+            return Country(code: c.code, name: c.name, regime: Rules.regimeFor(c.code), authority: auth.isEmpty ? "\(c.name) civil aviation authority" : auth)
         }
     }
 
+    static func licences(for regime: String) -> [Licence] {
+        let list = Rules.licences(regime).map { Licence(id: $0.id, label: $0.label, hours: $0.minHours ?? 0) }
+        if !list.isEmpty { return list }
+        return [.init(id: "PPL(A)", label: "PPL(A) · Private Pilot Licence", hours: 45)]
+    }
+
     @State private var name = ""
-    @State private var country = SetupView.countries[0]
-    @State private var licence = SetupView.licences(for: "faa")[0]
+    @State private var country = Country(code: "US", name: "United States", regime: "faa", authority: "FAA")
+    @State private var licence = Licence(id: "Private Pilot", label: "Private Pilot certificate", hours: 40)
+    @State private var countryList: [Country] = []
     @State private var airport = ""
     @State private var hoursSoFar = ""
     @State private var busy = false
@@ -58,7 +53,7 @@ struct SetupView: View {
                 Labeled(label: "Country") {
                     Menu {
                         Picker("Country", selection: $country) {
-                            ForEach(Self.countries) { Text($0.name).tag($0) }
+                            ForEach(countryList) { Text($0.name).tag($0) }
                         }
                     } label: { pickerLabel(country.name) }
                 }
@@ -87,7 +82,7 @@ struct SetupView: View {
                         .keyboardType(.decimalPad)
                         .boploField()
                 }
-                Footnote(text: "Published minimum: \(licence.hours) hours. Your instructor and authority decide what counts.")
+                Footnote(text: licence.hours > 0 ? "Published minimum: \(licence.hours) hours. Your instructor and authority decide what counts." : "Your instructor and authority decide what counts.")
             }
             ErrorText(text: error)
             Button {
@@ -101,6 +96,11 @@ struct SetupView: View {
         }
         .onAppear {
             if name.isEmpty { name = model.profile?.name ?? model.workspace?.user.display_name ?? "" }
+            if countryList.isEmpty {
+                countryList = Self.countries
+                let region = Locale.current.region?.identifier ?? "US"
+                if let c = countryList.first(where: { $0.code == region }) { country = c; licence = Self.licences(for: c.regime)[0] }
+            }
         }
     }
 
@@ -125,7 +125,7 @@ struct SetupView: View {
                 "regime": country.regime,
                 "authority": country.authority,
                 "licence": licence.id,
-                "goalHours": licence.hours,
+                "goalHours": licence.hours > 0 ? licence.hours : 45,
                 "airport": airport.trimmingCharacters(in: .whitespaces).uppercased(),
                 "openingMinutes": max(0, opening),
                 "complete": true,

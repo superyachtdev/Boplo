@@ -4015,6 +4015,11 @@
     if (embedded && (k === 'plan' || k === 'more')) { bridge({ type: k === 'plan' ? 'upgrade' : 'close' }); if (history.length > 1) history.back(); return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
     hideNativeSplash();
+    // the native app opens the simulator straight into a practice approach: ?embed=1&practice=CODE&rw=05&kind=short&wx=gusty&challenge=1#sim
+    if (embedded && k === 'sim' && !ui.embedPractice) {
+      const q = new URLSearchParams(location.search), code = q.get('practice');
+      if (code) { ui.embedPractice = true; const af = { code, name: q.get('name') || code, runway: q.get('rw') || '' }; setTimeout(() => openPractice(code, q.get('rw') || '', q.get('kind') || 'short', { weather: q.get('wx') || undefined, challenge: q.get('challenge') === '1', af }), 300); }
+    }
   }
   addEventListener('hashchange', () => {
     if (sheet.open) sheet.close(); const pl = document.getElementById('plot'); if (pl?.open) pl.close(); const sm = document.getElementById('sim'); if (sm?.open) sm.close();

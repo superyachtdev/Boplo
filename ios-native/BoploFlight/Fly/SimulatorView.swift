@@ -2,6 +2,8 @@ import SwiftUI
 
 /// The 3D simulator stays on the web (photo-real Google scenery), shown full screen inside the app.
 struct SimulatorView: View {
+    /// Defaults to the simulator page; a practice URL opens straight into an approach (leaderboard challenge).
+    var url: URL = WebFeature.sim.url
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
     @State private var loading = true
@@ -11,7 +13,7 @@ struct SimulatorView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Theme.night.ignoresSafeArea()
-            BoploWebView(url: WebFeature.sim.url, reloadToken: token, loading: $loading, failed: $failed) { message in
+            BoploWebView(url: url, reloadToken: token, loading: $loading, failed: $failed) { message in
                 switch message["type"] as? String {
                 case "upgrade":
                     dismiss()

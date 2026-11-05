@@ -22,7 +22,7 @@ extension View {
             case .ask: AskView()
             case .plan: PlanView()
             case .flight(let f): FlightDetailView(flight: f)
-            case .web(let feature): WebFeatureView(feature: feature)
+            case .web(let feature): ToolScreen(feature: feature)
             case .trackMap: TrackMapView()
             case .analytics: AnalyticsView()
             }
@@ -38,6 +38,29 @@ extension View {
                 }
                 .accessibilityLabel("Log a flight")
             }
+        }
+    }
+}
+
+/// Every training and planning tool is native; only the 3D simulator stays on the web.
+struct ToolScreen: View {
+    let feature: WebFeature
+    var body: some View {
+        switch feature {
+        case .progress: TrainingProgressPage()
+        case .currency: CurrencyPage()
+        case .budget: BudgetPage()
+        case .radio: RadioPage()
+        case .weather: WeatherPage()
+        case .navlog: NavLogPage()
+        case .preflight: PreflightPage()
+        case .community: CommunityPage()
+        case .leaderboards: LeaderboardsPage()
+        case .school: SchoolPage()
+        case .checkride: CheckrideView()
+        case .map: TrackMapView()
+        case .analytics: AnalyticsView()
+        case .sim: WebFeatureView(feature: .sim)
         }
     }
 }

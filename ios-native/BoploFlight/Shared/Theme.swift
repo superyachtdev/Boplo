@@ -92,6 +92,8 @@ struct Page<Content: View>: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.cloud.ignoresSafeArea())
+        // The big title is in the page, so the bar stays empty (the title still names the back button).
+        .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) } }
     }
 }
 
