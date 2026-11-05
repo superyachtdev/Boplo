@@ -101,10 +101,13 @@ struct RadioScenarios {
             return faa ? "Centennial" : "Popham"
         }()
         let pc = Self.compact(place)
-        func re(_ label: String, _ needles: [String]) -> RadioScenario.Element { .init(label: label) { t in needles.contains { !$0.isEmpty && t.contains($0) } } }
+        let re: (String, [String]) -> RadioScenario.Element = { label, needles in
+            RadioScenario.Element(label: label) { t in needles.contains { !$0.isEmpty && t.contains($0) } }
+        }
+        let isFAA = model.regime == "faa"
         let csEl = re("Your callsign", [csC, abC, abReg, Self.compact(r)])
         let may = RadioScenario.Element(label: "MAYDAY three times") { t in t.components(separatedBy: "mayday").count - 1 >= 3 }
-        if faa {
+        if isFAA {
             scenarios = [
                 RadioScenario(id: "f-ctaf", title: "Position report at a non-towered airport", situation: "You’re on the left downwind for runway 28 at \(place), planning to land.", atc: "",
                               model: "\(place) traffic, \(type) \(cs), left downwind runway two eight, full stop, \(place).",
