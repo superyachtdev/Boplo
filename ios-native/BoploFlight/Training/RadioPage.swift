@@ -107,8 +107,9 @@ struct RadioScenarios {
         let isFAA = model.regime == "faa"
         let csEl = re("Your callsign", [csC, abC, abReg, Self.compact(r)])
         let may = RadioScenario.Element(label: "MAYDAY three times") { t in t.components(separatedBy: "mayday").count - 1 >= 3 }
+        let list: [RadioScenario]
         if isFAA {
-            scenarios = [
+            list = [
                 RadioScenario(id: "f-ctaf", title: "Position report at a non-towered airport", situation: "You’re on the left downwind for runway 28 at \(place), planning to land.", atc: "",
                               model: "\(place) traffic, \(type) \(cs), left downwind runway two eight, full stop, \(place).",
                               elements: [re("Starts with the airport and “traffic”", [pc + "traffic"]), csEl, re("Position: left downwind", ["leftdownwind"]), re("Runway 28", ["runway28", "28"]), re("Intentions (full stop or touch and go)", ["fullstop", "touchandgo", "land"]), .init(label: "Ends with the airport name") { $0.hasSuffix(pc) }]),
@@ -125,7 +126,7 @@ struct RadioScenarios {
                               elements: [may, csEl, re("Nature of the emergency", ["engine", "failure", "fire", "fuel"]), re("Intentions", ["forcedlanding", "landing", "land"]), re("Position", ["miles", "north", "south", "east", "west", "overhead"]), re("Altitude", ["feet", "altitude", "3500"]), re("Heading", ["heading"]), re("People on board", ["onboard", "pob", "souls"])])
             ]
         } else {
-            scenarios = [
+            list = [
                 RadioScenario(id: "u-check", title: "Radio check", situation: "You’ve just started up at \(place) and want to check your radio with \(place) Radio.", atc: "",
                               model: "\(place) Radio, \(cs), radio check.", reply: "\(cs), \(place) Radio, readability five.",
                               elements: [re("Station you’re calling", [pc + "radio", pc]), csEl, re("“Radio check”", ["radiocheck"])]),
@@ -141,6 +142,7 @@ struct RadioScenarios {
                               elements: [may, re("Station you’re calling", [pc, "radio", "information", "centre", "approach", "tower"]), csEl, re("Nature of the emergency", ["engine", "failure", "fire", "fuel"]), re("Intentions", ["forcedlanding", "landing", "land"]), re("Position", ["miles", "north", "south", "east", "west", "overhead"]), re("Level or altitude", ["feet", "altitude", "flightlevel", "2500"]), re("Heading", ["heading"]), re("Pilot qualification", ["studentpilot", "student", "ppl", "qualif"]), re("People on board", ["onboard", "pob"])])
             ]
         }
+        scenarios = list
     }
 }
 
