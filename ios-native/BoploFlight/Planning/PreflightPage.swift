@@ -108,8 +108,8 @@ struct PreflightPage: View {
             Labeled(label: "Registration") { TextField("e.g. G-ABCD", text: $reg).textInputAutocapitalization(.characters).boploField() }
             ForEach(Array(stations.enumerated()), id: \.offset) { _, s in
                 let id = s["id"] as? String ?? ""
-                let max = d(s["max"])
-                Labeled(label: "\(s["label"] as? String ?? id) (\(units))\(max.map { " · max \(Int($0))" } ?? "")") {
+                let maxLoad = d(s["max"])
+                Labeled(label: "\(s["label"] as? String ?? id) (\(units))\(maxLoad.map { " · max \(Int($0))" } ?? "")") {
                     TextField("0", text: Binding(get: { loads[id] ?? "" }, set: { loads[id] = $0 })).keyboardType(.decimalPad).boploField()
                 }
             }

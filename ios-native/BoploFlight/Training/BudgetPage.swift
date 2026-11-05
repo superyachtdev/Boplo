@@ -66,41 +66,46 @@ struct BudgetPage: View {
         let minH = Rules.licence(model.regime, p?.licence)?.minHours
         let recent = model.flights(inLast: 56)
         let perWeekRecentH = Double(recent.reduce(0) { $0 + $1.mins }) / 60 / 8
-        let costed = model.flights.compactMap { f in cost(f).map { (f, $0) } }
-        let spent = costed.reduce(0) { $0 + $1.1 }
-        let costedHours = Double(costed.reduce(0) { $0 + $1.0.mins }) / 60
+        let costed: [(Flight, Double)] = model.flights.compactMap { f -> (Flight, Double)? in
+            guard let c = cost(f) else { return nil }
+            return (f, c)
+        }
+        let spent: Double = costed.reduce(0.0) { $0 + $1.1 }
+        let costedHours: Double = Double(costed.reduce(0) { $0 + $1.0.mins }) / 60
         let perHour = !costed.isEmpty && costedHours > 0 ? spent / costedHours : (num(rateAircraft) + num(rateInstructor) * 0.6)
         let flPerWeek = Double(recent.count) / 8
         let avgLen = model.flights.isEmpty ? 1.1 : Double(model.flights.reduce(0) { $0 + $1.mins }) / Double(model.flights.count) / 60
-        let planned = ["Twice a week": 2.0, "Weekly": 1, "Monthly": 0.25, "Intensive course": 4][p?.frequency ?? ""] ?? 0
-        let perWeekFl = flPerWeek > 0 ? flPerWeek : (planned > 0 ? planned : 1)
+        let plannedMap: [String: Double] = ["Twice a week": 2, "Weekly": 1, "Monthly": 0.25, "Intensive course": 4]
+        let planned: Double = plannedMap[p?.frequency ?? ""] ?? 0
+        let perWeekFl: Double = flPerWeek > 0 ? flPerWeek : (planned > 0 ? planned : 1)
         let perWeekH = perWeekRecentH > 0 ? perWeekRecentH : perWeekFl * avgLen
         let factor = perWeekFl >= 1.8 ? 1.4 : perWeekFl >= 0.9 ? 1.65 : 1.9
         let typical = minH.map { Int((Double($0) * factor).rounded()) }
-        let goal = p?.goalHours ?? 0
+        let goal: Double = p?.goalHours ?? 0
         let target: Double?
         if basis == "min", let m = minH { target = Double(m) }
         else if basis == "goal", goal > 0 { target = goal }
         else if let t = typical { target = Double(t) }
         else if goal > 0 { target = goal }
         else { target = nil }
-        let extrasPaid = extras.filter(\.paid).reduce(0) { $0 + num($1.amount) }
-        let extrasDue = extras.filter { !$0.paid }.reduce(0) { $0 + num($1.amount) }
+        let extrasPaid: Double = extras.filter(\.paid).reduce(0.0) { $0 + num($1.amount) }
+        let extrasDue: Double = extras.filter { !$0.paid }.reduce(0.0) { $0 + num($1.amount) }
         let totalH = Double(model.totalMinutes) / 60
         let remainingH = target.map { max(0, $0 - totalH) }
         let remainingFly = remainingH.map { $0 * perHour }
         let projected = remainingFly.map { spent + extrasPaid + $0 + extrasDue }
-        let weeks = remainingH.flatMap { perWeekH > 0 ? $0 / perWeekH : nil }
+        let weeks: Double? = perWeekH > 0 ? remainingH.map { $0 / perWeekH } : nil
         let finish = weeks.map { Date().addingTimeInterval($0 * 7 * 86400) }
         let monthly = perWeekH * perHour * 4.345
         let budget = num(total)
-        let left = budget > 0 ? budget - spent - extrasPaid : nil
-        let runOut = left.flatMap { l in monthly > 0 ? (l <= 0 ? Date() : Date().addingTimeInterval(l / monthly * 30.44 * 86400)) : nil }
-        let short = budget > 0 ? projected.map { $0 - budget } : nil
-        var fast: (Int, Double, Int)? = nil
+        let left: Double? = budget > 0 ? budget - spent - extrasPaid : nil
+        var runOut: Date? = nil
+        if let l = left, monthly > 0 { runOut = l <= 0 ? Date() : Date().addingTimeInterval(l / monthly * 30.44 * 86400) }
+        let short: Double? = budget > 0 ? projected.map { $0 - budget } : nil
+        var fast: (hours: Int, save: Double, saveH: Int)? = nil
         if let m = minH, let t = typical, perWeekFl < 1.8 {
             let h = Int((Double(m) * 1.4).rounded())
-            fast = (h, Double(t - h) * perHour, t - h)
+            fast = (hours: h, save: Double(t - h) * perHour, saveH: t - h)
         }
         return Forecast(min: minH, typical: typical, target: target, perWeekFlights: perWeekFl, perWeekHours: perWeekH, perHour: perHour, spent: spent,
                         extrasPaid: extrasPaid, extrasDue: extrasDue, remainingH: remainingH, remainingFly: remainingFly, projected: projected, finish: finish,
@@ -204,7 +209,7 @@ struct BudgetPage: View {
     private func runway(_ fc: Forecast) -> some View {
         if fc.budget > 0, fc.hasRates {
             let recent = Array(model.sortedFlights.prefix(6))
-            let avgMin = recent.isEmpty ? 60 : Double(recent.reduce(0) { $0 + $1.mins }) / Double(recent.count)
+            let avgMin: Double = recent.isEmpty ? 60 : Double(recent.reduce(0) { $0 + $1.mins }) / Double(recent.count)
             let perLesson = fc.perHour * avgMin / 60
             let left = fc.budget - fc.spent - fc.extrasPaid - fc.extrasDue
             let lessons = perLesson > 0 ? max(0, Int(floor(left / perLesson))) : 0
@@ -307,14 +312,14 @@ struct BudgetPage: View {
     private func load() {
         guard !loaded else { return }
         let b = model.json("budget")
-        let t = (b["total"] as? NSNumber)?.doubleValue ?? 0
+        let t: Double = (b["total"] as? NSNumber)?.doubleValue ?? 0
         total = t > 0 ? t.clean : ""
         let ra = model.number("rateAircraft"), ri = model.number("rateInstructor")
         rateAircraft = ra > 0 ? ra.clean : ""
         rateInstructor = ri > 0 ? ri.clean : ""
         extras = ((b["extras"] as? [[String: Any]]) ?? []).map { x in
-            let a = (x["amt"] as? NSNumber)?.doubleValue ?? 0
-            return Extra(name: x["n"] as? String ?? "", amount: a > 0 ? a.clean : "", paid: x["paid"] as? Bool ?? false)
+            let a: Double = (x["amt"] as? NSNumber)?.doubleValue ?? 0
+            return Extra(name: (x["n"] as? String) ?? "", amount: a > 0 ? a.clean : "", paid: (x["paid"] as? Bool) ?? false)
         }
         DispatchQueue.main.async { loaded = true }
     }
