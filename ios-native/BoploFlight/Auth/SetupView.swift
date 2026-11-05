@@ -44,50 +44,73 @@ struct SetupView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text("A few details and your desk is ready. You can change any of this later.")
-                        .foregroundStyle(.secondary)
-                }
-                Section("You") {
-                    TextField("Your name", text: $name)
+        Page(title: "Set up your desk", subtitle: "A few details and your desk is ready. You can change any of this later.") {
+            Tile {
+                TileHead("You")
+                Labeled(label: "Your name") {
+                    TextField("First and last name", text: $name)
                         .textContentType(.name)
-                }
-                Section("Where you train") {
-                    Picker("Country", selection: $country) {
-                        ForEach(Self.countries) { Text($0.name).tag($0) }
-                    }
-                    .onChange(of: country) { _, value in licence = Self.licences(for: value.regime)[0] }
-                    LabeledContent("Authority", value: country.authority)
-                    TextField("Home airfield (e.g. KSEE or EGHP)", text: $airport)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                }
-                Section {
-                    Picker("Training for", selection: $licence) {
-                        ForEach(Self.licences(for: country.regime), id: \.self) { Text($0.label).tag($0) }
-                    }
-                    TextField("Hours flown before Boplo (optional)", text: $hoursSoFar)
-                        .keyboardType(.decimalPad)
-                } header: { Text("Your licence") } footer: {
-                    Text("Published minimum: \(licence.hours) hours. Your instructor and authority decide what counts.")
-                }
-                Section {
-                    ErrorText(text: error)
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        HStack { Spacer(); if busy { ProgressView() } else { Text("Open my desk").bold() }; Spacer() }
-                    }
-                    .disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .boploField()
                 }
             }
-            .navigationTitle("Set up your desk")
+            Tile {
+                TileHead("Where you train")
+                Labeled(label: "Country") {
+                    Menu {
+                        Picker("Country", selection: $country) {
+                            ForEach(Self.countries) { Text($0.name).tag($0) }
+                        }
+                    } label: { pickerLabel(country.name) }
+                }
+                .onChange(of: country) { _, value in licence = Self.licences(for: value.regime)[0] }
+                Labeled(label: "Licensing authority") {
+                    Text(country.authority).font(.archivo(15.5, .medium)).foregroundStyle(Theme.ink2)
+                }
+                Labeled(label: "Home airfield") {
+                    TextField("e.g. KSEE or EGHP", text: $airport)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .boploField()
+                }
+            }
+            Tile {
+                TileHead("Your licence")
+                Labeled(label: "Training for") {
+                    Menu {
+                        Picker("Training for", selection: $licence) {
+                            ForEach(Self.licences(for: country.regime), id: \.self) { Text($0.label).tag($0) }
+                        }
+                    } label: { pickerLabel(licence.label) }
+                }
+                Labeled(label: "Hours flown before Boplo (optional)") {
+                    TextField("0", text: $hoursSoFar)
+                        .keyboardType(.decimalPad)
+                        .boploField()
+                }
+                Footnote(text: "Published minimum: \(licence.hours) hours. Your instructor and authority decide what counts.")
+            }
+            ErrorText(text: error)
+            Button {
+                Task { await save() }
+            } label: {
+                HStack { if busy { ProgressView().tint(.white) }; Text("Open my desk") }
+            }
+            .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+            .disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
+            .padding(.top, 4)
         }
         .onAppear {
             if name.isEmpty { name = model.profile?.name ?? model.workspace?.user.display_name ?? "" }
         }
+    }
+
+    private func pickerLabel(_ text: String) -> some View {
+        HStack {
+            Text(text).font(.archivo(16)).foregroundStyle(Theme.ink).lineLimit(1)
+            Spacer()
+            Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.ink3)
+        }
+        .boploField()
     }
 
     private func save() async {

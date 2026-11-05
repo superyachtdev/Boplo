@@ -30,60 +30,129 @@ struct FlightFormView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Flight") {
-                    DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
-                    HStack {
-                        TextField("From", text: $departure)
-                        Image(systemName: "arrow.right").foregroundStyle(.secondary)
-                        TextField("To", text: $arrival)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Tile {
+                        TileHead("Flight")
+                        DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
+                            .font(.archivo(15.5, .medium))
+                        HStack(spacing: 8) {
+                            Labeled(label: "From") { codeField("EGHP", text: $departure) }
+                            Image(systemName: "arrow.right").foregroundStyle(Theme.ink3).padding(.top, 22)
+                            Labeled(label: "To") { codeField("EGHP", text: $arrival) }
+                        }
+                        Labeled(label: "Role") {
+                            HStack(spacing: 4) {
+                                ForEach([("dual", "Dual"), ("solo", "Solo"), ("pic", "PIC")], id: \.0) { id, label in
+                                    Button { withAnimation(.snappy) { role = id } } label: {
+                                        Text(label).font(.archivo(14.5, .semibold)).frame(maxWidth: .infinity).frame(height: 38)
+                                            .foregroundStyle(role == id ? .white : Theme.ink2)
+                                            .background(role == id ? Theme.ink : .clear, in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(4)
+                            .background(Theme.well, in: Capsule())
+                        }
                     }
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    Picker("Role", selection: $role) {
-                        Text("Dual").tag("dual"); Text("Solo").tag("solo"); Text("PIC").tag("pic")
+                    Tile {
+                        TileHead(title: "Time and landings") {
+                            Text(hoursText(hours * 60 + minutes)).font(Theme.display(26)).monospacedDigit()
+                        }
+                        counter("Hours", value: $hours, range: 0...24, step: 1)
+                        counter("Minutes", value: $minutes, range: 0...55, step: 5)
+                        Divider().overlay(Theme.hair)
+                        counter("Landings", value: $landings, range: 0...100, step: 1)
+                        counter("Night landings", value: $nightLandings, range: 0...max(0, landings), step: 1)
                     }
-                    .pickerStyle(.segmented)
+                    Tile {
+                        TileHead("Aircraft and lesson")
+                        Labeled(label: "Aircraft") { TextField("e.g. PA-28 Warrior", text: $aircraft).boploField() }
+                        Labeled(label: "Registration") {
+                            TextField("G-BOPL", text: $registration).textInputAutocapitalization(.characters).autocorrectionDisabled().boploField()
+                        }
+                        Labeled(label: "Instructor") { TextField("Name", text: $instructor).textContentType(.name).boploField() }
+                        Labeled(label: "Lesson") { TextField("e.g. Lesson 12 · Navigation", text: $lesson).boploField() }
+                    }
+                    Tile {
+                        TileHead("Debrief")
+                        Labeled(label: "One thing that went well") { TextField("Something to keep doing", text: $win).boploField() }
+                        Labeled(label: "Notes") {
+                            TextField("What you practised, what to work on next", text: $notes, axis: .vertical)
+                                .lineLimit(4...10)
+                                .padding(.vertical, 12)
+                                .boploField()
+                        }
+                    }
+                    if !track.isEmpty || !(editing?.track.isEmpty ?? true) {
+                        let pts = track.isEmpty ? (editing?.track ?? []) : track
+                        Tile(spacing: 10) {
+                            TileHead(title: "Track") { Text("\(pts.count) GPS points").font(.archivo(13)).foregroundStyle(Theme.ink3) }
+                            if pts.count >= 2 {
+                                TrackPreview(points: pts).frame(height: 160).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                    }
+                    ErrorText(text: error)
+                    Button { Task { await save() } } label: {
+                        HStack { if busy { ProgressView().tint(.white) }; Text(editing == nil ? "Save flight" : "Save changes") }
+                    }
+                    .buttonStyle(.pill(.blue, height: 52, full: true, spark: true))
+                    .disabled(busy)
                 }
-                Section("Time and landings") {
-                    Stepper("Hours: \(hours)", value: $hours, in: 0...24)
-                    Stepper("Minutes: \(minutes)", value: $minutes, in: 0...55, step: 5)
-                    Stepper("Landings: \(landings)", value: $landings, in: 0...100)
-                    Stepper("Night landings: \(nightLandings)", value: $nightLandings, in: 0...max(0, landings))
-                }
-                Section("Aircraft and lesson") {
-                    TextField("Aircraft (e.g. PA-28 Warrior)", text: $aircraft)
-                    TextField("Registration", text: $registration)
-                        .textInputAutocapitalization(.characters)
-                    TextField("Instructor", text: $instructor)
-                    TextField("Lesson", text: $lesson)
-                }
-                Section("Debrief") {
-                    TextField("One thing that went well", text: $win)
-                    TextField("Notes", text: $notes, axis: .vertical).lineLimit(3...8)
-                }
-                if !track.isEmpty {
-                    Section { Label("\(track.count) GPS points from your recording", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
-                }
-                Section { ErrorText(text: error) }
+                .padding(16)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Theme.cloud.ignoresSafeArea())
             .navigationTitle(editing == nil ? "Log a flight" : "Edit flight")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(busy ? "Saving…" : "Save") { Task { await save() } }.disabled(busy)
+                    Button(busy ? "Saving…" : "Save") { Task { await save() } }.disabled(busy).fontWeight(.semibold)
                 }
             }
         }
         .onAppear(perform: load)
     }
 
+    private func codeField(_ prompt: String, text: Binding<String>) -> some View {
+        TextField(prompt, text: text)
+            .textInputAutocapitalization(.characters)
+            .autocorrectionDisabled()
+            .font(.archivo(17, .semibold))
+            .boploField()
+    }
+
+    private func counter(_ label: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {
+        HStack {
+            Text(label).font(.archivo(15.5))
+            Spacer()
+            HStack(spacing: 0) {
+                Button { value.wrappedValue = max(range.lowerBound, value.wrappedValue - step) } label: {
+                    Image(systemName: "minus").frame(width: 40, height: 36)
+                }
+                .disabled(value.wrappedValue <= range.lowerBound)
+                Text("\(value.wrappedValue)").font(.archivo(17, .semibold)).monospacedDigit().frame(minWidth: 34)
+                Button { value.wrappedValue = min(range.upperBound, value.wrappedValue + step) } label: {
+                    Image(systemName: "plus").frame(width: 40, height: 36)
+                }
+                .disabled(value.wrappedValue >= range.upperBound)
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(Theme.ink)
+            .background(Theme.well, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.hair))
+            .sensoryFeedback(.selection, trigger: value.wrappedValue)
+        }
+    }
+
     private func load() {
         guard !loaded else { return }
         loaded = true
         if let f = editing {
-            if let d = f.day {
+            if let d = Day.date(f.date) {
                 var utc = Calendar(identifier: .gregorian); utc.timeZone = TimeZone(identifier: "UTC")!
                 date = Calendar.current.date(from: utc.dateComponents([.year, .month, .day], from: d)) ?? Date()
             }
@@ -95,12 +164,20 @@ struct FlightFormView: View {
             instructor = f.instructor ?? ""; lesson = f.lesson ?? ""
             win = f.win ?? ""; notes = f.notes ?? ""
         } else {
-            departure = model.profile?.airport ?? ""
+            departure = Self.code(model.profile?.airport)
             arrival = departure
             aircraft = model.profile?.aircraft ?? ""
+            registration = model.profile?.registration ?? ""
             lesson = model.profile?.nextLesson ?? ""
             if let m = recordedMinutes, m > 0 { hours = m / 60; minutes = m % 60 }
         }
+    }
+
+    /// "EGHP · Popham" → "EGHP"
+    static func code(_ airport: String?) -> String {
+        let a = (airport ?? "").trimmingCharacters(in: .whitespaces)
+        let first = a.components(separatedBy: " · ").first ?? a
+        return (first.split(separator: " ").first.map(String.init) ?? first).uppercased()
     }
 
     private func save() async {
@@ -121,7 +198,7 @@ struct FlightFormView: View {
         let points = editing?.points ?? track
         if !points.isEmpty {
             payload["points"] = points.prefix(2000).map { ["lat": $0.lat, "lng": $0.lng] }
-            payload["routeKind"] = "track"
+            payload["routeKind"] = editing?.routeKind ?? "track"
         }
         if let cost = editing?.cost { payload["cost"] = cost }
         do {

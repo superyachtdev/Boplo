@@ -1518,3 +1518,14 @@ body.ios-app .ios-shell.ios-fade .ios-scroll{animation:ios-fade .28s var(--ease)
 @media (prefers-reduced-motion:reduce){
   body.ios-app .ios-shell .ios-scroll,body.ios-app .skel i,body.ios-app #sheet[open],body.ios-app .ios-inline{animation:none !important;transition:none !important}
 }
+
+/* ---------- embedded in the native iPhone app (?embed=1): the app draws the title, tabs and back button ---------- */
+html.embed,html.embed body{background:var(--cloud)}
+html.embed .bradio{display:none!important}
+.embed-shell{min-height:100vh;background:var(--cloud)}
+.embed-shell .main{padding:0;margin:0}
+.embed-shell .page{max-width:none;padding:12px 16px calc(32px + env(safe-area-inset-bottom))}
+.embed-shell .grid{gap:12px}
+.embed-shell .grid>*{grid-column:1/-1}
+.embed-sub{color:var(--ink-3);font-size:14.5px;margin:0 2px 14px}
+.embed-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}

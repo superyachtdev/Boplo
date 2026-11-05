@@ -17,21 +17,24 @@ struct SignInView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Theme.deep, Theme.night], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-            VStack(spacing: 0) {
+            ZStack {
+                RadialGradient(colors: [Color(hex: 0x0B1E4E), Color(hex: 0x040B22), Theme.night], center: UnitPoint(x: 0.8, y: 0), startRadius: 0, endRadius: 700)
+                Contours(seed: 0).opacity(0.55)
+            }
+            .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                BoploWordmark(height: 30)
+                    .padding(.top, 12)
                 Spacer()
-                VStack(spacing: 14) {
-                    BoploWordmark(color: .white)
+                VStack(alignment: .leading, spacing: 14) {
                     Text("Your flying, in one place.")
-                        .font(Theme.display(26))
+                        .font(Theme.display(44))
+                        .tracking(-1.5)
                         .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                    Text("Prep every lesson, log every flight and see exactly what’s left.")
-                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Prep every lesson, log every flight and see exactly what’s left before your licence.")
+                        .font(.archivo(16))
                         .foregroundStyle(Theme.mist)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
                 }
                 Spacer()
                 VStack(spacing: 12) {
@@ -40,14 +43,14 @@ struct SignInView: View {
                     case .email: emailForm
                     case .code: codeForm
                     }
-                    if let note { Text(note).font(.footnote).foregroundStyle(Theme.ice).multilineTextAlignment(.center) }
-                    if let error { Text(error).font(.footnote).foregroundStyle(Color(red: 1, green: 0.55, blue: 0.55)).multilineTextAlignment(.center) }
+                    if let note { Text(note).font(.archivo(13.5)).foregroundStyle(Theme.ice).multilineTextAlignment(.center) }
+                    if let error { Text(error).font(.archivo(13.5, .medium)).foregroundStyle(Color(hex: 0xFF8C8C)).multilineTextAlignment(.center) }
                 }
-                .padding(.horizontal, 24)
                 legal
-                    .padding(.top, 20)
-                    .padding(.bottom, 12)
+                    .padding(.top, 18)
+                    .padding(.bottom, 8)
             }
+            .padding(.horizontal, 24)
         }
         .preferredColorScheme(.dark)
     }
@@ -61,18 +64,15 @@ struct SignInView: View {
             }
             .signInWithAppleButtonStyle(.white)
             .frame(height: 52)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(Capsule())
             .disabled(busy)
 
             Button {
                 error = nil; note = nil; step = .email; focused = true
             } label: {
                 Label("Continue with email", systemImage: "envelope")
-                    .frame(maxWidth: .infinity, minHeight: 52)
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .buttonStyle(GhostPillStyle())
         }
     }
 
@@ -86,15 +86,15 @@ struct SignInView: View {
                 .focused($focused)
                 .submitLabel(.send)
                 .onSubmit { Task { await sendCode() } }
-                .modifier(FieldStyle())
+                .foregroundStyle(.white)
+                .boploField(dark: true)
             Button { Task { await sendCode() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text("Email me a sign-in code") }
-                    .frame(maxWidth: .infinity, minHeight: 52)
             }
-            .buttonStyle(.borderedProminent)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .buttonStyle(.pill(.blue, height: 52, full: true))
             .disabled(busy)
             Button("Back") { step = .choose; error = nil; note = nil }
+                .font(.archivo(14.5, .medium))
                 .foregroundStyle(Theme.mist)
         }
     }
@@ -105,9 +105,10 @@ struct SignInView: View {
                 .textContentType(.oneTimeCode)
                 .keyboardType(.numberPad)
                 .focused($focused)
-                .font(.title2.monospacedDigit())
                 .multilineTextAlignment(.center)
-                .modifier(FieldStyle())
+                .foregroundStyle(.white)
+                .boploField(dark: true)
+                .font(.archivo(24, .semibold).monospacedDigit())
                 .onChange(of: code) { _, value in
                     let digits = String(value.filter(\.isNumber).prefix(6))
                     if digits != value { code = digits }
@@ -115,19 +116,18 @@ struct SignInView: View {
                 }
             Button { Task { await verifyCode() } } label: {
                 HStack { if busy { ProgressView().tint(.white) }; Text("Sign in") }
-                    .frame(maxWidth: .infinity, minHeight: 52)
             }
-            .buttonStyle(.borderedProminent)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .buttonStyle(.pill(.blue, height: 52, full: true))
             .disabled(busy || code.count != 6)
             Button("Use a different email") { step = .email; code = ""; error = nil; note = nil }
+                .font(.archivo(14.5, .medium))
                 .foregroundStyle(Theme.mist)
         }
     }
 
     private var legal: some View {
         Text("By continuing you agree to the [Terms](https://boplo.app/terms.html) and [Privacy policy](https://boplo.app/privacy.html).")
-            .font(.caption)
+            .font(.archivo(12))
             .foregroundStyle(Theme.mist)
             .tint(Theme.ice)
             .multilineTextAlignment(.center)
@@ -191,13 +191,14 @@ struct SignInView: View {
     }
 }
 
-struct FieldStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.18)))
+/// Translucent white pill on dark screens (the web's .btn-ghost).
+struct GhostPillStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.archivo(15.5, .semibold))
             .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(Color.white.opacity(configuration.isPressed ? 0.14 : 0.07), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.18)))
     }
 }

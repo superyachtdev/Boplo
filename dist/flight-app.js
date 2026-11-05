@@ -6,6 +6,10 @@
   const sheet = document.getElementById('sheet');
   const toastEl = document.getElementById('toast');
   const preview = new URLSearchParams(location.search).get('preview') === '1';
+  // ?embed=1: one page shown inside the native iPhone app, which draws its own navigation and handles purchases
+  const embedded = new URLSearchParams(location.search).get('embed') === '1';
+  const bridge = msg => { try { window.webkit?.messageHandlers?.boplo?.postMessage(msg); } catch (e) { } };
+  if (embedded) document.documentElement.classList.add('embed');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------------- helpers ---------------- */
@@ -197,6 +201,7 @@
 
   /* ---------------- sign in ---------------- */
   function auth(notice = '') {
+    if (embedded) bridge({ type: 'signedOut' });
     document.title = 'Sign in · Boplo Flight';
     root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
       <div class="auth-copy">
@@ -552,6 +557,7 @@
 
   /* ---------------- shell ---------------- */
   function shell(page, head, body) {
+    if (embedded) { embedShell(page, head, body); return; }
     if (nativeApp()) { iosShell(page, head, body); return; }
     const p = state.profile;
     document.title = `${head.title.replace(/<[^>]+>/g, '')} · Boplo Flight`;
@@ -635,6 +641,21 @@
         armed = false;
       });
     }
+  }
+  function embedShell(page, head, body) {
+    const plain = String(head.title || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    document.title = plain;
+    root.innerHTML = `<div class="shell embed-shell"><main class="main"><div class="page">
+        ${head.sub ? `<p class="embed-sub">${head.sub}</p>` : ''}
+        ${head.actions ? `<div class="head-actions embed-actions">${head.actions}</div>` : ''}
+        ${body}
+      </div></main></div>`;
+    bridge({ type: 'page', page, title: plain });
+    $$('[data-add]').forEach(b => b.onclick = () => bridge({ type: 'logFlight' }));
+    $$('[data-record]').forEach(b => b.onclick = () => bridge({ type: 'record' }));
+    $$('[data-flyagain]').forEach(b => b.onclick = () => { const f = state.flights.find(x => x.id === b.dataset.flyagain); if (f) openSim(f, 'replay'); });
+    $$('[data-logout]').forEach(b => b.remove());
+    $$('[data-flight]').forEach(b => b.onclick = () => bridge({ type: 'flight', id: b.dataset.flight }));
   }
   let iosRefreshing = false;
   async function iosRefresh() {
@@ -3064,6 +3085,7 @@
     </section>`;
   }
   function upgradeSheet(message) {
+    if (embedded) { bridge({ type: 'upgrade', message }); return; }
     const b = B();
     sheet.innerHTML = `<div class="sheet-head"><h2 class="display" id="sheet-title">Part of Advanced</h2><button type="button" class="icon-btn" data-close aria-label="Close">${ico('close')}</button></div>
       <div class="sheet-body"><p>${esc(message)}</p><ul class="check-list">${ADV_FEATURES.slice(0, 5).map(([t]) => `<li>${esc(t)}</li>`).join('')}</ul></div>
@@ -3989,7 +4011,8 @@
     iosSignedOut(false);
     if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
     if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
-    const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; } if (k !== 'study') quiz = null;
+    const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; }
+    if (embedded && (k === 'plan' || k === 'more')) { bridge({ type: k === 'plan' ? 'upgrade' : 'close' }); if (history.length > 1) history.back(); return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
     hideNativeSplash();
   }
@@ -4052,7 +4075,14 @@
   }
 
   /* ---------------- start ---------------- */
-  if ('serviceWorker' in navigator && !preview && location.protocol === 'https:' && !nativeApp()) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
+  if (embedded) document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (href === '#plan') { e.preventDefault(); if (sheet.open) sheet.close(); bridge({ type: 'upgrade' }); }
+    else if (href === '#more' || href === '/' || href === '/index.html') { e.preventDefault(); bridge({ type: 'close' }); }
+  }, true);
+  if ('serviceWorker' in navigator && !preview && !embedded && location.protocol === 'https:' && !nativeApp()) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => { }));
   if (nativeApp()) document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('a[href]');
     if (!a) return;

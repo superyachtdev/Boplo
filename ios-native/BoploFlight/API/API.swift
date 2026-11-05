@@ -83,4 +83,49 @@ final class API {
     func object(_ path: String) async throws -> [String: Any] {
         (try JSONSerialization.jsonObject(with: try await send(path)) as? [String: Any]) ?? [:]
     }
+
+    /// Streams Ask Boplo's answer (server-sent events of {"t": text} chunks), calling `onText` with the text so far.
+    func stream(_ path: String, body: [String: Any], onText: @escaping @MainActor (String) -> Void) async throws -> String {
+        var request = URLRequest(url: URL(string: path, relativeTo: API.origin)!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("BoploFlight-iOS", forHTTPHeaderField: "X-Boplo-Client")
+        request.setValue(API.origin.absoluteString, forHTTPHeaderField: "Origin")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let bytes: URLSession.AsyncBytes, response: URLResponse
+        do {
+            (bytes, response) = try await session.bytes(for: request)
+        } catch {
+            throw APIError(message: "Can’t reach Boplo. Check your connection and try again.", status: 0)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let type = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
+        if !(200..<300).contains(status) || !type.contains("event-stream") {
+            var data = Data()
+            for try await b in bytes { data.append(b) }
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+            if status == 401 { NotificationCenter.default.post(name: .boploSignedOut, object: nil) }
+            throw APIError(message: message ?? "Boplo couldn’t answer just now. Try again in a moment.", status: status)
+        }
+        var text = "", failure: String?
+        var last = Date.distantPast
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }
+            let json = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] else { continue }
+            if let t = obj["t"] as? String { text += t }
+            if let e = obj["error"] as? String { failure = e }
+            if Date().timeIntervalSince(last) > 0.06 {
+                last = Date()
+                let snapshot = text
+                await onText(snapshot)
+            }
+        }
+        let final = text
+        await onText(final)
+        if text.isEmpty { throw APIError(message: failure ?? "Boplo didn’t answer. Try asking again.", status: 0) }
+        return text
+    }
 }

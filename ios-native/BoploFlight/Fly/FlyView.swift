@@ -7,18 +7,17 @@ struct FlyView: View {
     @State private var saving = false
     @State private var showSim = false
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    recorderCard
-                    simCard
-                }
-                .padding(16)
+            Page(title: "Fly") {
+                simCard
+                recorderCard
+                tools
             }
-            .background(Theme.cloud.ignoresSafeArea())
-            .navigationTitle("Fly")
+            .logFlightButton(model)
+            .boploDestinations()
             .sheet(isPresented: $saving, onDismiss: { recorder.reset() }) {
                 FlightFormView(track: recorder.points, recordedMinutes: recorder.elapsedMinutes)
             }
@@ -26,10 +25,22 @@ struct FlyView: View {
         }
     }
 
+    private var tools: some View {
+        VStack(spacing: 0) {
+            ForEach(Array([WebFeature.navlog, .preflight, .weather, .leaderboards].enumerated()), id: \.element) { i, f in
+                if i > 0 { Divider().overlay(Theme.hair).padding(.leading, 58) }
+                NavigationLink(value: Route.web(f)) { MenuRow(icon: f.icon, title: f.title, subtitle: f.subtitle) }
+            }
+        }
+        .buttonStyle(.plain)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous).strokeBorder(Theme.hair))
+    }
+
     private var recorderCard: some View {
-        Card {
+        Tile {
             HStack {
-                Text("Record a flight").font(.headline)
+                Text("Record a flight").font(.archivo(17, .semibold))
                 Spacer()
                 if recorder.isRecording {
                     Label("Recording", systemImage: "record.circle")
@@ -45,8 +56,8 @@ struct FlyView: View {
                         .stroke(Theme.electric, lineWidth: 4)
                 }
             }
-            .mapStyle(.hybrid(elevation: .realistic))
-            .frame(height: 240)
+            .mapStyle(.imagery(elevation: .realistic))
+            .frame(height: 220)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             if recorder.isRecording || !recorder.points.isEmpty {
@@ -59,62 +70,49 @@ struct FlyView: View {
                 }
             } else {
                 Text("Start before you taxi and stop after you shut down. The track keeps recording with the screen locked, then saves to your logbook.")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
             }
 
             ErrorText(text: recorder.message)
 
             if recorder.isRecording {
-                Button(role: .destructive) {
+                Button {
                     recorder.stop()
                     saving = true
                 } label: {
-                    Label("Stop and save", systemImage: "stop.fill").frame(maxWidth: .infinity, minHeight: 44)
+                    Label("Stop and save", systemImage: "stop.fill")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .buttonStyle(.pill(.ink, height: 50, full: true))
             } else {
                 Button {
                     recorder.start()
                 } label: {
-                    Label("Start recording", systemImage: "record.circle").frame(maxWidth: .infinity, minHeight: 44)
+                    Label("Start recording", systemImage: "record.circle")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.pill(.blue, height: 50, full: true))
             }
-            Text("GPS altitude is approximate. Use your instruments, not your phone, to fly.")
-                .font(.caption2).foregroundStyle(.secondary)
+            Footnote(text: "GPS altitude is approximate. Use your instruments, not your phone, to fly.")
         }
     }
 
     private var simCard: some View {
-        Button { showSim = true } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Simulator").font(.caption.weight(.semibold)).foregroundStyle(Theme.ice)
-                Text("Fly the approach before you fly it.")
-                    .font(Theme.display(24)).foregroundStyle(.white).multilineTextAlignment(.leading)
-                Text("Short finals and circuits over real 3D scenery.")
-                    .font(.subheadline).foregroundStyle(Theme.mist)
-                HStack {
-                    Spacer()
-                    Label("Open simulator", systemImage: "arrow.right")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(.white, in: Capsule())
-                        .foregroundStyle(Theme.ink)
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LinearGradient(colors: [Theme.deep, Theme.night], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        DarkTile(spacing: 10, seed: 1.3) {
+            Text("Simulator").font(.archivo(13, .semibold)).foregroundStyle(Theme.ice)
+            Text("Fly the approach before you fly it.")
+                .font(Theme.display(32)).tracking(-1).foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Short finals, circuits and take-offs at any airfield, over real 3D scenery. Free includes two short finals a day.")
+                .font(.archivo(14.5)).foregroundStyle(Theme.mist)
+            Button { showSim = true } label: { Text("Open simulator") }
+                .buttonStyle(.pill(.light, height: 48, spark: true))
+                .padding(.top, 4)
         }
-        .buttonStyle(.plain)
     }
 
     private func readout(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.bold()).monospacedDigit()
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.archivo(20, .semibold)).monospacedDigit()
+            Text(label).font(.archivo(12)).foregroundStyle(Theme.ink3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
