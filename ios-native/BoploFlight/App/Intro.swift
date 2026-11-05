@@ -332,6 +332,9 @@ struct LaunchIntro: View {
 struct TakeoffSequence: View {
     let name: String
     let firstTime: Bool
+    var signedOut = false
+    /// Wait on the dark runway (up to 1.5 s) until the app knows who you are, so the clearance can use your name.
+    var hold = false
     /// The screen is fully cloud: mount the desk underneath now.
     var onCovered: () -> Void
     var onFinish: () -> Void
@@ -342,6 +345,7 @@ struct TakeoffSequence: View {
     @State private var finished = false
     @State private var rotated = false
     @State private var lastBump: Double = 0
+    @State private var started = false
 
     // Beats, in seconds.
     private var roll: Double { 1.35 }
@@ -352,7 +356,7 @@ struct TakeoffSequence: View {
 
     var body: some View {
         TimelineView(.animation) { tl in
-            let t = tl.date.timeIntervalSince(start)
+            let t = started ? tl.date.timeIntervalSince(start) : 0
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, size in
                     var s = RunwayState()
@@ -380,13 +384,25 @@ struct TakeoffSequence: View {
         .contentShape(Rectangle())
         .onTapGesture {
             // Tap to skip straight to the climb through cloud.
+            guard started else { return }
             let t = Date().timeIntervalSince(start)
             if t < cloudIn - 0.3 { start = Date().addingTimeInterval(-(cloudIn - 0.3)) }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isStaticText)
         .statusBarHidden(true)
-        .onAppear { start = Date() }
+        .onAppear { if !hold { begin() } }
+        .onChange(of: hold) { _, h in if !h { begin() } }
+        .task {
+            try? await Task.sleep(for: .seconds(1.5))
+            begin()
+        }
+    }
+
+    private func begin() {
+        guard !started else { return }
+        start = Date()
+        started = true
     }
 
     private func clearance(_ t: Double) -> some View {
@@ -410,7 +426,7 @@ struct TakeoffSequence: View {
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
-            Text(firstTime ? "Your desk is set up. Next lesson, logbook and study are waiting above the cloud." : "Welcome back. Your desk is just above the cloud.")
+            Text(signedOut ? "Sign in and your desk is waiting just above the cloud." : firstTime ? "Your desk is set up. Next lesson, logbook and study are waiting above the cloud." : "Welcome back. Your desk is just above the cloud.")
                 .font(.archivo(16))
                 .foregroundStyle(Theme.mist)
                 .fixedSize(horizontal: false, vertical: true)

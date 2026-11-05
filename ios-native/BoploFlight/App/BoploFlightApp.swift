@@ -40,36 +40,32 @@ enum Appearance {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
-    /// The cold-launch intro is showing.
-    @State private var intro = true
-    /// The app under the intro is mounted (it appears as the intro lifts away).
-    @State private var revealed = false
-    /// The take-off has reached white-out, so the desk can mount underneath.
+    /// Every cold launch plays the take-off too.
+    @State private var coldLaunch = true
+    /// The take-off has reached white-out, so the app can mount underneath.
     @State private var aboveCloud = false
+
+    private var playing: Bool { coldLaunch || model.takeoff }
 
     var body: some View {
         ZStack {
-            if revealed {
+            if !playing || aboveCloud {
                 content
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
             } else {
+                // Matches the launch screen, so the first frame never flashes.
                 Theme.night.ignoresSafeArea()
             }
-            if model.takeoff {
-                TakeoffSequence(name: model.profile?.firstName ?? "", firstTime: model.takeoffFirstTime,
+            if playing {
+                TakeoffSequence(name: model.profile?.firstName ?? "",
+                                firstTime: model.takeoffFirstTime && !coldLaunch,
+                                signedOut: model.phase == .signedOut,
+                                hold: coldLaunch && model.phase == .loading,
                                 onCovered: { aboveCloud = true },
-                                onFinish: { model.takeoff = false; aboveCloud = false })
+                                onFinish: { coldLaunch = false; model.takeoff = false; aboveCloud = false })
                     .transition(.opacity)
                     .zIndex(2)
             }
-            if intro {
-                LaunchIntro(ready: model.phase != .loading,
-                            onReveal: { withAnimation(.spring(response: 0.75, dampingFraction: 0.9)) { revealed = true } },
-                            onFinish: { intro = false })
-                    .zIndex(3)
-            }
         }
-        .animation(.easeInOut(duration: 0.3), value: model.takeoff)
     }
 
     @ViewBuilder
@@ -83,13 +79,7 @@ struct RootView: View {
             case .setup:
                 SetupView()
             case .ready:
-                if model.takeoff && !aboveCloud {
-                    // Hold the desk back until the climb reaches cloud, so it arrives fresh (the ring fills as you break out).
-                    Theme.night.ignoresSafeArea()
-                } else {
-                    MainTabs()
-                        .transition(.opacity)
-                }
+                MainTabs()
             }
         }
         .animation(.easeInOut(duration: 0.25), value: model.phase)
