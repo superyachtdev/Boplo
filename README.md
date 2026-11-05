@@ -65,6 +65,7 @@ Names only. Values never go in the repo or in chat.
 - **AI:** `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (also the fallback when Claude is down), `OPENAI_API_KEY` (logbook scan), `AI_MODEL`, `AI_PROVIDER`
 - **AI spend limits:** `AI_DAILY_FREE` (default 3 a person), `AI_DAILY_ADV` (40), `AI_GLOBAL_DAILY` (3000 calls a day across everyone), `AI_OFF` (any value switches Ask off)
 - **Maps and weather:** `GOOGLE_MAPS_BROWSER_KEY`, `OPEN_METEO_API_KEY`
+- **Live traffic:** `ADSB_API_KEY` (FlyItalyADSB, free plan: 500 km radius, 300,000 calls a month), `ADSB_DAILY` (daily ceiling on upstream calls, default 9,500). Each area is cached for 15 s and shared by everyone viewing it.
 - **Monitoring:** `SENTRY_DSN`
 
 ## Monitoring

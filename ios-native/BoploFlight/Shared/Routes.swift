@@ -12,6 +12,7 @@ enum Route: Hashable {
     case analytics
     case appIcon
     case aiFeatures
+    case liveTraffic
 }
 
 extension View {
@@ -29,6 +30,7 @@ extension View {
             case .analytics: AnalyticsView()
             case .appIcon: AppIconPage()
             case .aiFeatures: AIFeaturesPage()
+            case .liveTraffic: LiveTrafficPage()
             }
         }
     }

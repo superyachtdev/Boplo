@@ -7,6 +7,7 @@ struct FlyView: View {
     @State private var saving = false
     @State private var showSim = false
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var traffic = LiveTraffic()
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -27,6 +28,10 @@ struct FlyView: View {
 
     private var tools: some View {
         VStack(spacing: 0) {
+            NavigationLink(value: Route.liveTraffic) {
+                MenuRow(icon: "airplane.circle", title: "Live traffic", subtitle: "Planes around \(model.homeCode.isEmpty ? "you" : model.homeCode) right now, from ADS-B")
+            }
+            Divider().overlay(Theme.hair).padding(.leading, 58)
             ForEach(Array([WebFeature.navlog, .preflight, .weather, .leaderboards].enumerated()), id: \.element) { i, f in
                 if i > 0 { Divider().overlay(Theme.hair).padding(.leading, 58) }
                 NavigationLink(value: Route.web(f)) { MenuRow(icon: f.icon, title: f.title, subtitle: f.subtitle) }
@@ -49,26 +54,57 @@ struct FlyView: View {
                         .symbolEffect(.pulse)
                 }
             }
-            Map(position: $camera) {
+            Map(position: $camera, selection: $traffic.selected) {
                 UserAnnotation()
                 if recorder.points.count >= 2 {
                     MapPolyline(coordinates: recorder.points.map(\.coordinate))
                         .stroke(Theme.electric, lineWidth: 4)
                 }
-            }
-            .mapStyle(.hybrid(elevation: .realistic))
-            .mapControlVisibility(.hidden)
-            .frame(height: 260)
-            .overlay(alignment: .topTrailing) {
-                Button { camera = .userLocation(followsHeading: false, fallback: .automatic) } label: {
-                    Image(systemName: "location.fill").font(.system(size: 15, weight: .semibold))
+                ForEach(traffic.planes) { p in
+                    Annotation(p.title, coordinate: p.coordinate, anchor: .center) {
+                        PlaneMarker(plane: p, selected: traffic.selected == p.id)
+                    }
+                    .annotationTitles(.hidden)
+                    .tag(p.id)
                 }
-                .floatingIcon()
-                .accessibilityLabel("Centre on me")
+            }
+            .mapStyle(.hybrid(elevation: .realistic, pointsOfInterest: .excludingAll))
+            .mapControlVisibility(.hidden)
+            .onMapCameraChange(frequency: .onEnd) { ctx in traffic.show(ctx.region) }
+            .frame(height: 300)
+            .overlay(alignment: .top) {
+                HStack {
+                    TrafficToggle(traffic: traffic)
+                    Spacer()
+                    NavigationLink(value: Route.liveTraffic) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 14, weight: .semibold))
+                    }
+                    .floatingIcon()
+                    .accessibilityLabel("Open the live traffic map")
+                    Button { camera = .userLocation(followsHeading: false, fallback: .automatic) } label: {
+                        Image(systemName: "location.fill").font(.system(size: 15, weight: .semibold))
+                    }
+                    .floatingIcon()
+                    .accessibilityLabel("Centre on me")
+                }
+                .glassGroup(spacing: 10)
                 .padding(10)
             }
+            .overlay(alignment: .bottom) {
+                if let p = traffic.selectedPlane {
+                    PlaneCard(plane: p) { traffic.selected = nil }
+                        .padding(8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if traffic.on {
+                    TrafficCredit().frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, recorder.isRecording ? 52 : 8)
+                }
+            }
+            .animation(.snappy, value: traffic.selected)
+            .sensoryFeedback(.selection, trigger: traffic.selected)
+            .onDisappear { traffic.stop() }
+            .onAppear { if traffic.on { traffic.start() } }
             .overlay(alignment: .bottomLeading) {
-                if recorder.isRecording {
+                if recorder.isRecording && traffic.selected == nil {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         HStack(spacing: 8) {
                             Circle().fill(Theme.danger).frame(width: 8, height: 8)

@@ -1,3 +1,4 @@
+import { traffic } from '../lib/traffic.js';
 import { osmRunways, contributeOSM } from '../lib/osmrunways.js';
 import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
@@ -84,6 +85,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  const flight=validateFlight(await body());await env.DB.prepare('UPDATE flight_records SET data=?,updated_at=? WHERE id=? AND user_id=?').bind(JSON.stringify(flight),Date.now(),row.id,user.id).run();return json({flight:{id:row.id,...flight}});
  }
 if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
+ if(path==='traffic'&&request.method==='GET')return await traffic(env,url);
  if(path==='share'&&request.method==='POST'){needAdvanced('Sharing with your instructor');const raw=[...crypto.getRandomValues(new Uint8Array(24))].map(n=>n.toString(16).padStart(2,'0')).join('');const row=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();if(!row)fail(400,'Finish setting up your desk first.');const d=JSON.parse(row.data);d.shareHash=await sha(raw);await env.DB.prepare('UPDATE flight_profiles SET data=?,updated_at=? WHERE user_id=?').bind(JSON.stringify(d),Date.now(),user.id).run();return json({token:raw});}
  if(path==='share'&&request.method==='DELETE'){const row=await env.DB.prepare('SELECT data FROM flight_profiles WHERE user_id=?').bind(user.id).first();if(row){const d=JSON.parse(row.data);delete d.shareHash;await env.DB.prepare('UPDATE flight_profiles SET data=?,updated_at=? WHERE user_id=?').bind(JSON.stringify(d),Date.now(),user.id).run();}return json({ok:true});}
  if(path==='flights/import'&&request.method==='POST'){needAdvanced('Importing flights');const input=await body();const list=Array.isArray(input.flights)?input.flights:fail(400,'Send a list of flights.');if(list.length>500)fail(400,'Import at most 500 flights at a time.');const ok=[],errors=[];for(const [i,f] of list.entries()){try{ok.push(validateFlight(f));}catch(e){errors.push({row:i+1,error:e.message});}}const saved=[];for(const f of ok){const id=crypto.randomUUID();await env.DB.prepare('INSERT INTO flight_records(id,user_id,data,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,user.id,JSON.stringify(f),Date.now(),Date.now()).run();saved.push({id,...f});}return json({flights:saved,errors},201);}
