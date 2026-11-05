@@ -75,6 +75,7 @@ final class AppModel {
                 takeoff = true
             }
             phase = next
+            if next == .ready { publishWidgets() }
         } catch let error as APIError where error.status == 401 {
             handleSignedOut()
         } catch {

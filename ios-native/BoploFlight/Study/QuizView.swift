@@ -182,7 +182,7 @@ struct QuizView: View {
     private var result: some View {
         let pm = model.passMark
         let pass = resultScore >= pm
-        Text(session.kind == .mock ? "Mock exam result" : session.kind == .review ? "Review done" : "Session complete")
+        Text(session.kind == .mock ? (resultScore >= model.passMark ? "Exam passed. Readback correct." : "Exam below the mark.") : session.kind == .review ? "Review complete." : "Theory checked.")
             .font(Theme.display(34)).tracking(-1)
         Text("\(right) of \(answers.count) correct · exam readiness now \(readinessAfter)%.")
             .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
@@ -195,7 +195,7 @@ struct QuizView: View {
             }
         }
         if missed.isEmpty {
-            Text("Everything right. Nice work.").font(.archivo(15)).foregroundStyle(Theme.ink2)
+            Text("All correct. Readback correct.").font(.archivo(15)).foregroundStyle(Theme.ink2)
         } else {
             Tile {
                 TileHead("Worth another look")

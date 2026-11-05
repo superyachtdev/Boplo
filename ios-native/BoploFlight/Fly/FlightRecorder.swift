@@ -12,6 +12,7 @@ final class FlightRecorder: NSObject, CLLocationManagerDelegate {
     private(set) var startedAt: Date?
     private(set) var speedKnots: Double = 0
     private(set) var altitudeFeet: Double = 0
+    private(set) var distanceNM: Double = 0
     var message: String?
 
     private let manager = CLLocationManager()
@@ -42,8 +43,10 @@ final class FlightRecorder: NSObject, CLLocationManagerDelegate {
             break
         }
         points = []
+        distanceNM = 0
         startedAt = Date()
         isRecording = true
+        RecordingActivity.start(at: startedAt ?? Date())
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
@@ -53,6 +56,7 @@ final class FlightRecorder: NSObject, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         isRecording = false
+        RecordingActivity.end()
     }
 
     func reset() {
@@ -60,6 +64,7 @@ final class FlightRecorder: NSObject, CLLocationManagerDelegate {
         startedAt = nil
         speedKnots = 0
         altitudeFeet = 0
+        distanceNM = 0
     }
 
     // MARK: CLLocationManagerDelegate
@@ -69,11 +74,17 @@ final class FlightRecorder: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in
             guard self.isRecording else { return }
             for location in good where self.points.count < 2000 {
-                self.points.append(TrackPoint(lat: location.coordinate.latitude, lng: location.coordinate.longitude))
+                let pt = TrackPoint(lat: location.coordinate.latitude, lng: location.coordinate.longitude)
+                if let prev = self.points.last {
+                    let a = CLLocation(latitude: prev.lat, longitude: prev.lng), b = CLLocation(latitude: pt.lat, longitude: pt.lng)
+                    self.distanceNM += b.distance(from: a) / 1852
+                }
+                self.points.append(pt)
             }
             if let last = good.last {
                 self.speedKnots = max(0, last.speed) * 1.943844
                 self.altitudeFeet = last.altitude * 3.28084
+                RecordingActivity.update(speedKt: self.speedKnots, altitudeFt: self.altitudeFeet, distanceNm: self.distanceNM)
             }
             if self.points.count >= 2000 {
                 self.message = "That’s the most points one flight can hold, so recording has stopped."

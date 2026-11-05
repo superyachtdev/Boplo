@@ -47,7 +47,7 @@ struct FlightListView: View {
             chips
             if model.flights.isEmpty {
                 Tile {
-                    Text("Your logbook is empty.").font(.archivo(18, .semibold))
+                    Text("Logbook clear. Ready for your first entry.").font(.archivo(18, .semibold))
                     Text("Each flight you log keeps its time, role, landings and debrief together.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
                     Button { model.logFlight() } label: { Text("Log your first flight") }.primaryStyle(full: false)
                 }
@@ -62,8 +62,8 @@ struct FlightListView: View {
                 countLine
                 if list.isEmpty {
                     Tile {
-                        Text("No flights match.").font(.archivo(17, .semibold))
-                        Text("Try a different search or role.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
+                        Text("Nothing on frequency.").font(.archivo(17, .semibold))
+                        Text("No flights match that search or role. Try another.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
                         Button("Clear filters") { search = ""; role = "all" }.buttonStyle(.pill(.line, height: 42))
                     }
                 } else {
@@ -136,7 +136,7 @@ struct TrackMapView: View {
             chips
             if withTracks.isEmpty {
                 Tile {
-                    Text("No tracks yet.").font(.archivo(17, .semibold))
+                    Text("No tracks on the chart yet.").font(.archivo(17, .semibold))
                     Text("Record a flight with GPS, or add a route to a flight, and it’s drawn here.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
                     Button { model.tab = .fly } label: { Text("Record a flight") }.primaryStyle(full: false)
                 }

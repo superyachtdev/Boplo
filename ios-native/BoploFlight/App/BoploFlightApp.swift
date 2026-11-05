@@ -100,6 +100,7 @@ struct LaunchView: View {
 
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
+    @State private var celebrating: Milestone?
 
     var body: some View {
         @Bindable var model = model
@@ -140,6 +141,29 @@ struct MainTabs: View {
         .sheet(item: $model.openedFlight) { flight in
             NavigationStack { FlightDetailView(flight: flight) }
         }
+        .fullScreenCover(item: $celebrating) { MilestoneMoment(milestone: $0) }
+        .task(id: model.flights.count) { await checkMilestones() }
+    }
+}
+
+extension MainTabs {
+    /// Celebrates a milestone the first time the app sees it. On the very first run everything you'd
+    /// already reached is marked as seen, so nobody gets a backlog of celebrations.
+    func checkMilestones() async {
+        let all = Milestone.all(model)
+        let d = UserDefaults.standard
+        var seen = Set(d.stringArray(forKey: "boplo.seenMilestones") ?? [])
+        defer { d.set(Array(seen), forKey: "boplo.seenMilestones") }
+        guard d.bool(forKey: "boplo.milestonesPrimed") else {
+            seen.formUnion(all.map(\.key))
+            d.set(true, forKey: "boplo.milestonesPrimed")
+            return
+        }
+        let fresh = all.filter { !seen.contains($0.key) }
+        guard let newest = fresh.first else { return }
+        seen.formUnion(fresh.map(\.key))
+        try? await Task.sleep(for: .seconds(0.9))
+        celebrating = newest
     }
 }
 

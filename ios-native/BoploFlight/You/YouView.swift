@@ -34,6 +34,8 @@ struct YouView: View {
                     NavigationLink(value: Route.plan) { MenuRow(icon: "star", title: "Plan & billing", subtitle: model.isAdvanced ? "Your plan and renewal" : "Upgrade to Advanced") }
                     divider
                     NavigationLink(value: Route.web(.school)) { MenuRow(icon: "graduationcap", title: "Flight school", subtitle: model.billing?.school?.name ?? "Join your school with its code, or set up your school") }
+                    divider
+                    NavigationLink(value: Route.appIcon) { MenuRow(icon: "app.badge", title: "App icon", subtitle: "Night runway, dawn or cloud") }
                 }
                 group {
                     NavigationLink(value: Route.web(.community)) { MenuRow(icon: WebFeature.community.icon, title: WebFeature.community.title, subtitle: WebFeature.community.subtitle) }

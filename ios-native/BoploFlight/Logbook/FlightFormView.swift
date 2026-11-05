@@ -210,10 +210,10 @@ struct FlightFormView: View {
             if editing == nil {
                 let total = Double(model.totalMinutes) / 60
                 let goal = model.profile?.goalHours ?? 0
-                model.show(.init(symbol: "airplane.circle.fill", title: "Flight logged",
+                model.show(.init(symbol: "airplane.circle.fill", title: "Logged. Good flight.",
                                  detail: "+\(hoursText(hours * 60 + minutes)) h · " + (goal > 0 ? String(format: "%.1f of %d h", total, Int(goal)) : String(format: "%.1f h total", total))))
             } else {
-                model.show(.init(title: "Changes saved"))
+                model.show(.init(title: "Entry amended"))
             }
             dismiss()
         } catch {

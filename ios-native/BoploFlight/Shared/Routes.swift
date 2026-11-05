@@ -10,6 +10,7 @@ enum Route: Hashable {
     case web(WebFeature)
     case trackMap
     case analytics
+    case appIcon
 }
 
 extension View {
@@ -25,6 +26,7 @@ extension View {
             case .web(let feature): ToolScreen(feature: feature)
             case .trackMap: TrackMapView()
             case .analytics: AnalyticsView()
+            case .appIcon: AppIconPage()
             }
         }
     }
@@ -68,32 +70,7 @@ struct ToolScreen: View {
 /// A flight as a white card: route, date · role · landings, lesson, time.
 struct FlightCard: View {
     let flight: Flight
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(flight.dep.isEmpty ? "—" : flight.dep) → \(flight.arr.isEmpty ? "—" : flight.arr)")
-                    .font(.archivo(16, .semibold))
-                    .foregroundStyle(Theme.ink)
-                Text([Day.short(flight.date), flight.roleLabel, "\(Int(flight.landings ?? 0)) ldg"].joined(separator: " · "))
-                    .font(.archivo(13.5))
-                    .foregroundStyle(Theme.ink3)
-                if let l = flight.lesson ?? flight.aircraft, !l.isEmpty {
-                    Text(l).font(.archivo(13.5)).foregroundStyle(Theme.ink3).lineLimit(1)
-                }
-            }
-            Spacer(minLength: 8)
-            Text(hoursText(flight.mins))
-                .font(.archivo(18, .semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.ink)
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.hair))
-        .contentShape(Rectangle())
-    }
+    var body: some View { FlightStrip(flight: flight) }
 }
 
 /// The role chip colours from the web logbook.

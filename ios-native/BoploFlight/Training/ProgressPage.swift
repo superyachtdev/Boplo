@@ -271,6 +271,8 @@ struct TrainingProgressPage: View {
 
 struct Milestone: Identifiable {
     let id = UUID()
+    /// Stable across launches, for remembering which ones you've already celebrated.
+    var key: String { title + "|" + (date ?? "") }
     let title: String
     let date: String?
     let big: String
@@ -306,28 +308,113 @@ struct Milestone: Identifiable {
     }
 }
 
-/// A shareable 9:16 card for a milestone, rendered natively.
+/// A shareable 9:16 card for a milestone, styled as a boarding pass: route, pilot, date, licence,
+/// a torn perforation and a barcode stub.
 struct MilestoneCard: View {
     let milestone: Milestone
     let name: String
+    var home: String = ""
+    var licence: String = ""
+
     var body: some View {
         ZStack {
-            RadialGradient(colors: [Color(hex: 0x0B1E4E), Color(hex: 0x040B22), Theme.night], center: UnitPoint(x: 0.75, y: 0), startRadius: 10, endRadius: 900)
+            RadialGradient(colors: [Color(hex: 0x0B1E4E), Color(hex: 0x040B22), Theme.night], center: UnitPoint(x: 0.75, y: 0), startRadius: 10, endRadius: 1100)
             Contours(seed: 2.2).opacity(0.5)
-            VStack(alignment: .leading, spacing: 18) {
-                BoploWordmark(height: 44)
-                Spacer()
-                Text(milestone.big).font(Theme.display(150, bold: true)).foregroundStyle(.white).minimumScaleFactor(0.3).lineLimit(1)
-                Text(milestone.unit).font(.archivo(40, .medium)).foregroundStyle(Theme.ice)
-                Text(milestone.title).font(Theme.display(64)).foregroundStyle(.white)
-                Text([name, milestone.date.map { Day.full($0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.archivo(30)).foregroundStyle(Theme.mist)
-                Spacer().frame(height: 60)
+            VStack(spacing: 0) {
+                // Top: the airline band
+                HStack {
+                    BoploWordmark(height: 48)
+                    Spacer()
+                    Text("Milestone pass").font(.archivo(30, .semibold)).foregroundStyle(Theme.ice)
+                }
+                .padding(.horizontal, 64).frame(height: 150)
+                .background(Theme.navy)
+
+                VStack(alignment: .leading, spacing: 40) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("From").font(.archivo(26)).foregroundStyle(Theme.ink3)
+                            Text(home.isEmpty ? "----" : home).font(.system(size: 92, weight: .bold, design: .monospaced))
+                        }
+                        Spacer()
+                        Image(systemName: "airplane").font(.system(size: 60, weight: .semibold)).foregroundStyle(Theme.electric)
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("To").font(.archivo(26)).foregroundStyle(Theme.ink3)
+                            Text(milestone.big).font(.system(size: 92, weight: .bold, design: .monospaced))
+                                .minimumScaleFactor(0.4).lineLimit(1)
+                        }
+                    }
+                    .foregroundStyle(Theme.ink)
+                    Text(milestone.title)
+                        .font(Theme.display(96, bold: true)).tracking(-3)
+                        .foregroundStyle(Theme.ink)
+                        .minimumScaleFactor(0.5).lineLimit(2)
+                    Grid(alignment: .leading, horizontalSpacing: 40, verticalSpacing: 28) {
+                        GridRow { field("Pilot", name.isEmpty ? "Student pilot" : name); field("Date", milestone.date.map { Day.full($0) } ?? "") }
+                        GridRow { field("Licence", licence.isEmpty ? "—" : licence); field("Logged", milestone.unit) }
+                    }
+                }
+                .padding(64)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                // Perforation
+                ZStack {
+                    Line().stroke(Theme.ink.opacity(0.25), style: StrokeStyle(lineWidth: 3, dash: [14, 12])).frame(height: 3).padding(.horizontal, 50)
+                    HStack {
+                        Circle().fill(Color(hex: 0x050D28)).frame(width: 64, height: 64).offset(x: -32)
+                        Spacer()
+                        Circle().fill(Color(hex: 0x050D28)).frame(width: 64, height: 64).offset(x: 32)
+                    }
+                }
+                .frame(height: 64)
+
+                // Stub with barcode
+                VStack(alignment: .leading, spacing: 22) {
+                    Barcode(seed: (milestone.title + (milestone.date ?? "")).hashValue).frame(height: 120)
+                    HStack {
+                        Text("BOPLO FLIGHT").font(.system(size: 26, weight: .semibold, design: .monospaced))
+                        Spacer()
+                        Text("boplo.app").font(.archivo(26, .semibold)).foregroundStyle(Theme.electric)
+                    }
+                    .foregroundStyle(Theme.ink2)
+                }
+                .padding(.horizontal, 64).padding(.vertical, 44)
             }
-            .padding(80)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+            .padding(.horizontal, 80)
+            .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
         }
         .frame(width: 1080, height: 1920)
+    }
+
+    private func field(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.archivo(24)).foregroundStyle(Theme.ink3)
+            Text(value).font(.archivo(36, .semibold)).foregroundStyle(Theme.ink).lineLimit(1).minimumScaleFactor(0.6)
+        }
+    }
+}
+
+private struct Line: Shape {
+    func path(in rect: CGRect) -> Path { var p = Path(); p.move(to: CGPoint(x: 0, y: rect.midY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY)); return p }
+}
+
+/// Decorative barcode, deterministic per milestone.
+struct Barcode: View {
+    let seed: Int
+    var body: some View {
+        Canvas { ctx, size in
+            var x: CGFloat = 0
+            var v = UInt64(bitPattern: Int64(seed)) | 1
+            while x < size.width {
+                v ^= v << 13; v ^= v >> 7; v ^= v << 17
+                let w = CGFloat(2 + Int(v % 4) * 2)
+                if v % 3 != 0 { ctx.fill(Path(CGRect(x: x, y: 0, width: w, height: size.height)), with: .color(Theme.ink)) }
+                x += w + CGFloat(2 + Int((v >> 8) % 3) * 2)
+            }
+        }
     }
 }
 
@@ -359,7 +446,7 @@ struct MilestoneShareSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task {
-            let r = ImageRenderer(content: MilestoneCard(milestone: milestone, name: model.profile?.firstName ?? ""))
+            let r = ImageRenderer(content: MilestoneCard(milestone: milestone, name: model.profile?.firstName ?? "", home: model.homeCode, licence: model.profile?.licence ?? ""))
             r.scale = 1
             image = r.uiImage
         }

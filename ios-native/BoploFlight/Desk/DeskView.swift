@@ -44,50 +44,61 @@ struct DeskView: View {
 
     // MARK: Hero
 
-    /// The one bold moment on the desk: hours toward the licence, on the navy contour field.
+    /// The one bold moment on the desk: your hours on an airspeed-style gauge, painted over the
+    /// actual sky at your home airfield (time of day, cloud, rain) with its latest METAR category.
     private var hero: some View {
-        let total = Double(model.totalMinutes) / 60
+        let sky = SkyWatch.shared.now
+        let dual = Double(model.minutes(role: "dual")) / 60
+        let solo = Double(model.minutes(role: "solo")) / 60
+        let pic = Double(model.minutes(role: "pic")) / 60
+        let earlier = (p?.openingMinutes ?? 0) / 60
         let goal = p?.goalHours ?? 0
         let last30 = model.flights(inLast: 30)
-        return DarkTile(spacing: 18, seed: 0.6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(greeting).font(.archivo(14, .semibold)).foregroundStyle(Theme.ice)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center) {
+                Text(greeting).font(.archivo(14, .semibold)).foregroundStyle(.white.opacity(0.9))
                 Spacer()
-                NavigationLink(value: Route.profile) {
-                    Text([p?.licence, shortAuthority == "—" ? nil : shortAuthority].compactMap { $0 }.joined(separator: " · "))
-                        .font(.archivo(12.5, .semibold))
+                if !sky.summary.isEmpty {
+                    NavigationLink(value: Route.web(.weather)) {
+                        HStack(spacing: 6) {
+                            if !sky.category.isEmpty { Circle().fill(sky.categoryColor).frame(width: 7, height: 7) }
+                            Text(sky.summary).font(.archivo(12.5, .semibold)).monospacedDigit()
+                        }
                         .padding(.horizontal, 10).frame(height: 26)
-                        .background(Theme.ice.opacity(0.12), in: Capsule())
-                        .foregroundStyle(Theme.ice)
-                }
-                .buttonStyle(.plain)
-            }
-            HStack(alignment: .center, spacing: 20) {
-                Ring(progress: model.progress, size: 132, lineWidth: 11, track: Theme.ice.opacity(0.14), fill: Theme.ice) {
-                    VStack(spacing: 0) {
-                        Text(String(format: "%.1f", total))
-                            .font(Theme.display(36, bold: true)).tracking(-1.2).monospacedDigit()
-                            .contentTransition(.numericText())
-                        Text(goal > 0 ? "of \(Int(goal)) h" : "hours").font(.archivo(12.5)).foregroundStyle(Theme.mist)
+                        .background(.black.opacity(0.22), in: Capsule())
+                        .foregroundStyle(.white)
                     }
-                    .foregroundStyle(.white)
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel("Weather at \(sky.station): \(sky.category)")
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(goal > 0 ? "\(String(format: "%.1f", total)) of \(Int(goal)) hours" : "\(String(format: "%.1f", total)) hours")
+            }
+            HStack(alignment: .center, spacing: 16) {
+                HoursGauge(dual: dual, solo: solo, pic: pic, other: earlier, goal: goal, size: 150)
                 VStack(alignment: .leading, spacing: 12) {
                     heroStat("\(model.flights.count)", model.flights.count == 1 ? "flight logged" : "flights logged")
                     heroStat(decimalHours(last30.reduce(0) { $0 + $1.mins }) + " h", "in the last 30 days")
                     heroStat(goal > 0 ? "\(Int((model.progress * 100).rounded()))%" : "—", goal > 0 ? "of the minimum" : "set an hours goal")
                 }
             }
-            if let t = p?.target, !t.isEmpty {
-                Text("Aiming for \(Day.monthYear(t)). Your instructor and authority decide what counts.")
-                    .font(.archivo(12.5)).foregroundStyle(Theme.mist)
-            } else {
-                Text(goal > 0 ? "Published minimum \(Int(goal)) h. Your instructor and authority decide what counts." : "Set an hours goal in your profile to see progress here.")
-                    .font(.archivo(12.5)).foregroundStyle(Theme.mist)
-            }
+            GaugeLegend(dual: dual, solo: solo, pic: pic)
+            Text(heroFootnote(goal: goal))
+                .font(.archivo(12.5)).foregroundStyle(.white.opacity(0.72))
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            SkyBackdrop(sky: sky)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous))
+        }
+        .environment(\.colorScheme, .dark)
+        .task(id: model.homeCode) { await SkyWatch.shared.refresh(code: model.homeCode, country: model.countryCode) }
+    }
+
+    private func heroFootnote(goal: Double) -> String {
+        let licence = [p?.licence, shortAuthority == "—" ? nil : shortAuthority].compactMap { $0 }.joined(separator: " · ")
+        if let t = p?.target, !t.isEmpty { return "\(licence.isEmpty ? "Aiming" : licence + ", aiming") for \(Day.monthYear(t)). Your instructor and authority decide what counts." }
+        if goal > 0 { return "\(licence.isEmpty ? "" : licence + ". ")Published minimum \(Int(goal)) h; the red mark is the minimum." }
+        return "Set an hours goal in your profile to put the minimum on the dial."
     }
 
     private func heroStat(_ value: String, _ label: String) -> some View {
@@ -213,6 +224,15 @@ struct DeskView: View {
                 NavigationLink(value: Route.prepare) { Text("Prepare") }
                     .buttonStyle(.pill(.ink, height: 40))
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            // Your home field as it's printed on the chart, faint behind the lesson.
+            SectionalAirfield(code: model.homeCode)
+                .frame(width: 128, height: 128)
+                .opacity(0.09)
+                .padding(.top, 34)
+                .padding(.trailing, 6)
+                .allowsHitTesting(false)
         }
     }
 
@@ -390,7 +410,7 @@ struct DeskView: View {
             }
             if list.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Your first flight goes here.").font(.archivo(17, .semibold))
+                    Text("Logbook clear. Ready for your first entry.").font(.archivo(17, .semibold))
                     Text("Log the time, role, landings and what you learned while it’s fresh.").font(.archivo(14.5)).foregroundStyle(Theme.ink3)
                     Button { model.logFlight() } label: { Text("Log a flight") }.primaryStyle(full: false)
                 }
