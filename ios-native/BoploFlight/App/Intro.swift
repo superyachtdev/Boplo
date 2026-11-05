@@ -25,8 +25,10 @@ struct RunwayState {
     var dawn: Double = 0
     /// Cloud you are climbing through, 0 clear, 1 white-out.
     var cloud: Double = 0
-    /// Seconds since start, for drifting cloud.
+    /// Seconds since start, for drifting cloud and blinking lights.
     var time: Double = 0
+    /// A light aircraft ahead of you on the centreline: distance away and height (camera height = 1).
+    var plane: (z: Double, alt: Double)?
 }
 
 private struct RGB {
@@ -88,6 +90,7 @@ enum RunwayPainter {
             }
             lights(&ctx, s: s, p: p, glow: false)
         }
+        if let pl = s.plane { plane(&ctx, z: pl.z, alt: pl.alt, time: s.time, cx: cx, horizon: horizon, f: f) }
 
         // Cloud you climb through: a white wall rising from below, with puffs drifting past.
         if s.cloud > 0 {
@@ -107,6 +110,85 @@ enum RunwayPainter {
                      with: .linearGradient(Gradient(stops: [.init(color: cloud.color.opacity(0), location: 0), .init(color: cloud.color, location: 0.22)]),
                                            startPoint: CGPoint(x: 0, y: edge - h * 0.4), endPoint: CGPoint(x: 0, y: edge + h * 1.6)))
             if c >= 1 { ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(cloud.color)) }
+        }
+    }
+
+    /// A high-wing trainer seen from behind: fuselage, wing with struts, tailplane, fin, wheels,
+    /// and its nav lights (red left, green right), strobes and beacon.
+    private static func plane(_ ctx: inout GraphicsContext, z: Double, alt: Double, time: Double, cx: Double, horizon: Double, f: Double) {
+        guard z > 0.6 else { return }
+        let k = f / z
+        let base = CGPoint(x: cx, y: horizon + (1 - alt) * k)
+        func q(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: base.x + x * k, y: base.y + y * k) }
+        func poly(_ pts: [(Double, Double)]) -> Path {
+            var path = Path()
+            path.move(to: q(pts[0].0, pts[0].1))
+            for pt in pts.dropFirst() { path.addLine(to: q(pt.0, pt.1)) }
+            path.closeSubpath()
+            return path
+        }
+        func line(_ a: (Double, Double), _ b: (Double, Double), _ width: Double, _ color: Color) {
+            var path = Path(); path.move(to: q(a.0, a.1)); path.addLine(to: q(b.0, b.1))
+            ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: max(0.8, width * k), lineCap: .round))
+        }
+
+        // Landing light washing the runway ahead, fading as it climbs away.
+        if alt < 0.7 {
+            let zz = z + 3.5, k2 = f / zz
+            let c = CGPoint(x: cx, y: horizon + k2)
+            let rw = 1.5 * k2, rh = 0.35 * k2
+            ctx.fill(Path(ellipseIn: CGRect(x: c.x - rw, y: c.y - rh, width: rw * 2, height: rh * 2)),
+                     with: .radialGradient(Gradient(colors: [Color.white.opacity(0.22 * (1 - alt / 0.7)), .clear]), center: c, startRadius: 0, endRadius: rw))
+        }
+        // Its shadow, left on the runway as the wheels come off.
+        if alt > 0.01 && alt < 1 {
+            let g = CGPoint(x: cx, y: horizon + k)
+            ctx.fill(Path(ellipseIn: CGRect(x: g.x - 0.5 * k, y: g.y - 0.04 * k, width: k, height: 0.08 * k)), with: .color(.black.opacity(0.35 * (1 - alt))))
+        }
+
+        let strut = Color(hex: 0x33456E), metal = Color(hex: 0x1A2747)
+        let skin = GraphicsContext.Shading.linearGradient(Gradient(colors: [Color(hex: 0xF2F6FF), Color(hex: 0xB8C6E4), Color(hex: 0x6E7FA6)]),
+                                                         startPoint: q(0, -0.56), endPoint: q(0, -0.06))
+        // Main gear
+        line((-0.06, -0.12), (-0.18, -0.03), 0.018, strut)
+        line((0.06, -0.12), (0.18, -0.03), 0.018, strut)
+        for x in [-0.18, 0.18] {
+            ctx.fill(Path(ellipseIn: CGRect(x: q(x, 0).x - 0.026 * k, y: q(0, -0.075).y, width: 0.052 * k, height: 0.075 * k)), with: .color(metal))
+        }
+        // Wing struts, then the wing on top of the cabin (slight dihedral)
+        line((-0.1, -0.17), (-0.4, -0.335), 0.012, strut)
+        line((0.1, -0.17), (0.4, -0.335), 0.012, strut)
+        ctx.fill(poly([(-0.66, -0.37), (0, -0.36), (0.66, -0.37), (0.66, -0.345), (0.1, -0.33), (-0.1, -0.33), (-0.66, -0.345)]), with: skin)
+        // Fuselage (seen tail-on it's a rounded box tapering into the tail cone)
+        ctx.fill(Path(roundedRect: CGRect(x: q(-0.12, 0).x, y: q(0, -0.335).y, width: 0.24 * k, height: 0.22 * k), cornerRadius: 0.07 * k), with: skin)
+        ctx.fill(Path(ellipseIn: CGRect(x: q(-0.06, 0).x, y: q(0, -0.27).y, width: 0.12 * k, height: 0.1 * k)), with: .color(Color(hex: 0x52638C)))
+        // Tailplane and fin, nearest to you
+        ctx.fill(poly([(-0.27, -0.215), (0.27, -0.215), (0.27, -0.195), (0, -0.19), (-0.27, -0.195)]), with: skin)
+        ctx.fill(poly([(-0.022, -0.21), (0.022, -0.21), (0.012, -0.56), (-0.01, -0.56)]), with: skin)
+        // Boplo blue stripe on the fin
+        ctx.fill(poly([(-0.019, -0.34), (0.019, -0.34), (0.017, -0.4), (-0.017, -0.4)]), with: .color(Theme.electric))
+
+        // Lights, with a soft glow
+        let strobe = time.truncatingRemainder(dividingBy: 1.1) < 0.07
+        let beacon = time.truncatingRemainder(dividingBy: 0.85) < 0.18
+        var dots: [(CGPoint, Color, Double)] = [
+            (q(-0.66, -0.357), Color(hex: 0xFF4A4A), 1),
+            (q(0.66, -0.357), Color(hex: 0x4AF29A), 1),
+            (q(0, -0.205), .white, 0.8),
+        ]
+        if strobe { dots += [(q(-0.66, -0.357), .white, 1.8), (q(0.66, -0.357), .white, 1.8)] }
+        if beacon { dots.append((q(0, -0.565), Color(hex: 0xFF3B3B), 1.2)) }
+        let r = max(1.3, 0.022 * k)
+        ctx.drawLayer { layer in
+            layer.addFilter(.blur(radius: max(3, r * 2.2)))
+            for (pt, color, size) in dots {
+                let rr = r * 3 * size
+                layer.fill(Path(ellipseIn: CGRect(x: pt.x - rr, y: pt.y - rr, width: rr * 2, height: rr * 2)), with: .color(color.opacity(0.85)))
+            }
+        }
+        for (pt, color, size) in dots {
+            let rr = r * size
+            ctx.fill(Path(ellipseIn: CGRect(x: pt.x - rr, y: pt.y - rr, width: rr * 2, height: rr * 2)), with: .color(color))
         }
     }
 
@@ -188,7 +270,11 @@ struct LaunchIntro: View {
                 Canvas { ctx, size in
                     var s = RunwayState()
                     s.lit = reduceMotion ? 1 : easeOut((t - 0.05) / 0.85)
-                    s.rabbit = (!reduceMotion && t > 0.75) ? (t - 0.75).truncatingRemainder(dividingBy: 0.9) / 0.9 : nil
+                    // A trainer ahead of you rolls, lifts off and climbs away over the horizon.
+                    let tp = reduceMotion ? 0 : t
+                    let roll = max(0, tp - 0.15)
+                    let air = max(0, tp - 1.05)
+                    s.plane = (z: 2.6 + 0.9 * roll + 5 * pow(roll, 2.2), alt: 1.1 * pow(air, 1.7))
                     s.pitch = reduceMotion ? 0 : smooth(e / 0.8) * 0.75
                     s.travelled = reduceMotion ? 0 : pow(max(0, e), 2) * 6
                     s.time = t
@@ -214,11 +300,11 @@ struct LaunchIntro: View {
         .onAppear {
             start = Date()
             isReady = ready
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.85).delay(reduceMotion ? 0 : 0.3)) { markIn = true }
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.85).delay(reduceMotion ? 0 : 0.85)) { markIn = true }
         }
         .onChange(of: ready) { _, v in isReady = v; tryExit() }
         .task {
-            try? await Task.sleep(for: .seconds(reduceMotion ? 0.5 : 1.35))
+            try? await Task.sleep(for: .seconds(reduceMotion ? 0.5 : 2.1))
             minDone = true
             tryExit()
             // Never hold anyone at the door: if the network is slow, show the app's own loading state.
