@@ -48,7 +48,7 @@ export async function ensurePrice(env, key, fetcher = fetch) {
   const plan = PLANS[key]; if (!plan) throw Object.assign(new Error('Choose monthly or yearly.'), { status: 400 });
   const found = await stripe(env, 'GET', 'prices', { lookup_keys: [plan.lookup], active: true, limit: 1 }, fetcher);
   // a price change creates a new Stripe price and moves the lookup key to it; existing subscribers keep theirs
-  if (found.data?.[0] && found.data[0].unit_amount === plan.amount) return found.data[0];
+  if (found.data?.[0] && (found.data[0].unit_amount == null || found.data[0].unit_amount === plan.amount)) return found.data[0];
   const products = await stripe(env, 'GET', 'products/search', { query: "metadata['boplo']:'flight_advanced'" }, fetcher).catch(() => ({ data: [] }));
   const product = products.data?.[0] || await stripe(env, 'POST', 'products', { name: 'Boplo Flight Advanced', description: 'The full Boplo Flight desk for student pilots.', metadata: { boplo: 'flight_advanced' } }, fetcher);
   return stripe(env, 'POST', 'prices', { product: product.id, unit_amount: plan.amount, currency: plan.currency, recurring: { interval: plan.interval }, lookup_key: plan.lookup, transfer_lookup_key: true, tax_behavior: 'exclusive', nickname: plan.label }, fetcher);
