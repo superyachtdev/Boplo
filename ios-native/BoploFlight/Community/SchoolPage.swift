@@ -138,7 +138,7 @@ struct StudentSchoolView: View {
             Tile(spacing: 10) {
                 TileHead("You and your instructors")
                 Text("Debriefs, lesson plans and sign-offs from \(name) land here. Message your instructors any time.").font(.archivo(14)).foregroundStyle(Theme.ink3)
-                ForEach(Array(items.enumerated()), id: \.offset) { _, it in CoachItem(item: it) }
+                ForEach(Array(items.enumerated()), id: \.offset) { _, it in CoachItem(item: it, canReport: true) }
                 ErrorText(text: error)
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField("Ask your instructor something, or tell them how it’s going…", text: $draft, axis: .vertical).lineLimit(1...5).padding(.vertical, 12).boploField()
@@ -178,6 +178,12 @@ struct StudentSchoolView: View {
 /// One entry in the coaching thread: message, debrief, lesson plan or sign-off.
 struct CoachItem: View {
     let item: [String: Any]
+    /// Students can report a message from staff (App Store guideline 1.2).
+    var canReport = false
+    @State private var confirm = false
+    @State private var reported = false
+    @State private var error: String?
+
     var body: some View {
         let staff = item["fromStaff"] as? Bool ?? false
         let kind = item["kind"] as? String ?? "msg"
@@ -187,6 +193,17 @@ struct CoachItem: View {
                 Text(kind == "debrief" ? "Debrief" : kind == "plan" ? "Lesson plan" : kind == "signoff" ? "Sign-off" : "").font(.archivo(12)).foregroundStyle(Theme.electric)
                 Spacer()
                 Text(PilotTag.ago(item["at"])).font(.archivo(11.5)).foregroundStyle(Theme.ink3)
+                if canReport && (item["fromStaff"] as? Bool ?? false), let id = item["id"] as? String {
+                    Menu {
+                        Button(reported ? "Reported" : "Report this message", systemImage: "flag") { confirm = true }.disabled(reported)
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink3).frame(width: 28, height: 22)
+                    }
+                    .accessibilityLabel("More")
+                    .confirmationDialog("Report this message?", isPresented: $confirm, titleVisibility: .visible) {
+                        Button("Report", role: .destructive) { Task { await report(id) } }
+                    } message: { Text("Boplo reviews reported messages within 24 hours. Your school isn’t told who reported it.") }
+                }
             }
             switch kind {
             case "debrief":
@@ -205,6 +222,18 @@ struct CoachItem: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(staff ? Theme.well : Theme.electric.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(alignment: .bottomTrailing) {
+            if reported { Text("Reported").font(.archivo(11, .semibold)).foregroundStyle(Theme.ink3).padding(8) }
+            else if let error { Text(error).font(.archivo(11)).foregroundStyle(Theme.danger).padding(8) }
+        }
+    }
+
+    private func report(_ id: String) async {
+        do {
+            try await API.shared.send("flight/coach/report", method: "POST", body: ["id": id, "reason": "reported"])
+            reported = true
+            Haptic.tap(.light, 0.6)
+        } catch { self.error = error.localizedDescription }
     }
 }
 

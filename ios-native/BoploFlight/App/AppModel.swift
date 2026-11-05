@@ -99,8 +99,15 @@ final class AppModel {
         handleSignedOut()
     }
 
+    /// Deletes the account. People who signed in with Apple confirm with Apple once, so the server can
+    /// revoke Boplo's access to their Apple ID (App Store guideline 5.1.1(v)).
     func deleteAccount() async throws {
-        try await API.shared.send("flight/account/delete", method: "POST", body: ["confirm": "DELETE"])
+        do {
+            try await API.shared.send("flight/account/delete", method: "POST", body: ["confirm": "DELETE", "client": "ios"])
+        } catch let e as APIError where e.status == 428 {
+            let code = try await AppleReauth.authorizationCode()
+            try await API.shared.send("flight/account/delete", method: "POST", body: ["confirm": "DELETE", "client": "ios", "appleAuthorizationCode": code])
+        }
         handleSignedOut()
     }
 

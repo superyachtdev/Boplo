@@ -59,7 +59,7 @@ time. Try it on the staging database once so the steps are known before they're 
 Names only. Values never go in the repo or in chat.
 
 - **Core:** `SESSION_SECRET`, `APP_ORIGIN`, `CRON_SECRET`, `OWNER_EMAILS`
-- **Sign-in:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APPLE_TEAM_ID`, `APPLE_BUNDLE_ID`
+- **Sign-in:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APPLE_TEAM_ID`, `APPLE_BUNDLE_ID`, `APPLE_SIWA_KEY_ID` and `APPLE_SIWA_PRIVATE_KEY` (a Sign in with Apple key, used to revoke Apple sign-in when someone deletes their account)
 - **App Review account:** `REVIEW_EMAIL`, `REVIEW_CODE` (signs in with a fixed code, no email)
 - **Payments:** `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_FLIGHT_WEBHOOK_SECRET`, `STRIPE_TAX`; Apple: `APPLE_ROOT_PEM`
 - **AI:** `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (also the fallback when Claude is down), `OPENAI_API_KEY` (logbook scan), `AI_MODEL`, `AI_PROVIDER`

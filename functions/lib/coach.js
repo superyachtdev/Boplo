@@ -20,7 +20,8 @@ export function ensureCoach(env) {
       'CREATE TABLE IF NOT EXISTS flight_coach (id TEXT PRIMARY KEY, school_id TEXT NOT NULL, student_id TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT, from_staff INTEGER NOT NULL, kind TEXT NOT NULL, flight_id TEXT, body TEXT NOT NULL, created_at INTEGER NOT NULL, read_at INTEGER)',
       'CREATE INDEX IF NOT EXISTS flight_coach_student ON flight_coach(student_id, created_at DESC)',
       'CREATE INDEX IF NOT EXISTS flight_coach_school ON flight_coach(school_id, created_at DESC)',
-      'CREATE TABLE IF NOT EXISTS flight_kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)'
+      'CREATE TABLE IF NOT EXISTS flight_kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
+      'CREATE TABLE IF NOT EXISTS flight_coach_reports (user_id TEXT NOT NULL, msg_id TEXT NOT NULL, reason TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, msg_id))'
     ]) await env.DB.prepare(q).run();
   })().catch(e => { ready.delete(env.DB); throw e; }));
   return ready.get(env.DB);
@@ -173,7 +174,23 @@ export async function coachRoutes(env, path, method, user, m, body, origin, fetc
     return { unread: r?.n || 0, debriefs: dbf, latest: lt ? shape(lt) : null, school: m.school.name };
   }
   if (path === 'coach/msg' && method === 'POST') return post(env, m, user, user.id, 'msg', await body(), origin, fetcher);
+  if (path === 'coach/report' && method === 'POST') return reportMessage(env, m, user, await body(), fetcher);
   return null;
+}
+
+// A student reports a message from their school's staff. Stored, and emailed to Boplo's owners so a
+// person reviews it (App Store guideline 1.2).
+async function reportMessage(env, m, user, b, fetcher) {
+  const id = clean(b?.id, 80), reason = clean(b?.reason || 'reported', 300);
+  const msg = id && await env.DB.prepare('SELECT id, body, author_name FROM flight_coach WHERE id=? AND school_id=? AND student_id=? AND from_staff=1').bind(id, m.school.id, user.id).first();
+  if (!msg) fail(404, 'That message isn’t in your thread.');
+  await env.DB.prepare('INSERT OR IGNORE INTO flight_coach_reports(user_id,msg_id,reason,created_at) VALUES(?,?,?,?)').bind(user.id, id, reason, Date.now()).run();
+  const to = String(env.OWNER_EMAILS || '').split(',').map(x => x.trim()).filter(Boolean)[0];
+  if (to && env.RESEND_API_KEY && env.EMAIL_FROM) {
+    const esc = t => String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    await fetcher('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject: `Report: school message at ${m.school.name}`, html: `<p>A student reported a message from <b>${esc(msg.author_name)}</b> at <b>${esc(m.school.name)}</b>.</p><p>Message ${esc(id)}:</p><blockquote>${esc(String(msg.body).slice(0, 1500))}</blockquote><p>Reason: ${esc(reason)}</p><p>Review it within 24 hours.</p>` }) }).catch(() => { });
+  }
+  return { ok: true };
 }
 
 // ---------- weekly digest for instructors (called from the daily cron; sends at most once a week each) ----------
