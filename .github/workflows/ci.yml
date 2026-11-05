@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging, work]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install WebKit for the iOS-shell test
+        run: npx playwright install --with-deps webkit
+      - name: Tests
+        run: npm test
+      - name: Functions build
+        run: npx wrangler pages functions build functions --outdir=work/functions-build
+      - name: No secrets committed
+        run: |
+          if git grep -nE '(sk-ant-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|re_[A-Za-z0-9]{20,}_)' -- ':!package-lock.json'; then
+            echo "A key-shaped string is committed. Remove it and rotate the key."; exit 1
+          fi

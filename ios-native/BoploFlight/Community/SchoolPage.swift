@@ -39,7 +39,7 @@ struct SchoolPage: View {
     private var joinTile: some View {
         Tile(spacing: 12) {
             TileHead("Join your school")
-            Text("Your school gives you a code. Joining gives you Advanced, paid for by your school. School plans are bought on the website, not in this app.")
+            Text("Your school gives you a code. Joining gives you Advanced, paid for by your school.")
                 .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
             Labeled(label: "School code") {
                 TextField("e.g. K7PX4M2Q", text: $code).textInputAutocapitalization(.characters).autocorrectionDisabled().boploField(font: .archivo(18, .semibold))

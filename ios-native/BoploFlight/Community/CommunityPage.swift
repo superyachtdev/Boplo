@@ -129,7 +129,7 @@ struct AskQuestionSheet: View {
                         Picker("Topic", selection: $topic) { ForEach(topics.isEmpty ? [("general", "General")] : topics, id: \.0) { Text($0.1).tag($0.0) } }.pickerStyle(.menu).tint(Theme.ink)
                     }
                     Labeled(label: "Details (optional)") { TextField("Add context: your licence, aircraft, what you’ve tried.", text: $bodyText, axis: .vertical).lineLimit(4...10).padding(.vertical, 12).boploField() }
-                    Footnote(text: "Others see your first name, home airfield and licence. Don’t share personal details, and follow your instructor’s advice over anything posted here.")
+                    Text("Others see your first name, home airfield and licence. Don’t share personal details, and follow your instructor’s advice over anything posted here. By posting you agree to the community rules in the [Terms](https://boplo.app/terms.html#community): nothing abusive, hateful, sexual or unsafe. Posts can be reported, and people who break the rules are removed.").font(.archivo(12.5)).foregroundStyle(Theme.ink3).tint(Theme.electric)
                     ErrorText(text: error)
                 }
                 .padding(16)
@@ -167,6 +167,7 @@ struct QuestionPage: View {
     @State private var busy = false
     @State private var error: String?
     @State private var reported: Set<String> = []
+    @State private var blocking: (pid: String, name: String, isQuestion: Bool)?
 
     var body: some View {
         Page(title: "Question", inline: true) {
@@ -177,7 +178,7 @@ struct QuestionPage: View {
                 Tile(spacing: 10) {
                     TileHead("Your answer")
                     TextField("Share what worked for you", text: $reply, axis: .vertical).lineLimit(3...10).padding(.vertical, 12).boploField()
-                    Footnote(text: "Shown with your first name, home airfield and licence.")
+                    Text("Shown with your first name, home airfield and licence. By posting you agree to the community rules in the [Terms](https://boplo.app/terms.html#community): nothing abusive, hateful, sexual or unsafe. Posts can be reported, and people who break the rules are removed.").font(.archivo(12.5)).foregroundStyle(Theme.ink3).tint(Theme.electric)
                     ErrorText(text: error)
                     Button("Post answer") { Task { await answer() } }.buttonStyle(.pill(.blue, height: 44))
                         .disabled(busy || reply.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -219,6 +220,13 @@ struct QuestionPage: View {
                 }
                 if !mine {
                     Button(reported.contains(pid) ? "Reported" : "Report") { Task { await report(pid) } }.font(.archivo(13, .semibold)).foregroundStyle(Theme.ink3).disabled(reported.contains(pid))
+                    if let by = p["by"] as? [String: Any], let person = by["pid"] as? String, !person.isEmpty {
+                        Button("Block") { blocking = (person, by["name"] as? String ?? "this pilot", isQuestion) }
+                            .font(.archivo(13, .semibold)).foregroundStyle(Theme.danger)
+                            .confirmationDialog("Block \(blocking?.name ?? "this pilot")?", isPresented: Binding(get: { blocking?.pid == person }, set: { if !$0 { blocking = nil } }), titleVisibility: .visible) {
+                                Button("Block", role: .destructive) { Task { await block(person, leave: isQuestion) } }
+                            } message: { Text("You won’t see their questions, answers or messages, and they won’t see yours. Unblock any time from support.") }
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -236,6 +244,14 @@ struct QuestionPage: View {
 
     private func vote(_ pid: String, _ v: Int) async {
         do { try await API.shared.send("flight/community/vote", method: "POST", body: ["id": pid, "v": v]); await load() } catch { self.error = error.localizedDescription }
+    }
+
+    private func block(_ person: String, leave: Bool) async {
+        do {
+            try await API.shared.send("flight/community/block/\(person)", method: "POST", body: [:])
+            blocking = nil
+            if leave { dismiss() } else { await load() }
+        } catch { self.error = error.localizedDescription }
     }
 
     private func report(_ pid: String) async {

@@ -36,6 +36,8 @@ struct YouView: View {
                     NavigationLink(value: Route.web(.school)) { MenuRow(icon: "graduationcap", title: "Flight school", subtitle: model.billing?.school?.name ?? "Join your school with its code, or set up your school") }
                     divider
                     NavigationLink(value: Route.appIcon) { MenuRow(icon: "app.badge", title: "App icon", subtitle: "Night runway, dawn or cloud") }
+                    divider
+                    NavigationLink(value: Route.aiFeatures) { MenuRow(icon: "sparkles", title: "AI features", subtitle: "What Ask Boplo sends, and the switch") }
                 }
                 group {
                     NavigationLink(value: Route.web(.community)) { MenuRow(icon: WebFeature.community.icon, title: WebFeature.community.title, subtitle: WebFeature.community.subtitle) }

@@ -11,6 +11,7 @@ enum Route: Hashable {
     case trackMap
     case analytics
     case appIcon
+    case aiFeatures
 }
 
 extension View {
@@ -27,6 +28,7 @@ extension View {
             case .trackMap: TrackMapView()
             case .analytics: AnalyticsView()
             case .appIcon: AppIconPage()
+            case .aiFeatures: AIFeaturesPage()
             }
         }
     }

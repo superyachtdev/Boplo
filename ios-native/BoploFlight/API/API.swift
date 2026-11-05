@@ -86,6 +86,10 @@ final class API {
 
     /// Streams Ask Boplo's answer (server-sent events of {"t": text} chunks), calling `onText` with the text so far.
     func stream(_ path: String, body: [String: Any], onText: @escaping @MainActor (String) -> Void) async throws -> String {
+        // App Store guideline 5.1.2(i): ask before anything is sent to a third-party AI provider.
+        if path.hasPrefix("flight/ask"), !(await AIConsent.ensure()) {
+            throw APIError(message: "Ask Boplo needs your OK to send your question to its AI provider. Turn it on in You › AI features, or tap Allow next time.", status: 403)
+        }
         var request = URLRequest(url: URL(string: path, relativeTo: API.origin)!)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
