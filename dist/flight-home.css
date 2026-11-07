@@ -447,3 +447,10 @@ h1,h2,h3,p{margin:0}
 .r-save strong{color:var(--electric)}
 .saver-foot{grid-column:1/-1;font-size:13px;color:var(--mist);max-width:60em;margin-top:8px}
 @media (max-width:820px){.saver-inner{grid-template-columns:1fr}}
+
+/* App Store badge (Apple's official artwork, loaded from Apple) */
+.store-badge{display:inline-flex;margin-top:18px;border-radius:10px;transition:transform .2s var(--ease)}
+.store-badge img{display:block;height:50px;width:auto}
+.store-badge:hover{transform:translateY(-1px)}
+.store-badge:focus-visible{outline:2px solid var(--ice);outline-offset:3px}
+.final .store-badge{margin-top:22px}
