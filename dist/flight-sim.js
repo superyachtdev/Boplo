@@ -19,6 +19,55 @@ window.BoploSim = (() => {
   const mmss = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; };
   const store = { get(k, d) { try { const v = localStorage.getItem('boplo-sim-' + k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set(k, v) { try { localStorage.setItem('boplo-sim-' + k, JSON.stringify(v)); } catch { } } };
 
+  /* ---- atmosphere: single scattering through a spherical Earth atmosphere (Rayleigh, Mie and ozone), used for the
+     sky, for the haze between the eye and the scenery (aerial perspective) and for the colour of the sunlight. Everything is
+     worked in heights and angle cosines rather than Earth-sized vectors, so it stays precise in 32-bit floats. ---- */
+  const ATM = { RE: 6360e3, HA: 60e3, HR: 8000, HM: 1200, BR: [5.802e-6, 13.558e-6, 33.1e-6], BO: [.65e-6, 1.881e-6, .085e-6], SUN: 22 };
+  // Mie scattering at sea level from the visibility (Koschmieder: extinction = 3.912 / visibility)
+  const mieFromVis = v => clamp((3.912 / v - 1.3e-5) / 1.11, 4e-6, 4e-4);
+  // the colour of direct sunlight after the atmosphere, at height h (m) with the sun at elevation e (degrees)
+  function sunTransmittance(h, e, mie) {
+    const { RE, HA, HR, HM, BR, BO } = ATM, mu = Math.sin(e * D2R), r = RE + h;
+    const disc = r * r * mu * mu - (h - HA) * (2 * RE + h + HA); if (disc < 0) return [0, 0, 0];
+    if (mu < 0 && r * r * mu * mu - h * (2 * RE + h) >= 0) return [0, 0, 0]; // the Earth is in the way
+    const T = -r * mu + Math.sqrt(disc), n = 40, ds = T / n; let oR = 0, oM = 0, oO = 0;
+    for (let i = 0; i < n; i++) { const t = ds * (i + .5), num = t * t + 2 * r * mu * t, d1 = num / (2 * r + t * mu), hh = h + num / (2 * r + d1); oR += Math.exp(-hh / HR) * ds; oM += Math.exp(-hh / HM) * ds; oO += Math.max(0, 1 - Math.abs(hh - 25e3) / 15e3) * ds; }
+    return [0, 1, 2].map(i => Math.exp(-(BR[i] * oR + mie * 1.11 * oM + BO[i] * oO)));
+  }
+  const ATM_GLSL = `
+    const float RE = 6360e3, HA = 60e3, HR = 8000.0, HM = 1200.0, PI = 3.14159265;
+    const vec3 BR = vec3(5.802e-6, 13.558e-6, 33.1e-6), BO = vec3(0.65e-6, 1.881e-6, 0.085e-6);
+    // height after travelling t along a ray that starts at height h with cosine mu from the vertical (precise in floats)
+    float hAt(float h, float mu, float t) { float r = RE + h, num = t * t + 2.0 * r * mu * t, d1 = num / (2.0 * r + t * mu); return h + num / (2.0 * r + d1); }
+    vec3 density(float h) { return vec3(exp(-h / HR), exp(-h / HM), max(0.0, 1.0 - abs(h - 25000.0) / 15000.0)); }
+    vec3 extinction(vec3 od, float mie) { return BR * od.x + vec3(mie * 1.11) * od.y + BO * od.z; }
+    // distance to the top of the atmosphere, and to the ground (or -1 if the ray misses it)
+    float toTop(float h, float mu) { float r = RE + h; return -r * mu + sqrt(max(r * r * mu * mu - (h - HA) * (2.0 * RE + h + HA), 0.0)); }
+    float toGround(float h, float mu) { float r = RE + h, d = r * r * mu * mu - h * (2.0 * RE + h); return mu < 0.0 && d >= 0.0 ? -r * mu - sqrt(d) : -1.0; }
+    // light scattered towards the eye along a ray (camera height h, view/up cosine mu, sun/up cosine muS, view/sun cosine nu),
+    // up to distance tMax; T returns the transmittance along that stretch
+    vec3 scatter(float h, float mu, float muS, float nu, float tMax, int N, int M, float mie, out vec3 T) {
+      float tG = toGround(h, mu), tE = min(tG > 0.0 ? tG : toTop(h, mu), tMax), r = RE + h;
+      vec3 sR = vec3(0.0), sM = vec3(0.0), od = vec3(0.0);
+      for (int i = 0; i < 24; i++) {
+        if (i >= N) break;
+        // samples bunch up near the eye, where the air is densest along most lines of sight
+        float f0 = float(i) / float(N), f1 = float(i + 1) / float(N), t0 = tE * f0 * f0, t1 = tE * f1 * f1, ds = t1 - t0, t = 0.5 * (t0 + t1);
+        float hp = max(hAt(h, mu, t), 0.0), rp = RE + hp;
+        vec3 d = density(hp) * ds;
+        float mS = clamp((r * muS + t * nu) / rp, -1.0, 1.0);
+        vec3 odm = od + d * 0.5; od += d;
+        if (toGround(hp, mS) > 0.0) continue; // in the Earth's shadow
+        float tl = toTop(hp, mS), dl = tl / float(M); vec3 odl = vec3(0.0);
+        for (int j = 0; j < 8; j++) { if (j >= M) break; odl += density(hAt(hp, mS, dl * (float(j) + 0.5))) * dl; }
+        vec3 tr = exp(-extinction(odm + odl, mie));
+        sR += tr * d.x; sM += tr * d.y;
+      }
+      T = exp(-extinction(od, mie));
+      float pR = 3.0 / (16.0 * PI) * (1.0 + nu * nu), g = 0.8, g2 = g * g;
+      float pM = 3.0 / (8.0 * PI) * (1.0 - g2) * (1.0 + nu * nu) / ((2.0 + g2) * pow(1.0 + g2 - 2.0 * g * nu, 1.5));
+      return 22.0 * (sR * BR * pR + sM * mie * pM * 0.65);
+    }`;
   let cesReady = null;
   function loadCesium() {
     if (window.Cesium?.CesiumWidget) return Promise.resolve(window.Cesium);
@@ -602,6 +651,8 @@ window.BoploSim = (() => {
     // graphics level. Fast: terrain and satellite imagery, no 3D city. Balanced: the photo-real 3D scenery at a lighter level of
     // detail and screen-resolution rendering. Detailed: full 3D detail, sharp on high-density screens, HDR and sun glare.
     const GFX = ['fast', 'balanced', 'detailed'].includes(O.gfx) ? O.gfx : 'fast';
+    // antialiasing: multisampling is cheap on phone GPUs (tile-based), so phones get it too above the fast setting; FXAA on top
+    const MSAA0 = GFX === 'fast' ? (coarse ? 1 : 2) : GFX === 'detailed' ? 4 : 2;
     const SSE0 = GFX === 'detailed' ? (coarse ? 18 : 12) : (coarse ? 32 : 24), RES0 = GFX === 'detailed' && !coarse ? Math.min(1, 1.5 / (window.devicePixelRatio || 1)) : 1;
     const audio = engineAudio(O.jet);
     const cleanups = [];
@@ -747,8 +798,8 @@ window.BoploSim = (() => {
     const startLL = F.ll(P[0][0], P[0][1]);
     try {
       viewer = new C.CesiumWidget($('[data-map]'), {
-        baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !coarse, terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
-        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: coarse ? 1 : GFX === 'detailed' ? 4 : 2, creditContainer: $('[data-credits]'), requestRenderMode: false, showRenderLoopErrors: false
+        baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !(coarse && GFX === 'fast'), terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
+        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: MSAA0, creditContainer: $('[data-credits]'), requestRenderMode: false, showRenderLoopErrors: false
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
@@ -757,7 +808,7 @@ window.BoploSim = (() => {
     scene.postProcessStages.fxaa.enabled = true;
     // render sharp on high-density screens (capped for speed), with high dynamic range so the sun, sky and paint read like a photo
     // high dynamic range with Khronos' neutral tone mapper: bright sky reflections on the paint stay bright without washing out
-    if (!coarse && GFX !== 'fast') { try { scene.highDynamicRange = true; if (C.Tonemapper?.PBR_NEUTRAL != null) scene.postProcessStages.tonemapper = C.Tonemapper.PBR_NEUTRAL; } catch { } }
+    if (GFX !== 'fast') { try { scene.highDynamicRange = true; if (C.Tonemapper?.PBR_NEUTRAL != null) scene.postProcessStages.tonemapper = C.Tonemapper.PBR_NEUTRAL; } catch { } }
     scene.fog.enabled = true; scene.fog.density = 1.6e-4; scene.fog.minimumBrightness = .25;
     camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5;
     // ---- time of day: the sun, sky, light on the scenery and fog all follow one clock you can move during the flight ----
@@ -787,6 +838,124 @@ window.BoploSim = (() => {
     const lightAt = e => { if (e <= KEYS[0].e) return KEYS[0]; for (let i = 1; i < KEYS.length; i++) if (e <= KEYS[i].e) { const A = KEYS[i - 1], B = KEYS[i], t = (e - A.e) / (B.e - A.e), o = {}; for (const k of Object.keys(A)) o[k] = mix(A[k], B[k], t); return o; } return KEYS[KEYS.length - 1]; };
     const sky = { hour: TOD === 'night' ? hourFor(-16) : TOD === 'golden' ? hourFor(6) : 10.6, elev: 45, L: [1, 1, 1], dark: false, dim: false };
     let LIGHT = [1, 1, 1], starBox = null, flare = null, tintShader = null, grade = null, rwStRef = () => [];
+    // ---- the sky and the air: a physically based sky (single scattering, Rayleigh, Mie and ozone) replaces Cesium's sky
+    // everywhere it shows, and the same atmosphere sits between the eye and the scenery, so mountains and the horizon fade
+    // into the sky's own colour with no hard edge. Over the satellite terrain it also lights the hills from the real sun (relief
+    // from the elevation data) and adds fine ground detail close up. The step counts drop with the adaptive quality.
+    const FXQ = GFX === 'detailed' ? { N: 12, M: 4, aN: 6 } : GFX === 'balanced' ? { N: 10, M: 3, aN: 5 } : { N: 8, M: 3, aN: 4 };
+    if (coarse) { FXQ.N -= 2; FXQ.aN -= 1; }
+    const AN = { camRel: new C.Cartesian3(), ac: new C.Cartesian3(0, 0, -1e7), acR: 12, mie: mieFromVis(60000), exp: 1, night: 0, twi: 0, stars: 0, moonB: 0, cloudL: .9, relief: 0, detail: GFX === 'fast' && coarse ? 0 : 1, N: FXQ.N, M: FXQ.M, aN: FXQ.aN };
+    const anchorW = C.Cartesian3.fromDegrees(startLL[0], startLL[1], 0), anchorM = C.Transforms.eastNorthUpToFixedFrame(anchorW);
+    const anchorE = C.Matrix4.multiplyByPointAsVector(anchorM, C.Cartesian3.UNIT_X, new C.Cartesian3()), anchorN = C.Matrix4.multiplyByPointAsVector(anchorM, C.Cartesian3.UNIT_Y, new C.Cartesian3());
+    const atmoUp = new C.Cartesian3(), atmoTan = new C.Cartesian2(), atmoMoon = new C.Cartesian3(0, 0, 1);
+    let atmo = null;
+    try {
+      atmo = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_atmosphere', uniforms: {
+          u_cd: () => camera.directionWC, u_cu: () => camera.upWC, u_cr: () => camera.rightWC,
+          u_up: () => C.Ellipsoid.WGS84.geodeticSurfaceNormal(camera.positionWC, atmoUp), u_sun: () => scene.context.uniformState.sunDirectionWC || C.Cartesian3.UNIT_Z,
+          u_tan: () => { const fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2); atmoTan.x = ty * (fr.aspectRatio || 1); atmoTan.y = ty; return atmoTan; },
+          u_h: () => clamp(camera.positionCartographic.height, 1, 59e3), u_mie: () => AN.mie, u_exp: () => AN.exp, u_N: () => AN.N, u_M: () => AN.M, u_aN: () => AN.aN,
+          u_night: () => AN.night, u_twi: () => AN.twi, u_stars: () => AN.stars, u_moonW: () => atmoMoon, u_moonB: () => AN.moonB, u_cloudL: () => AN.cloudL,
+          u_camRel: () => C.Cartesian3.subtract(camera.positionWC, anchorW, AN.camRel), u_east: anchorE, u_north: anchorN, u_ac: () => AN.ac, u_acR: () => AN.acR,
+          u_relief: () => AN.relief, u_detail: () => AN.detail },
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; in vec2 v_textureCoordinates;
+          uniform vec3 u_cd; uniform vec3 u_cu; uniform vec3 u_cr; uniform vec3 u_up; uniform vec3 u_sun; uniform vec2 u_tan;
+          uniform float u_h; uniform float u_mie; uniform float u_exp; uniform int u_N; uniform int u_M; uniform int u_aN;
+          uniform float u_night; uniform float u_twi; uniform float u_stars; uniform vec3 u_moonW; uniform float u_moonB; uniform float u_cloudL;
+          uniform vec3 u_camRel; uniform vec3 u_east; uniform vec3 u_north; uniform vec3 u_ac; uniform float u_acR; uniform float u_relief; uniform float u_detail;
+          ${ATM_GLSL}
+          float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float hash3(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+          float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y); }
+          vec3 expose(vec3 L) { return 1.0 - exp(-L * u_exp); }
+          // what's left of the sky once the sun is well down: a faint blue night gradient
+          vec3 nightSky(float mu) { return mix(vec3(0.045, 0.06, 0.12), vec3(0.006, 0.01, 0.03), smoothstep(0.0, 0.45, mu)); }
+          vec3 twilight(float mu, float nu) { return mix(vec3(0.17, 0.2, 0.32), vec3(0.06, 0.11, 0.27), smoothstep(0.0, 0.6, mu)) * (0.8 + 0.2 * nu); }
+          vec3 eyePos(vec2 fc, float d) { return czm_windowToEyeCoordinates(fc, d).xyz; }
+          void main() {
+            vec2 uv = v_textureCoordinates; vec4 cc = texture(colorTexture, uv); vec3 base = cc.rgb;
+            vec3 dir = normalize(u_cd + (uv.x * 2.0 - 1.0) * u_tan.x * u_cr + (uv.y * 2.0 - 1.0) * u_tan.y * u_cu);
+            float mu = dot(dir, u_up), muS = dot(u_sun, u_up), nu = dot(dir, u_sun);
+            float dep = czm_readDepth(depthTexture, uv); vec3 T;
+            if (dep >= 0.9999) {
+              // open sky. The scene behind is black, so whatever is there already (clouds, lights) is premultiplied over it.
+              vec3 L = scatter(u_h, mu, muS, nu, 1e9, u_N, u_M, u_mie, T);
+              bool ground = toGround(u_h, mu) > 0.0;
+              if (ground) L += T * vec3(0.05, 0.055, 0.045) * 22.0 * max(muS, 0.0) * 0.35; // land below the horizon not loaded yet
+              else L += T * 30.0 * smoothstep(0.99995, 0.99999, nu); // the sun's disc, reddened by the air in front of it
+              vec3 sky = expose(L) + (nightSky(mu) * u_night + twilight(mu, nu) * u_twi) * (ground ? 0.45 : 1.0);
+              if (u_moonB > 0.0 && !ground) { float md = dot(dir, u_moonW); sky += vec3(0.86, 0.9, 1.0) * u_moonB * (smoothstep(0.99996, 0.99998, md) * 1.6 + pow(max(md, 0.0), 1200.0) * 0.12); }
+              if (u_stars > 0.0) { float hs = hash3(floor(dir * 520.0)); sky += vec3(0.85, 0.9, 1.0) * u_stars * smoothstep(0.9988, 0.9999, hs) * 0.9 * smoothstep(0.03, 0.25, mu); }
+              float a = clamp(dot(base, vec3(0.3, 0.5, 0.2)) / max(u_cloudL, 0.04), 0.0, 1.0);
+              base = sky * (1.0 - a) + base;
+            } else {
+              vec3 pe = eyePos(gl_FragCoord.xy, dep); float dist = length(pe);
+              vec3 rel = u_camRel + u_cr * pe.x + u_cu * pe.y - u_cd * pe.z;
+              bool onAircraft = length(rel - u_ac) < u_acR;
+              // relief: the satellite terrain has no normals of its own, so take them from the depth of the neighbouring pixels
+              // and light the slopes from the actual sun direction (fading out close in and far away, and at night)
+              if (u_relief > 0.0 && !onAircraft && dist > 120.0 && dist < 26000.0) {
+                vec2 px = 1.0 / vec2(textureSize(depthTexture, 0));
+                float dR = czm_readDepth(depthTexture, uv + vec2(px.x, 0.0)), dU = czm_readDepth(depthTexture, uv + vec2(0.0, px.y));
+                if (dR < 0.9999 && dU < 0.9999) {
+                  vec3 pR = eyePos(gl_FragCoord.xy + vec2(1.0, 0.0), dR), pU = eyePos(gl_FragCoord.xy + vec2(0.0, 1.0), dU);
+                  if (abs(length(pR) - dist) < dist * 0.03 && abs(length(pU) - dist) < dist * 0.03) {
+                    vec3 nE = normalize(cross(pR - pe, pU - pe)); if (dot(nE, -pe) < 0.0) nE = -nE;
+                    vec3 nW = normalize(u_cr * nE.x + u_cu * nE.y - u_cd * nE.z);
+                    float rl = clamp(dot(nW, u_sun) / max(muS, 0.12), 0.3, 1.75);
+                    float k = u_relief * smoothstep(120.0, 400.0, dist) * (1.0 - smoothstep(12000.0, 26000.0, dist)) * smoothstep(-0.04, 0.08, muS);
+                    base *= mix(1.0, rl, 0.45 * k);
+                  }
+                }
+              }
+              // fine ground detail close up, so the satellite photo doesn't turn to blur under the wheels
+              if (u_detail > 0.0 && !onAircraft && dist < 900.0) {
+                vec2 q = vec2(dot(rel, u_east), dot(rel, u_north));
+                float fp = dist * 2.0 * u_tan.y / float(textureSize(depthTexture, 0).y); // metres per pixel
+                float v = (vnoise(q / 2.3) - 0.5) * 0.11 * (1.0 - smoothstep(0.12, 0.5, fp)) + (vnoise(q / 9.0) - 0.5) * 0.09 * (1.0 - smoothstep(0.5, 2.2, fp)) + (vnoise(q / 41.0) - 0.5) * 0.07;
+                base *= 1.0 + v * u_detail * (1.0 - smoothstep(350.0, 900.0, dist));
+              }
+              // aerial perspective: light scattered into the line of sight, and the scenery dimmed by the air in between
+              if (!onAircraft || dist > 60.0) {
+                vec3 L = scatter(u_h, mu, muS, nu, dist, u_aN, 2, u_mie, T);
+                base = base * T + expose(L) + (nightSky(max(mu, 0.0)) * u_night + twilight(max(mu, 0.0), nu) * u_twi) * (1.0 - T);
+              }
+            }
+            out_FragColor = vec4(base, cc.a);
+          }` }));
+      if (scene.skyAtmosphere) scene.skyAtmosphere.show = false; if (scene.sun) scene.sun.show = false; if (scene.moon) scene.moon.show = false; if (scene.skyBox) scene.skyBox.show = false; scene.backgroundColor = C.Color.BLACK;
+      if ('renderable' in scene.fog) scene.fog.renderable = false;
+    } catch (e) { console.warn('atmosphere', e); atmo = null; }
+    // heat shimmer behind jet engines: the scenery seen through each exhaust plume wobbles, more with more thrust
+    const HT = { e: [0, 1, 2, 3].map(() => new C.Cartesian4()), d: new C.Cartesian4(), r: new C.Cartesian4(), k: 0, on: true };
+    let heat = null;
+    if (O.jet && GFX !== 'fast') { try {
+      heat = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_heat', uniforms: { u_e0: () => HT.e[0], u_e1: () => HT.e[1], u_e2: () => HT.e[2], u_e3: () => HT.e[3], u_ed: () => HT.d, u_er: () => HT.r, u_k: () => HT.on ? HT.k : 0, u_t: () => performance.now() / 1000 % 1000, u_asp: () => camera.frustum.aspectRatio || 1 },
+        fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; in vec2 v_textureCoordinates;
+          uniform vec4 u_e0; uniform vec4 u_e1; uniform vec4 u_e2; uniform vec4 u_e3; uniform vec4 u_ed; uniform vec4 u_er; uniform float u_k; uniform float u_t; uniform float u_asp;
+          float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y); }
+          // how much of the plume from a to b (radius r at the nozzle, growing downstream) covers this pixel
+          float plume(vec2 p, vec4 s, float r) { vec2 a = s.xy * vec2(u_asp, 1.0), b = s.zw * vec2(u_asp, 1.0), ab = b - a;
+            float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-9), 0.0, 1.0), rr = r * (0.6 + 2.2 * t);
+            return (1.0 - smoothstep(rr * 0.35, rr, length(p - (a + ab * t)))) * smoothstep(0.0, 0.06, t) * pow(1.0 - t, 0.8); }
+          void main() {
+            vec2 uv = v_textureCoordinates; float w = 0.0;
+            if (u_k > 0.0) {
+              vec2 p = uv * vec2(u_asp, 1.0); float dep = czm_readDepth(depthTexture, uv);
+              float dist = dep >= 0.9999 ? 1e9 : length(czm_windowToEyeCoordinates(gl_FragCoord.xy, dep).xyz);
+              if (u_ed.x > 0.0 && dist > u_ed.x) w = max(w, plume(p, u_e0, u_er.x));
+              if (u_ed.y > 0.0 && dist > u_ed.y) w = max(w, plume(p, u_e1, u_er.y));
+              if (u_ed.z > 0.0 && dist > u_ed.z) w = max(w, plume(p, u_e2, u_er.z));
+              if (u_ed.w > 0.0 && dist > u_ed.w) w = max(w, plume(p, u_e3, u_er.w));
+            }
+            vec2 off = vec2(0.0);
+            if (w > 0.001) { vec2 q = uv * vec2(140.0 * u_asp, 140.0); off = (vec2(vnoise(q + vec2(0.0, u_t * 9.0)), vnoise(q * 1.3 + vec2(u_t * 7.0, 5.0))) - 0.5) * 0.006 * w * u_k; }
+            out_FragColor = texture(colorTexture, uv + off);
+          }` }));
+    } catch (e) { console.warn('heat', e); heat = null; } }
     if (!coarse && GFX === 'detailed') { try { flare = C.PostProcessStageLibrary.createLensFlareStage(); Object.assign(flare.uniforms, { intensity: .7, distortion: 1.4, ghostDispersal: .32, haloWidth: .32, dirtAmount: 0, earthRadius: C.Ellipsoid.WGS84.maximumRadius }); scene.postProcessStages.add(flare); } catch (e) { console.warn('flare', e); flare = null; } }
     const camUp = new C.Cartesian3(), camTan = new C.Cartesian2(), moonW = new C.Cartesian3(0, 0, 1);
     // colour grade over the whole frame: warm gain and lifted shadows at sunset, filmic contrast, a soft vignette
@@ -835,11 +1004,16 @@ window.BoploSim = (() => {
               base = mix(base, target, u_sky * 0.88); } }
             vec3 col = base * u_gain + u_lift * (1.0 - base);
             float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, u_sat);
-            col = (col - 0.5) * u_con + 0.5; vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
+            col = clamp(col, 0.0, 1.0);
+            // filmic contrast: an S-curve that deepens the shadows and rolls the highlights off instead of clipping them,
+            // with a touch of split toning (cool shadows, warm highlights) for a photographic look
+            vec3 sc = col * col * (3.0 - 2.0 * col); col = mix(col, sc, clamp((u_con - 1.0) * 5.0, 0.0, 0.6));
+            float lt = dot(col, vec3(0.2126, 0.7152, 0.0722)); col += vec3(0.012, 0.004, -0.014) * (lt - 0.45) * 2.0;
+            vec2 d = v_textureCoordinates - 0.5; col *= clamp(1.0 - u_vig * dot(d, d) * 2.2, 0.0, 1.0);
             out_FragColor = vec4(clamp(col, 0.0, 1.0), cc.a); }` }));
     } catch (e) { console.warn('grade', e); grade = null; }
     // a light bloom so the sun and lit cloud edges glow (skipped on phones and the fast setting)
-    const bloom = !coarse && GFX !== 'fast' ? scene.postProcessStages.bloom : null;
+    const bloom = GFX === 'detailed' || (!coarse && GFX !== 'fast') ? scene.postProcessStages.bloom : null;
     if (bloom) { try { bloom.enabled = true; Object.assign(bloom.uniforms, { glowOnly: false, contrast: 119, brightness: -.4, delta: .9, sigma: 3.2, stepSize: 1 }); } catch { } }
     try { const sa = scene.skyAtmosphere; if (sa) sa.perFragmentAtmosphere = true; if (scene.atmosphere && C.DynamicAtmosphereLightingType) scene.atmosphere.dynamicLighting = C.DynamicAtmosphereLightingType.SUNLIGHT; } catch { }
     const C3 = a => new C.Cartesian3(a[0], a[1], a[2]);
@@ -850,13 +1024,26 @@ window.BoploSim = (() => {
     function applyTime(h) {
       sky.hour = ((h % 24) + 24) % 24; const e = sunElev(sky.hour); sky.elev = e;
       viewer.clock.currentTime = C.JulianDate.fromDate(new Date(SUN.day0 + (sky.hour - startLL[0] / 15) * 3600e3)); viewer.clock.shouldAnimate = false;
-      const K = lightAt(e), L = K.L; LIGHT = L; sky.L = L; sky.dark = e < -7; sky.dim = e < 4;
+      const K = { ...lightAt(e) }, L = K.L; LIGHT = L; sky.L = L; sky.dark = e < -7; sky.dim = e < 4;
       const avg = (L[0] + L[1] + L[2]) / 3;
+      // sunlight colour from the air it has come through: white at midday, gold then orange as the sun gets low
+      // (below a few degrees the hand-tuned sunset key takes over, since the real sun is then partly behind the horizon)
+      if (atmo) {
+        let vis = 60000; try { if (WX.visM) vis = clamp(WX.visM, 800, 60000); } catch { } AN.mie = mieFromVis(vis);
+        const Ts = sunTransmittance(600, Math.max(e, .5), AN.mie), m = Math.max(...Ts, 1e-4), phys = Ts.map(v => Math.pow(v / m, .75)), w = clamp((e - 1) / 5, 0, 1);
+        K.lc = K.lc.map((v, i) => lerp(v, phys[i], w));
+        // eye adaptation: the sky is exposed brighter as the light fades, until only the night gradient and stars are left
+        AN.exp = e > 8 ? 1.7 : e > 2 ? lerp(2.1, 1.7, (e - 2) / 6) : e > -2 ? lerp(9, 2.1, (e + 2) / 4) : e > -6 ? lerp(40, 9, (e + 6) / 4) : lerp(90, 40, (e + 10) / 4);
+        // twilight blue: light scattered more than once (and the ozone's blue) keeps the sky blue overhead after sunset,
+        // which single scattering alone misses
+        AN.twi = clamp((e + 11) / 7, 0, 1) * clamp((3 - e) / 5, 0, 1);
+        AN.night = clamp((-e - 1) / 8, 0, 1);
+      }
       try { const sa = scene.skyAtmosphere; if (sa) { sa.brightnessShift = K.S[0]; sa.saturationShift = K.S[1]; sa.hueShift = K.S[2]; sa.atmosphereMieCoefficient = new C.Cartesian3(21e-6 * (1 + K.sg * .5), 21e-6 * (1 + K.sg * .5), 21e-6 * (1 + K.sg * .5)); sa.atmosphereMieAnisotropy = .9 + K.sg * .02; } } catch { }
-      try { scene.sun.show = true; scene.sun.glowFactor = Math.max(.6, K.sg); } catch { }
+      if (!atmo) try { scene.sun.show = true; scene.sun.glowFactor = Math.max(.6, K.sg); } catch { }
       // stars once the sky is dark enough
-      try { if (sky.dark && !starBox && C.SkyBox.createEarthSkyBox) starBox = C.SkyBox.createEarthSkyBox(); if (starBox) { scene.skyBox = starBox; starBox.show = e < -5; } } catch { }
-      scene.backgroundColor = C.Color.fromCssColorString(e < -8 ? '#04060d' : e < -3 ? '#0d1530' : '#5E93D8');
+      if (!atmo) try { if (sky.dark && !starBox && C.SkyBox.createEarthSkyBox) starBox = C.SkyBox.createEarthSkyBox(); if (starBox) { scene.skyBox = starBox; starBox.show = e < -5; } } catch { }
+      if (!atmo) scene.backgroundColor = C.Color.fromCssColorString(e < -8 ? '#04060d' : e < -3 ? '#0d1530' : '#5E93D8');
       // where the sun and moon are, and how much of the moon is lit (full when it's opposite the sun)
       const jd = viewer.clock.currentTime, sunD = bodyDir(C.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame, jd) || upW, moonD = bodyDir(C.Simon1994PlanetaryPositions.computeMoonPositionInEarthInertialFrame, jd);
       const moonEl = moonD ? C.Cartesian3.dot(moonD, upW) : -1, illum = moonD ? (1 - C.Cartesian3.dot(sunD, moonD)) / 2 : 0, moonUp = moonEl > 0.02;
@@ -883,7 +1070,7 @@ window.BoploSim = (() => {
       // the photo scenery has the sun baked in: tint it, and fade the distance into a coloured haze (warm at sunset, blue by day)
       const hazeD = Math.min(K.hd, typeof visM === 'number' ? visM * 1.1 : K.hd);
       try { if (tileset) {
-        if (fxOff) { } else if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: 1 / hazeD },
+        if (fxOff) { } else if (!tintShader) { tintShader = new C.CustomShader({ uniforms: { u_light: { type: C.UniformType.VEC3, value: C3(L) }, u_haze: { type: C.UniformType.VEC3, value: C3(K.hz) }, u_haze2: { type: C.UniformType.VEC3, value: C3(K.hz2) }, u_hk: { type: C.UniformType.FLOAT, value: atmo ? 1e-9 : 1 / hazeD },
             u_rl: { type: C.UniformType.FLOAT, value: K.rl }, u_amb: { type: C.UniformType.VEC3, value: C3(K.amb) }, u_sunc: { type: C.UniformType.VEC3, value: C3(K.lc) }, u_night: { type: C.UniformType.FLOAT, value: K.night }, u_ldir: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(toLight) }, u_upW: { type: C.UniformType.VEC3, value: C.Cartesian3.clone(upW) } },
           // the photo scenery has midday light baked in. Relight it from the real light direction using each surface's facet normal:
           // slopes and walls facing a low sun light up warm, those facing away fall into blue shade, so dawn and dusk have real relief.
@@ -918,12 +1105,15 @@ window.BoploSim = (() => {
               if (any(isnan(outc)) || any(isinf(outc))) outc = base * u_light;
               material.diffuse = outc;
             }` }); tileset.customShader = tintShader; }
-        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_rl', K.rl); tintShader.setUniform('u_amb', C3(K.amb)); tintShader.setUniform('u_sunc', C3(K.lc)); tintShader.setUniform('u_night', K.night); tintShader.setUniform('u_ldir', toLight); tintShader.setUniform('u_hk', 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
+        else { tintShader.setUniform('u_light', C3(L)); tintShader.setUniform('u_haze', C3(K.hz)); tintShader.setUniform('u_haze2', C3(K.hz2)); tintShader.setUniform('u_rl', K.rl); tintShader.setUniform('u_amb', C3(K.amb)); tintShader.setUniform('u_sunc', C3(K.lc)); tintShader.setUniform('u_night', K.night); tintShader.setUniform('u_ldir', toLight); tintShader.setUniform('u_hk', atmo ? 1e-9 : 1 / hazeD); } } } catch (e2) { console.warn('tint', e2); }
       if (!tileset) { const L0 = scene.imageryLayers.get(0); if (L0) { L0.brightness = Math.max(.15, avg); } scene.globe.enableLighting = e < 15; }
       scene.fog.minimumBrightness = lerp(.05, .3, (e + 8) / 14);
       if (grade) { const u = grade.uniforms; u.u_gain = C3(K.g); u.u_lift = C3(K.lf); u.u_con = K.c; u.u_sat = K.sat; u.u_vig = K.v; u.u_sky = K.sk; u.u_skyb = K.sb;
         u.u_zen = C3(K.zen); u.u_mid = C3(K.mid); u.u_away = C3(K.away); u.u_warm = C3(K.warm); u.u_gold = K.gold;
         u.u_stars = K.stars * (1 - .75 * sky.moon); u.u_moonB = sky.moon ? .35 + .9 * sky.moon : 0; u.u_sunDisc = e > -1.2 && e < 14 ? 1 : 0; }
+      if (atmo) { if (grade) grade.uniforms.u_sky = 0; AN.stars = K.stars * (1 - .75 * sky.moon); AN.moonB = sky.moon ? .35 + .9 * sky.moon : 0; C.Cartesian3.clone(moonW, atmoMoon);
+        // how bright a cloud should be, so its coverage can be told from its brightness against the black backdrop
+        AN.cloudL = clamp(avg * 1.05, .08, 1.05) * (K.lc[0] * .3 * .5 + L[0] * .3 * .6 + K.lc[1] * .5 * .5 + L[1] * .5 * .55 + K.lc[2] * .2 * .5 + L[2] * .2 * .55) * .85; }
       if (bloom) { try { bloom.uniforms.brightness = K.bl; } catch { } }
       if (flare) flare.enabled = e > -1;
       // clouds: lit warm from below at sunset, dim at dusk, near-black at night
@@ -936,7 +1126,7 @@ window.BoploSim = (() => {
     }
     if (scene.shadowMap) { scene.shadowMap.size = GFX === 'detailed' ? 2048 : 1024; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = GFX === 'detailed'; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
-    function dropFx() { fxOff = true; try { if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } try { if (model) model.customShader = undefined; acShader = null; } catch { } }
+    function dropFx() { fxOff = true; try { if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } try { if (atmo) { scene.postProcessStages.remove(atmo); atmo = null; if (heat) { scene.postProcessStages.remove(heat); heat = null; } if (scene.skyAtmosphere) scene.skyAtmosphere.show = true; if (scene.sun) scene.sun.show = true; if (scene.globe) scene.globe.showGroundAtmosphere = true; if ('renderable' in scene.fog) scene.fog.renderable = true; scene.backgroundColor = C.Color.fromCssColorString('#5E93D8'); } } catch { } try { if (model) model.customShader = undefined; acShader = null; } catch { } }
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch (err) { console.warn('render', err); dropFx(); } requestAnimationFrame(pump); })();
     const LLH = (x, z, h) => { const [lng, lat] = F.ll(x, z); return C.Cartesian3.fromDegrees(lng, lat, h); };
     const carto = (x, z) => { const [lng, lat] = F.ll(x, z); return C.Cartographic.fromDegrees(lng, lat); };
@@ -961,7 +1151,7 @@ window.BoploSim = (() => {
       if (O.googleKey) { try { const r = await Promise.race([fetch(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(O.googleKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapType: 'satellite', language: 'en-US', region: 'US' }) }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]); const j = r.ok ? await r.json() : null; if (j?.session) gsat = j.session; } catch (e) { console.warn('satellite tiles', e); } }
       if (gsat) { googleImagery = true; scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${gsat}&key=${encodeURIComponent(O.googleKey)}`, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 19, credit: new C.Credit('Imagery © Google · Terrain: AWS Terrain Tiles') })); }
       else scene.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url: IMG, tilingScheme: new C.WebMercatorTilingScheme(), maximumLevel: 14, credit: new C.Credit('Imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016), CC BY 4.0 · Terrain: AWS Terrain Tiles') }));
-      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = true; g.maximumScreenSpaceError = 2; g.tileCacheSize = 600; g.preloadSiblings = true; g.enableLighting = false;
+      const g = scene.globe; g.depthTestAgainstTerrain = true; g.showGroundAtmosphere = !atmo; AN.relief = atmo ? 1 : 0; g.maximumScreenSpaceError = 2; g.tileCacheSize = 600; g.preloadSiblings = true; g.enableLighting = false;
     }
     root.classList.toggle('is-google', scenery === 'google');
     // Google’s tile terms: the copyright line stays on screen, not only inside a collapsed credit.
@@ -1019,8 +1209,8 @@ window.BoploSim = (() => {
       // reflections: a live environment map of the sky and ground around the aircraft, so the clear-coated paint and glass
       // mirror the real sky (and the sunset) as it flies
       const envOpts = { enabled: true, maximumPositionEpsilon: 2000, maximumSecondsDifference: 600, brightness: 1.5, saturation: 1, groundAlbedo: .45, groundColor: new C.Color(.55, .56, .5, 1) };
-      try { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, environmentMapOptions: envOpts }); }
-      catch { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse ? C.ShadowMode.DISABLED : C.ShadowMode.CAST_ONLY, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y }); }
+      try { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse && GFX === 'fast' ? C.ShadowMode.DISABLED : C.ShadowMode.ENABLED, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y, environmentMapOptions: envOpts }); }
+      catch { model = await C.Model.fromGltfAsync({ url: glbUrl, shadows: coarse && GFX === 'fast' ? C.ShadowMode.DISABLED : C.ShadowMode.ENABLED, forwardAxis: C.Axis.Z, upAxis: C.Axis.Y }); }
       scene.primitives.add(model);
       model.readyEvent.addEventListener(() => { bladeNode = model.getNode('blades'); discNode = model.getNode('disc'); gearNode = model.getNode('gear'); for (const k of Object.keys(AC.surfaces || {})) { const n = model.getNode(k); if (n) surfNodes[k] = n; } });
     } catch (e) { console.warn('aircraft model', e); }
@@ -1033,11 +1223,47 @@ window.BoploSim = (() => {
       acShader = new C.CustomShader({ uniforms: {
           u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
           u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 },
-          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 } },
-        fragmentShaderText: `void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 }, u_micro: { type: C.UniformType.FLOAT, value: GFX === 'fast' ? 0 : 1 } },
+        fragmentShaderText: `float hsh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hsh(i), hsh(i + vec2(1.0, 0.0)), f.x), mix(hsh(i + vec2(0.0, 1.0)), hsh(i + vec2(1.0, 1.0)), f.x), f.y); }
+        // distance (m) to the nearest panel seam on a grid of the given spacing (m)
+        float seamD(float c, float sp) { return abs(fract(c / sp + 0.5) - 0.5) * sp; }
+        void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
           material.emissive *= u_cabin; // cabin windows: dark by day, warm glow from dusk
           vec3 N = normalize(fsInput.attributes.normalEC), V = normalize(-fsInput.attributes.positionEC);
           if (dot(N, V) < 0.0) N = -N;
+          vec3 upE = normalize(czm_viewRotation * u_up);
+          // ---- skin detail on painted and metal surfaces (not glass or the prop disc): panel seams, rivet rows, fine
+          // scratches in the clear coat and a little grime, all in the model's own coordinates (metres) so they stay put.
+          // The seams and rivets bend the normal (bump mapping without tangents), so they catch the light for real.
+          if (u_micro > 0.0 && material.roughness > 0.05 && material.alpha > 0.5) {
+            vec3 q = fsInput.attributes.positionMC, an = abs(normalize(fsInput.attributes.normalMC));
+            vec2 sv = an.x > an.y && an.x > an.z ? q.zy : (an.y > an.z ? q.zx : q.xy);
+            vec2 fw = fwidth(sv); float fp = max(fw.x, fw.y); // metres per pixel
+            float seam = 0.0, riv = 0.0, kS = 1.0 - smoothstep(0.012, 0.035, fp), kR = 1.0 - smoothstep(0.0025, 0.007, fp);
+            if (kS > 0.0) {
+              float a = seamD(sv.x, 0.62), b = seamD(sv.y, 0.47);
+              seam = max(1.0 - smoothstep(0.003, 0.003 + 1.5 * fp, a), 1.0 - smoothstep(0.003, 0.003 + 1.5 * fp, b)) * kS;
+              if (kR > 0.0) {
+                float ra = length(vec2(abs(a - 0.018), seamD(sv.y, 0.042))), rb = length(vec2(abs(b - 0.018), seamD(sv.x, 0.042)));
+                riv = (1.0 - smoothstep(0.0022, 0.0034, min(ra, rb))) * kR;
+              }
+            }
+            float hgt = (riv * 0.00045 - seam * 0.0012);
+            vec3 dpx = dFdx(fsInput.attributes.positionEC), dpy = dFdy(fsInput.attributes.positionEC);
+            vec3 r1 = cross(dpy, N), r2 = cross(N, dpx); float det = dot(dpx, r1);
+            vec3 grad = sign(det) * (dFdx(hgt) * r1 + dFdy(hgt) * r2);
+            if (abs(det) > 1e-14) N = normalize(abs(det) * N - grad);
+            // scratches run fore and aft; grime gathers low on the airframe
+            float scr = vn(q.zx * vec2(1.6, 38.0) + q.y * 3.0) * vn(q.zy * vec2(2.2, 41.0));
+            float grime = vn(q.zx * 0.9) * smoothstep(0.3, -0.6, dot(N, upE));
+            material.roughness = clamp(material.roughness + (scr - 0.25) * 0.09 * kS + seam * 0.25 + grime * 0.12, 0.02, 1.0);
+            material.diffuse *= (1.0 - seam * 0.22) * (1.0 - grime * 0.08) * (1.0 + riv * 0.06);
+            // ambient occlusion: undersides see the ground rather than the sky, seams are little cavities
+            material.occlusion *= mix(0.62, 1.0, smoothstep(-0.75, 0.35, dot(N, upE))) * (1.0 - seam * 0.35);
+            material.normalEC = N;
+          }
           vec3 R = reflect(-V, N), Rw = normalize(czm_inverseViewRotation * R);
           float h = dot(Rw, u_up), gl2 = clamp(1.0 - material.roughness, 0.0, 1.0); gl2 *= gl2;
           vec3 env = h > 0.0 ? mix(u_hor, u_top, smoothstep(0.0, 0.5, h)) : mix(u_hor * 0.55, u_gnd, smoothstep(0.0, 0.08, -h));
@@ -1221,6 +1447,21 @@ window.BoploSim = (() => {
       model.show = !st.crashed && !cockpit(); lights.show = !cockpit();
       // nav lights: model frame after axis conversion is x forward, y left, z up
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
+      // where the aircraft is, for the atmosphere pass (it skips the haze and ground detail on the aircraft itself)
+      if (atmo) { C.Cartesian3.subtract(C.Matrix4.getTranslation(model.modelMatrix, AN.ac), anchorW, AN.ac); AN.acR = Math.max(AC.type?.span || 11, AC.length || 9) * .62 + 2; }
+      // heat shimmer: each engine's plume, nozzle to a few metres behind, in screen coordinates
+      if (heat) {
+        const eng = (AC.engines || []).slice(0, 4), fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2), cv = scene.canvas, toWin = C.SceneTransforms.worldToWindowCoordinates || C.SceneTransforms.wgs84ToWindowCoordinates;
+        const n1 = (fs.n1 || 0) / 100; HT.k = model.show ? (.45 + .9 * n1) * (st.ground ? 1 : .7) : 0;
+        for (let i = 0; i < 4; i++) {
+          const e = eng[i]; let ok = false;
+          if (e && HT.k > 0) {
+            const sp = AC.type?.span || 20, a = at(e), b = at([e[0], e[1], e[2] - sp * (.15 + .25 * n1)]), wa = toWin(scene, a), wb = toWin(scene, b), d = C.Cartesian3.distance(camera.positionWC, a);
+            if (wa && wb && d > 2) { const W = cv.clientWidth || 1, H = cv.clientHeight || 1; HT.e[i].x = wa.x / W; HT.e[i].y = 1 - wa.y / H; HT.e[i].z = wb.x / W; HT.e[i].w = 1 - wb.y / H; HT.d[['x', 'y', 'z', 'w'][i]] = d - 1; HT.r[['x', 'y', 'z', 'w'][i]] = sp * .022 / (d * 2 * ty); ok = true; }
+          }
+          if (!ok) HT.d[['x', 'y', 'z', 'w'][i]] = 0;
+        }
+      }
       navL.position = at(AC.tips.left); navR.position = at(AC.tips.right); strobe.position = at(AC.tips.tail); strobe.show = (st.t % 1.3) < .06;
       // beacon on the fin, landing lights in the wing leading edge
       if (AC.beacon || AC.surfaces?.rud) { const r = AC.surfaces?.rud; beacon.position = at(AC.beacon || [0, r.pivot[1] + (r.axis[1] * 1.3), r.pivot[2] + .2]); beacon.show = (st.t % 1.1) < .14 && fs.rpm > 0; }
@@ -1335,7 +1576,10 @@ window.BoploSim = (() => {
         camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-clamp(dep + camLiftDeg, -30, 85)), roll: 0 } });
       }
       placeAircraft();
-      { const want = shadowsOK && st.agl < 250; if (scene.shadowMap && scene.shadowMap.enabled !== want) scene.shadowMap.enabled = want; }
+      { const sm = scene.shadowMap; if (sm) { if (sm.enabled !== shadowsOK) sm.enabled = shadowsOK;
+        // cascaded shadow maps: near the ground they reach the runway; in the air they tighten round the aircraft so its own
+        // shadows (wing on fuselage, tail on stabiliser) stay sharp
+        const md = st.agl < 250 ? 350 : 140 + (AC.type?.span || 11) * 2; if (Math.abs(sm.maximumDistance - md) > 1) sm.maximumDistance = md; } }
       gateT += dt; if (gateT > .2) { gateT = 0; updateGates(); }
       cloudT += dt; if (cloudT > 1) { cloudT = 0; updateClouds(); }
       if (papi.length) { const ey = st.alt + AC.wheelDrop + 1.2; for (const u of papi) { const d = Math.hypot(st.x - u.p.c[0], st.z - u.p.c[1]), ang = Math.atan2(ey - u.p.h, Math.max(1, d)) * R2D; u.prim.color = ang > u.ang ? PW : RED; } }
@@ -2196,8 +2440,12 @@ window.BoploSim = (() => {
     // adaptive quality: hold a smooth frame rate by trading scenery detail, render resolution and shadows
     const QUAL = [{ sse: SSE0, res: RES0, sh: true }, { sse: SSE0 * 1.4, res: RES0 * .9, sh: true }, { sse: SSE0 * 1.9, res: RES0 * .8, sh: false }, { sse: SSE0 * 2.5, res: RES0 * .7, sh: false }, { sse: SSE0 * 3.2, res: RES0 * .6, sh: false }];
     let qi = 0, fpsN = 0, fpsT = performance.now(), calm = 0;
-    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = 2 * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !coarse; };
-    let shadowsOK = !coarse; applyQ();
+    const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = 2 * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !(coarse && GFX === 'fast');
+      // the atmosphere and effects step down with the rest: fewer scattering samples, then no heat shimmer, multisampling or ground detail
+      AN.N = Math.max(5, FXQ.N - 2 * qi); AN.aN = Math.max(2, FXQ.aN - qi); HT.on = qi < 3; AN.detail = qi < 4 && !(GFX === 'fast' && coarse) ? 1 : 0;
+      try { const ms = qi >= 2 ? 1 : MSAA0; if (scene.msaaSamples !== ms) scene.msaaSamples = ms; } catch { }
+      if (acShader) try { acShader.setUniform('u_micro', GFX !== 'fast' && qi < 4 ? 1 : 0); } catch { } };
+    let shadowsOK = !(coarse && GFX === 'fast'); applyQ();
     function loop(now) {
       if (!alive) return;
       raf = requestAnimationFrame(loop); pumping = false;
