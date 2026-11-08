@@ -53,6 +53,7 @@ window.BoploAircraft = (() => {
       canopy: { type: 'cabin', t: [.12, .36] }, gear: { type: 'tail', track: 1.85, r: .27, fair: false, legLen: .62 }, livery: ['#F2C230', '#121212', '#121212'], tips: false,
       perf: { vs: 33, vr: 38, appr: 50, cruise: 65, vmax: 76, climb: 450 } }
   ];
+  const clamp01 = v => Math.max(0, Math.min(1, v));
   const byId = id => TYPES.find(t => t.id === id) || TYPES[2];
   // match free text from a logbook ("PA-28 Warrior", "C172", "Cessna 152") to a type
   function match(text) {
@@ -73,9 +74,25 @@ window.BoploAircraft = (() => {
 
   function build(id) {
     const T = byId(id);
-    const parts = { paint: [], matte: [], glass: [], blades: [], disc: [], ailL: [], ailR: [], flapL: [], flapR: [], elev: [], rud: [] };
+    // ---- mesh hierarchy: every part lives in a named node ("node:material", or just a name for both), so the simulator can
+    // move each one: control surfaces about their hinges, gear struts up and down, wheels round their axles, and a cockpit
+    // with its own moving controls and instruments. Nodes record their pivot in model coordinates (abs); child nodes sit
+    // under a parent (wheel under strut), and geometry is stored relative to the node's pivot.
+    const NODES = new Map();
+    const nodeDef = (name, abs = null, parent = null, local = false) => { let n = NODES.get(name); if (!n) { n = { name, abs: abs || [0, 0, 0], parent, local, mats: {} }; NODES.set(name, n); } else if (abs) { n.abs = abs; n.parent = parent; n.local = local; } return n; };
+    ['paint', 'matte', 'glass', 'glassIn', 'blades', 'disc', 'ailL', 'ailR', 'flapL', 'flapR', 'elev', 'rud'].forEach(k => nodeDef(k));
     const [CBASE, CACC, CTRIM] = T.livery.map(hex), CTIP = T.tips === false ? hex(T.livery[0]) : CACC, GREY = [.42, .45, .5, 1], DARK = [.07, .075, .085, 1], RUBBER = [.035, .035, .04, 1], GLASS = [.13, .19, .27, 1];
-    const mesh = b => { const m = { pos: [], col: [], idx: [] }; parts[b].push(m); return m; };
+    // cockpit colours carry alpha .995: the skin-detail shader leaves those surfaces alone (no rivets on the seats)
+    const INT = [.36, .37, .38, .995], PANEL = [.1, .105, .115, .995], FACE = [.03, .032, .036, .995], WHITE = [.92, .92, .9, .995], SEAT = [.16, .17, .2, .995], LCD = [.2, .75, .45, .995], SKY = [.18, .45, .85, .995], EARTH = [.45, .3, .16, .995], ORANGE = [1, .55, .1, .995];
+    const mesh = b => { const [nn, mat] = b.includes(':') ? b.split(':') : [b, b]; const n = nodeDef(nn), m = { pos: [], col: [], idx: [] }; (n.mats[mat] = n.mats[mat] || []).push(m); return m; };
+    // a box with flat faces (its own vertices per face), optionally rotated about x by rx (radians) around its centre
+    const box = (b, c, sz, col, rx = 0) => { const m = mesh(b), [hx, hy, hz] = sz.map(v => v / 2), cr = Math.cos(rx), sr = Math.sin(rx);
+      const P = (x, y, z) => [c[0] + x, c[1] + y * cr - z * sr, c[2] + y * sr + z * cr];
+      const F = [[[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]], [[1, -1, -1], [-1, -1, -1], [-1, 1, -1], [1, 1, -1]], [[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]], [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]], [[1, -1, 1], [1, -1, -1], [1, 1, -1], [1, 1, 1]], [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]]];
+      for (const f of F) { const k = m.pos.length / 3; for (const [a, bb, cc] of f) { m.pos.push(...P(a * hx, bb * hy, cc * hz)); m.col.push(...col); } m.idx.push(k, k + 1, k + 2, k, k + 2, k + 3); } return m; };
+    // a flat disc facing aft (towards the pilot), and a ring of tick marks round it
+    const disc = (b, c, r, col, n = 24) => { const m = mesh(b), k = m.pos.length / 3; m.pos.push(...c); m.col.push(...col); for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; m.pos.push(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, c[2]); m.col.push(...col); } for (let i = 0; i < n; i++) m.idx.push(k, k + 1 + i, k + 1 + (i + 1) % n); return m; };
+    const ticks = (b, c, r, n, col, a0 = 0, a1 = Math.PI * 2, len = .18) => { for (let i = 0; i < n; i++) { const a = Math.PI / 2 - (a0 + (a1 - a0) * i / (a1 - a0 >= Math.PI * 2 - 1e-6 ? n : n - 1)); box(b, [c[0] - Math.cos(a) * r * (1 - len / 2), c[1] + Math.sin(a) * r * (1 - len / 2), c[2]], [r * .05, r * len, .001], col); } };
     function loft(b, rings, colors, { closed = true, capStart = false, capEnd = false } = {}) {
       const m = mesh(b), n = rings[0].length;
       rings.forEach((r, i) => r.forEach(p => { m.pos.push(p[0], p[1], p[2]); m.col.push(...(Array.isArray(colors[0]) ? colors[i] : colors)); }));
@@ -94,7 +111,13 @@ window.BoploAircraft = (() => {
     // ---- fuselage ----
     const FU = fuselageRings(T), fine = []; for (let t = 0; t <= 1.0001; t += .025) fine.push(Math.min(1, t));
     const secAt = FU.at;
-    loft('paint', fine.map(t => { const s = secAt(t); return ring(s.z, s.cy, s.w, s.h); }), CBASE, { capEnd: true });
+    // the skin is open where the glass is, so you can see into the cabin and out of it: a fixed opening under a cabin's
+    // windows, and one that follows the bubble's width under a bubble canopy
+    const CV = T.canopy, [cta, ctb] = CV.t, bumpAt = t => Math.sin(Math.PI * Math.pow(clamp01((t - cta) / (ctb - cta)), .8));
+    const cutAt = t => CV.type === 'cabin' ? (CV.low ? .32 : .16) : (bumpAt(t) < .25 ? Math.PI / 2 - .001 : Math.acos(Math.min(.98, (.5 + .38 * bumpAt(t)) * .86)));
+    const openRing = (t, k = 1, n = 24) => { const s = secAt(t), a = cutAt(t); return arc(s.z, s.cy, s.w, s.h, Math.PI - a, a + Math.PI * 2, n, k); };
+    { const st = [...new Set([...fine, cta, ctb])].sort((a, b) => a - b), fr = st.filter(t => t <= cta), md = st.filter(t => t >= cta && t <= ctb), rr = st.filter(t => t >= ctb), full = t => { const s = secAt(t); return arc(s.z, s.cy, s.w, s.h, Math.PI / 2 + .001, Math.PI / 2 - .001 + Math.PI * 2, 24, 1); };
+      loft('paint', fr.map(full), CBASE, { closed: false }); loft('paint', md.map(t => openRing(t)), CBASE, { closed: false }); loft('paint', rr.map(full), CBASE, { closed: false, capEnd: true }); }
     // cheatline on both sides, belly trim
     for (const side of [0, Math.PI]) {
       const ts = fine.filter(t => t > .06 && t < .9);
@@ -112,12 +135,15 @@ window.BoploAircraft = (() => {
       const [ta, tb] = cv.t, ts = []; for (let t = ta; t <= tb + 1e-6; t += (tb - ta) / 10) ts.push(t);
       const a0 = cv.low ? .32 : .16, a1 = Math.PI - a0;
       loft('glass', ts.map(t => { const s = secAt(t); return arc(s.z, s.cy, s.w, s.h, a0, a1, 18, 1.016); }), GLASS, { closed: false });
+      // the inner face of the glass, 6 mm in: its own faint reflection seen from the cockpit
+      loft('glassIn', ts.map(t => { const s = secAt(t); return arc(s.z, s.cy, s.w, s.h, a0, a1, 18, 1.016 - .012 / s.w); }), GLASS, { closed: false });
       // window posts
       for (const t of [ta + (tb - ta) * .32, ta + (tb - ta) * .66]) { const s = secAt(t), s2 = secAt(t + .008); loft('paint', [arc(s.z, s.cy, s.w, s.h, a0, a1, 18, 1.02), arc(s2.z, s2.cy, s2.w, s2.h, a0, a1, 18, 1.02)], CBASE, { closed: false }); }
     } else {
       const [ta, tb] = cv.t, hh = (cv.hh || .5) * T.H, rings = [];
       for (let i = 0; i <= 8; i++) { const t = ta + (tb - ta) * i / 8, s = secAt(t), bump = Math.sin(Math.PI * Math.pow(i / 8, .8)); rings.push(ring(s.z, s.cy + s.h / 2 - hh * .15 + hh * .42 * bump, s.w * (.5 + .38 * bump), Math.max(.02, hh * bump * 1.05), 24, 2.1)); }
       loft('glass', rings, GLASS, { capStart: true, capEnd: true });
+      loft('glassIn', rings.map(r => { const c = r.reduce((a, p) => [a[0] + p[0] / r.length, a[1] + p[1] / r.length], [0, 0]); return r.map(p => [c[0] + (p[0] - c[0]) * .985, c[1] + (p[1] - c[1]) * .985, p[2]]); }), GLASS, { capStart: true, capEnd: true });
     }
 
     // pilot's eye: left seat, a little below the top of the cabin, about mid-canopy
@@ -182,54 +208,142 @@ window.BoploAircraft = (() => {
 
     // ---- landing gear ----
     const G = T.gear, belly = secAt(rootT).cy - secAt(rootT).h / 2, wheelY = belly - G.legLen;
-    const wheel = (x, z, r, fair) => {
-      const tyre = []; for (let i = 0; i <= 12; i++) { const a = i / 12 * Math.PI * 2; tyre.push([x + r * .45, wheelY + r + Math.sin(a) * r, z + Math.cos(a) * r]); }
-      loft('matte', [tyre, tyre.map(p => [p[0] - r * .9, p[1], p[2]])], RUBBER, { closed: false });
-      if (fair) loft('paint', [[z + r * 2.1, r * .15, r * .25], [z + r * 1.3, r * .9, r * 1.2], [z, r * 1.1, r * 1.55], [z - r * 1.2, r * 1, r * 1.3], [z - r * 2.2, r * .25, r * .35]].map(([zz, w, h]) => ring(zz, wheelY + r * 1.05, w, h, 16, 2.2, x)), CBASE, { capStart: true, capEnd: true });
+    // each leg is a strut node (leg, fairing) that slides up as it takes load, with the wheel as its child, spinning on its axle
+    const wheels = [];
+    let gearId = '';
+    const wheel = (x, z, r, fair, id = gearId) => {
+      const c = [x, wheelY + r, z], S = 'strut' + id, W = 'wheel' + id;
+      nodeDef(S, c); nodeDef(W, c, S); wheels.push({ id, strut: S, node: W, c, r, main: id !== 'N' && id !== 'T' });
+      const tyre = []; for (let i = 0; i <= 16; i++) { const a = i / 16 * Math.PI * 2; tyre.push([x + r * .45, wheelY + r + Math.sin(a) * r, z + Math.cos(a) * r]); }
+      loft(W + ':matte', [tyre.map(p => [p[0] - r * .1, c[1] + (p[1] - c[1]) * .7, c[2] + (p[2] - c[2]) * .7]), tyre, tyre.map(p => [p[0] - r * .9, p[1], p[2]]), tyre.map(p => [p[0] - r * .8, c[1] + (p[1] - c[1]) * .7, c[2] + (p[2] - c[2]) * .7])], RUBBER, { closed: false });
+      // hub caps with two spokes each side, so the spin shows
+      for (const sx of [1, -1]) { const hx = x + sx * r * .36; disc(W + ':matte', [hx, c[1], c[2]], r * .62, GREY, 14); box(W + ':matte', [hx + sx * .004, c[1], c[2]], [.006, r * 1.1, r * .16], DARK); box(W + ':matte', [hx + sx * .004, c[1], c[2]], [.006, r * .16, r * 1.1], DARK); }
+      if (fair) loft(S + ':paint', [[z + r * 2.1, r * .15, r * .25], [z + r * 1.3, r * .9, r * 1.2], [z, r * 1.1, r * 1.55], [z - r * 1.2, r * 1, r * 1.3], [z - r * 2.2, r * .25, r * .35]].map(([zz, w, h]) => ring(zz, wheelY + r * 1.05, w, h, 16, 2.2, x)), CBASE, { capStart: true, capEnd: true });
     };
     let groundAtt = 0, tailWheel = null;
     const mainZ = G.type === 'tail' ? WG.le - .05 : WG.le - secAtX(0)[1] * .62 - .1;
     for (const sx of [1, -1]) {
-      const x = sx * G.track / 2;
-      if (G.type === 'tail' || T.wing.pos === 'high') tube([sx * rs.w * .35, belly + .05, mainZ + (G.type === 'tail' ? .25 : 0)], [x, wheelY + G.r, mainZ], .035);
-      else tube([x * .9, yAt(Math.abs(x)) - .05, mainZ], [x, wheelY + G.r, mainZ], .04);
-      wheel(x, mainZ, G.r, G.fair);
+      const x = sx * G.track / 2; gearId = sx > 0 ? 'L' : 'R';
+      if (G.type === 'tail' || T.wing.pos === 'high') tube([sx * rs.w * .35, belly + .05, mainZ + (G.type === 'tail' ? .25 : 0)], [x, wheelY + G.r, mainZ], .035, 8, GREY, 'strut' + gearId + ':matte');
+      else tube([x * .9, yAt(Math.abs(x)) - .05, mainZ], [x, wheelY + G.r, mainZ], .04, 8, GREY, 'strut' + gearId + ':matte');
+      nodeDef('strut' + gearId, [x, wheelY + G.r, mainZ]); wheel(x, mainZ, G.r, G.fair);
     }
     if (G.type === 'tri') {
-      const nz = FU.noseZ - .45, ns = secAt(.04); tube([0, ns.cy - ns.h * .4, nz + .05], [0, wheelY + G.r * .85, nz], .035); wheel(0, nz, G.r * .85, G.fair);
+      gearId = 'N'; const nz = FU.noseZ - .45, ns = secAt(.04); nodeDef('strutN', [0, wheelY + G.r * .85, nz]); tube([0, ns.cy - ns.h * .4, nz + .05], [0, wheelY + G.r * .85, nz], .035, 8, GREY, 'strutN:matte'); wheel(0, nz, G.r * .85, G.fair);
     } else {
-      const tz = FU.tailZ + .35, ts = secAt(.95), r = .09; tube([0, ts.cy - ts.h / 2, tz + .1], [0, ts.cy - ts.h / 2 - .2 + r, tz], .02);
+      gearId = 'T'; const tz = FU.tailZ + .35, ts = secAt(.95), r = .09; nodeDef('strutT', [0, ts.cy - ts.h / 2 - .2 + r, tz]); tube([0, ts.cy - ts.h / 2, tz + .1], [0, ts.cy - ts.h / 2 - .2 + r, tz], .02, 8, GREY, 'strutT:matte');
       tailWheel = [0, ts.cy - ts.h / 2 - .2, tz]; wheel(0, tz, r, false);
       groundAtt = Math.atan2(tailWheel[1] - wheelY, mainZ - tz) / D2R; // nose-up angle sitting on the tailwheel
     }
 
     // ---- propeller ----
     const PR = Math.min(.95, T.H * .72), hub = [0, n0.cy, hubZ + .04];
+    nodeDef('blades', hub, null, true); nodeDef('disc', hub, null, true);
     for (const sgn of [1, -1]) { const b = []; for (const [rk, c, tw] of [[.06, .1, .35], [.35, .12, .28], [.7, .1, .18], [1, .06, .1]]) { const r = rk * PR, cc = c * PR * .6; b.push([[sgn * r, -cc / 2, Math.sin(tw * sgn) * cc / 2], [sgn * r, cc / 2, -Math.sin(tw * sgn) * cc / 2], [sgn * r, cc / 2, -Math.sin(tw * sgn) * cc / 2 - .025], [sgn * r, -cc / 2, Math.sin(tw * sgn) * cc / 2 - .025]]); } loft('blades', b, DARK, { capEnd: true }); }
     { const m = mesh('disc'); for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; m.pos.push(Math.cos(a) * PR, Math.sin(a) * PR, 0); m.col.push(.3, .32, .36, 1); } m.pos.push(0, 0, 0); m.col.push(.3, .32, .36, 1); for (let i = 0; i < 40; i++) m.idx.push(40, i, (i + 1) % 40); }
 
+
+    // ---- cockpit: an interior shell, the instrument panel with live instruments, seats, and the flying controls ----
+    // Everything hangs off the 'cockpit' node, which the simulator hides when the aircraft is too small on screen to see in.
+    const CK = nodeDef('cockpit');
+    const ctl = T.ctl || ({ c152: 'yoke', c172: 'yoke', pa28: 'yoke', sr20: 'side' })[T.id] || 'stick';
+    const panelZ = Math.min(eye[2] + .78, secAt(cta).z - .03), tP = (FU.noseZ - panelZ) / T.len, sP = secAt(tP);
+    const floorY = sP.cy - sP.h * .36, yG = eye[1] - .1, wi = sP.w / 2 * .9, aftT = Math.min(ctb + .05, .62);
+    // inner shell: the cabin walls, roof and the opening under the glass, 3% inside the skin, from the panel back to a bulkhead
+    { const st = [], t0 = Math.max(.02, tP - .04); for (let t = t0; t <= aftT + 1e-6; t += (aftT - t0) / 10) st.push(t);
+      loft('cockpit:interior', st.map(t => openRing(t, .965)), INT, { closed: false });
+      const sa = secAt(aftT), bk = ring(sa.z, sa.cy, sa.w * .965, sa.h * .965, 24); loft('cockpit:interior', [bk, bk.map(q => [q[0], q[1], q[2] - .002])], INT, { capStart: true }); }
+    box('cockpit:interior', [0, floorY - .01, (panelZ + secAt(aftT).z) / 2], [wi * 2, .02, panelZ - secAt(aftT).z], INT);
+    // panel and glareshield
+    const pTop = yG, pBot = floorY + .26;
+    box('cockpit:panel', [0, (pTop + floorY) / 2, panelZ + .03], [wi * 2.1, pTop - floorY, .06], PANEL);
+    box('cockpit:panel', [0, pTop + .015, panelZ - .03], [wi * 1.96, .03, .2], PANEL);
+    const iz = panelZ - .002, R0 = .041, xC = eye[0], rowA = pTop - .085, rowB = pTop - .19, cols = [xC + .1, xC, xC - .1];
+    const dial = (x, y, r = R0) => { disc('cockpit:panel', [x, y, iz], r * 1.12, GREY, 20); disc('cockpit:panel', [x, y, iz - .001], r, FACE, 20); };
+    // instruments: airspeed, attitude, altimeter / turn coordinator, heading, vertical speed (the six-pack), plus the tachometer
+    const inst = {};
+    const needle = (name, x, y, len, w = .006, col = WHITE, z = iz - .004) => { nodeDef(name, [x, y, z], 'cockpit'); box(name + ':gauge', [x, y + len / 2 - .006, z], [w, len, .002], col); disc(name + ':panel', [x, y, z - .0015], .006, FACE, 10); inst[name] = [x, y, z]; };
+    [[cols[0], rowA], [cols[2], rowA], [cols[1], rowB], [cols[2], rowB], [xC - .21, rowA]].forEach(([x, y]) => dial(x, y));
+    ticks('cockpit:gauge', [cols[0], rowA, iz - .0015], R0, 11, WHITE, .1, Math.PI * 1.85); needle('nASI', cols[0], rowA, R0 * .85);
+    ticks('cockpit:gauge', [cols[2], rowA, iz - .0015], R0, 10, WHITE); needle('nALT', cols[2], rowA, R0 * .85); needle('nALT2', cols[2], rowA, R0 * .55, .009, WHITE, iz - .0035);
+    ticks('cockpit:gauge', [cols[2], rowB, iz - .0015], R0, 9, WHITE, -Math.PI * .5 - 2.9, -Math.PI * .5 + 2.9); needle('nVSI', cols[2], rowB, R0 * .85);
+    ticks('cockpit:gauge', [xC - .21, rowA, iz - .0015], R0, 8, WHITE, -2.4, 2.4); needle('nRPM', xC - .21, rowA, R0 * .85);
+    // attitude: a sky-and-ground ball that turns with the bank and slides with the pitch, behind a fixed orange aircraft symbol
+    dial(cols[1], rowA); nodeDef('aiBall', [cols[1], rowA, iz - .0012], 'cockpit'); inst.aiBall = [cols[1], rowA, iz - .0012];
+    { const m = mesh('aiBall:gauge'), k0 = m.pos.length / 3, c = [cols[1], rowA, iz - .0012], r = R0 * .95; m.pos.push(...c); m.col.push(...SKY); for (let i = 0; i <= 12; i++) { const a = i / 12 * Math.PI; m.pos.push(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, c[2]); m.col.push(...SKY); } for (let i = 0; i < 12; i++) m.idx.push(k0, k0 + 1 + i, k0 + 2 + i);
+      const k1 = m.pos.length / 3; m.pos.push(...c); m.col.push(...EARTH); for (let i = 0; i <= 12; i++) { const a = Math.PI + i / 12 * Math.PI; m.pos.push(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, c[2]); m.col.push(...EARTH); } for (let i = 0; i < 12; i++) m.idx.push(k1, k1 + 1 + i, k1 + 2 + i);
+      box('aiBall:gauge', [c[0], c[1], c[2] - .0004], [r * 2, .0025, .0005], WHITE); }
+    box('cockpit:gauge', [cols[1] + R0 * .35, rowA, iz - .006], [R0 * .5, .004, .002], ORANGE); box('cockpit:gauge', [cols[1] - R0 * .35, rowA, iz - .006], [R0 * .5, .004, .002], ORANGE); disc('cockpit:gauge', [cols[1], rowA, iz - .006], .004, ORANGE, 8);
+    // heading: a compass card that turns under a fixed lubber line
+    dial(cols[1], rowB); nodeDef('dgCard', [cols[1], rowB, iz - .0012], 'cockpit'); inst.dgCard = [cols[1], rowB, iz - .0012];
+    ticks('dgCard:gauge', [cols[1], rowB, iz - .0014], R0 * .95, 12, WHITE); box('dgCard:gauge', [cols[1], rowB + R0 * .62, iz - .0016], [.008, .012, .001], ORANGE);
+    box('cockpit:gauge', [cols[1], rowB + R0 * 1.02, iz - .005], [.003, .014, .002], ORANGE);
+    // turn coordinator: a little aircraft that tips with the rate of turn
+    dial(cols[0], rowB); nodeDef('tcPlane', [cols[0], rowB, iz - .004], 'cockpit'); inst.tcPlane = [cols[0], rowB, iz - .004];
+    box('tcPlane:gauge', [cols[0], rowB, iz - .004], [R0 * 1.4, .005, .002], WHITE); box('tcPlane:gauge', [cols[0], rowB + .008, iz - .004], [.004, .014, .002], WHITE);
+    // radio stack in the middle, with green displays that glow at night
+    for (let i = 0; i < 3; i++) { const y = pTop - .07 - i * .055; box('cockpit:panel', [-.06, y, iz - .004], [.16, .045, .008], FACE); box('cockpit:lcd', [-.06, y, iz - .009], [.07, .014, .001], LCD); }
+    // seats
+    for (const sx of [1, -1]) { const x = sx * Math.abs(eye[0]); box('cockpit:seat', [x, floorY + .2, eye[2] + .08], [.44, .1, .46], SEAT); box('cockpit:seat', [x, floorY + .56, eye[2] - .2], [.44, .62, .1], SEAT, -.18); }
+    // flying controls for both seats: yokes, sticks or a side-stick, then rudder pedals and the throttle
+    const controls = [];
+    for (const sx of [1, -1]) {
+      const x = sx * Math.abs(eye[0]), sd = sx > 0 ? 'L' : 'R';
+      if (ctl === 'yoke') {
+        const y = pTop - .2, z = panelZ - .2, nm = 'yoke' + sd; nodeDef(nm, [x, y, z], 'cockpit');
+        tube([x, y, panelZ + .02], [x, y, z], .016, 8, DARK, nm + ':panel'); tube([x + .13, y, z - .01], [x - .13, y, z - .01], .014, 8, DARK, nm + ':panel');
+        for (const hx of [.13, -.13]) tube([x + hx, y, z - .01], [x + hx, y + .085, z - .03], .016, 8, DARK, nm + ':panel');
+        controls.push({ node: nm, kind: 'yoke', origin: [x, y, z] });
+      } else {
+        const side = ctl === 'side', px = side ? x + sx * .3 : x, py = side ? pTop - .28 : floorY, pz = side ? eye[2] + .45 : eye[2] + .4, L = side ? .14 : .5, nm = 'stick' + sd;
+        nodeDef(nm, [px, py, pz], 'cockpit'); tube([px, py, pz], [px, py + L, pz - .03], side ? .012 : .013, 8, DARK, nm + ':panel'); tube([px, py + L - .08, pz - .025], [px, py + L + .02, pz - .035], .02, 8, DARK, nm + ':panel');
+        controls.push({ node: nm, kind: 'stick', origin: [px, py, pz] });
+      }
+      for (const [pk, dx] of [['l', .09], ['r', -.09]]) { const nm = 'ped' + sd + pk, o = [x + dx, floorY + .1, panelZ - .14]; nodeDef(nm, o, 'cockpit'); box(nm + ':panel', o, [.07, .13, .015], DARK, -.5); controls.push({ node: nm, kind: 'pedal', side: pk === 'l' ? 1 : -1, origin: o }); }
+    }
+    if (ctl === 'yoke') { const o = [.04, pBot + .07, panelZ - .005]; nodeDef('throttle', o, 'cockpit'); tube(o, [o[0], o[1], o[2] - .07], .005, 6, GREY, 'throttle:panel'); disc('throttle:panel', [o[0], o[1], o[2] - .07], .018, DARK, 12); controls.push({ node: 'throttle', kind: 'plunger', origin: o }); }
+    else { box('cockpit:panel', [0, floorY + .12, eye[2] + .35], [.14, .24, .5], PANEL); const o = [.02, floorY + .24, eye[2] + .42]; nodeDef('throttle', o, 'cockpit'); tube(o, [o[0], o[1] + .14, o[2]], .006, 6, GREY, 'throttle:panel'); box('throttle:panel', [o[0], o[1] + .15, o[2]], [.03, .022, .03], DARK); box('cockpit:panel', [-.03, floorY + .3, eye[2] + .42], [.012, .1, .012], [.7, .08, .08, .995]); controls.push({ node: 'throttle', kind: 'lever', origin: o }); }
+
     // ---- merge and write the GLB ----
     const merge = list => { const pos = [], col = [], idx = []; for (const m of list) { const o = pos.length / 3; pos.push(...m.pos); col.push(...m.col); m.idx.forEach(i => idx.push(i + o)); } const nor = new Float32Array(pos.length); for (let i = 0; i < idx.length; i += 3) { const [a, b, c] = [idx[i] * 3, idx[i + 1] * 3, idx[i + 2] * 3]; const u = [pos[b] - pos[a], pos[b + 1] - pos[a + 1], pos[b + 2] - pos[a + 2]], v = [pos[c] - pos[a], pos[c + 1] - pos[a + 1], pos[c + 2] - pos[a + 2]], n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; for (const k of [a, b, c]) { nor[k] += n[0]; nor[k + 1] += n[1]; nor[k + 2] += n[2]; } } for (let i = 0; i < nor.length; i += 3) { const l = Math.hypot(nor[i], nor[i + 1], nor[i + 2]) || 1; nor[i] /= l; nor[i + 1] /= l; nor[i + 2] /= l; } return { pos: new Float32Array(pos), nor, col: new Float32Array(col), idx: new Uint32Array(idx) }; };
-    const prims = [
-      ['paint', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .3 }, extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .06 } }, doubleSided: true }],
-      ['matte', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .2, roughnessFactor: .7 }, doubleSided: true }],
-      ['glass', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .1, roughnessFactor: .03 }, extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .02 } }, doubleSided: true }],
-      ['blades', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .3, roughnessFactor: .5 }, doubleSided: true }],
-      ['disc', { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .14], metallicFactor: 0, roughnessFactor: 1 }, alphaMode: 'BLEND', doubleSided: true }],
-      ...['ailL', 'ailR', 'flapL', 'flapR', 'elev', 'rud'].map(k => [k, { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .3 }, extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .06 } }, doubleSided: true }])
-    ].filter(([k]) => parts[k].length).map(([k, mat]) => ({ name: k, geo: merge(parts[k]), mat }));
-    const chunks = [], views = [], accessors = []; let off = 0;
+    const CC = { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .3 }, extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .06 } }, doubleSided: true };
+    const MAT = {
+      paint: CC, ailL: CC, ailR: CC, flapL: CC, flapR: CC, elev: CC, rud: CC,
+      matte: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .2, roughnessFactor: .7 }, doubleSided: true },
+      // glass is see-through now (outer layer tinted and glossy, inner layer fainter), so the cockpit shows from outside and out
+      glass: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .28], metallicFactor: .1, roughnessFactor: .03 }, extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1, clearcoatRoughnessFactor: .02 } }, alphaMode: 'BLEND', doubleSided: true },
+      glassIn: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .1], metallicFactor: 0, roughnessFactor: .045 }, alphaMode: 'BLEND', doubleSided: true },
+      blades: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .3, roughnessFactor: .5 }, doubleSided: true },
+      disc: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, .14], metallicFactor: 0, roughnessFactor: 1 }, alphaMode: 'BLEND', doubleSided: true },
+      interior: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .85 }, doubleSided: true },
+      seat: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .9 }, doubleSided: true },
+      panel: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: .1, roughnessFactor: .55 }, doubleSided: true },
+      // instrument markings and radio displays light up at night (the simulator scales emission with the light level)
+      gauge: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .4 }, emissiveFactor: [.95, .88, .72], doubleSided: true },
+      lcd: { pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: .2 }, emissiveFactor: [.25, .95, .5], doubleSided: true }
+    };
+    const chunks = [], views = [], accessors = [], materials = [], matIdx = {}; let off = 0;
     const addView = (arr, target) => { const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength), pad = (4 - bytes.length % 4) % 4; views.push({ buffer: 0, byteOffset: off, byteLength: bytes.length, target }); chunks.push(bytes); if (pad) chunks.push(new Uint8Array(pad)); off += bytes.length + pad; return views.length - 1; };
-    const meshes = prims.map((p, pi) => {
-      const { pos, nor, col, idx } = p.geo, min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
-      for (let i = 0; i < pos.length; i += 3) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], pos[i + k]); max[k] = Math.max(max[k], pos[i + k]); }
-      const acc = (view, type, comp, count, extra = {}) => { accessors.push({ bufferView: view, componentType: comp, count, type, ...extra }); return accessors.length - 1; };
-      const aP = acc(addView(pos, 34962), 'VEC3', 5126, pos.length / 3, { min, max }), aN = acc(addView(nor, 34962), 'VEC3', 5126, nor.length / 3), aC = acc(addView(col, 34962), 'VEC4', 5126, col.length / 4), aI = acc(addView(idx, 34963), 'SCALAR', 5125, idx.length);
-      return { name: p.name, primitives: [{ attributes: { POSITION: aP, NORMAL: aN, COLOR_0: aC }, indices: aI, material: pi }] };
-    });
-    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, extensionsUsed: ['KHR_materials_clearcoat'], scene: 0, scenes: [{ nodes: prims.map((_, i) => i) }],
-      nodes: prims.map((p, i) => ({ mesh: i, name: p.name, ...(p.name === 'blades' || p.name === 'disc' ? { translation: hub } : {}) })),
-      meshes, materials: prims.map(p => ({ name: p.name, ...p.mat })), accessors, bufferViews: views, buffers: [{ byteLength: off }] };
+    const acc = (view, type, comp, count, extra = {}) => { accessors.push({ bufferView: view, componentType: comp, count, type, ...extra }); return accessors.length - 1; };
+    const matOf = k => { if (matIdx[k] == null) { materials.push({ name: k, ...(MAT[k] || MAT.paint) }); matIdx[k] = materials.length - 1; } return matIdx[k]; };
+    const list = [...NODES.values()].filter(n => Object.keys(n.mats).length || [...NODES.values()].some(c => c.parent === n.name)), idxOf = new Map(list.map((n, i) => [n.name, i])), meshes = [], gnodes = [];
+    for (const n of list) {
+      const prims = [];
+      for (const [k, ms] of Object.entries(n.mats)) {
+        const g = merge(ms); if (!g.idx.length) continue;
+        if (!n.local) for (let i = 0; i < g.pos.length; i += 3) { g.pos[i] -= n.abs[0]; g.pos[i + 1] -= n.abs[1]; g.pos[i + 2] -= n.abs[2]; }
+        const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+        for (let i = 0; i < g.pos.length; i += 3) for (let q = 0; q < 3; q++) { min[q] = Math.min(min[q], g.pos[i + q]); max[q] = Math.max(max[q], g.pos[i + q]); }
+        prims.push({ attributes: { POSITION: acc(addView(g.pos, 34962), 'VEC3', 5126, g.pos.length / 3, { min, max }), NORMAL: acc(addView(g.nor, 34962), 'VEC3', 5126, g.nor.length / 3), COLOR_0: acc(addView(g.col, 34962), 'VEC4', 5126, g.col.length / 4) }, indices: acc(addView(g.idx, 34963), 'SCALAR', 5125, g.idx.length), material: matOf(k) });
+      }
+      const par = n.parent ? NODES.get(n.parent) : null, tr = par ? n.abs.map((v, i) => v - par.abs[i]) : n.abs;
+      const gn = { name: n.name }; if (prims.length) { meshes.push({ name: n.name, primitives: prims }); gn.mesh = meshes.length - 1; }
+      if (tr.some(v => Math.abs(v) > 1e-9)) gn.translation = tr;
+      const kids = list.filter(c => c.parent === n.name).map(c => idxOf.get(c.name)); if (kids.length) gn.children = kids;
+      gnodes.push(gn);
+    }
+    const json = { asset: { version: '2.0', generator: 'Boplo Flight' }, extensionsUsed: ['KHR_materials_clearcoat'], scene: 0, scenes: [{ nodes: list.map((n, i) => n.parent ? -1 : i).filter(i => i >= 0) }],
+      nodes: gnodes, meshes, materials, accessors, bufferViews: views, buffers: [{ byteLength: off }] };
     let jsonBytes = new TextEncoder().encode(JSON.stringify(json)); const jpad = (4 - jsonBytes.length % 4) % 4;
     if (jpad) { const t = new Uint8Array(jsonBytes.length + jpad); t.set(jsonBytes); t.fill(32, jsonBytes.length); jsonBytes = t; }
     const total = 12 + 8 + jsonBytes.length + 8 + off, out = new Uint8Array(total), dv = new DataView(out.buffer);
@@ -237,7 +351,9 @@ window.BoploAircraft = (() => {
     dv.setUint32(12, jsonBytes.length, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jsonBytes, 20);
     let p = 20 + jsonBytes.length; dv.setUint32(p, off, true); dv.setUint32(p + 4, 0x004E4942, true); p += 8;
     for (const c of chunks) out.set(c, p), p += c.length;
-    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, eye, surfaces: Object.fromEntries(Object.entries(surfaces).map(([k, v]) => { let { a, b } = v; const flip = v.kind === 'rud' ? b[1] < a[1] : b[0] < a[0]; if (flip) [a, b] = [b, a]; const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...d); return [k, { ...v, pivot: a, axis: d.map(x => x / l) }]; })), tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T };
+    return { glb: out, S: T.span / 3.24, hub, wheelDrop: -wheelY, groundAtt, eye, surfaces: Object.fromEntries(Object.entries(surfaces).map(([k, v]) => { let { a, b } = v; const flip = v.kind === 'rud' ? b[1] < a[1] : b[0] < a[0]; if (flip) [a, b] = [b, a]; const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...d); return [k, { ...v, pivot: a, axis: d.map(x => x / l) }]; })), tips: { left: [tipX, tipY, tipZ[0] - tipZ[1] * .3], right: [-tipX, tipY, tipZ[0] - tipZ[1] * .3], tail: [0, tailS.cy + tailS.h * .3 + finH, finLE(finH) - TL.fin[1][1]] }, perf: T.perf, type: T,
+      // what the simulator animates beyond the control surfaces: struts and wheels, the cockpit controls and instruments, wing flex
+      cockpit: true, rig: { wheels, controls, inst, ctl, semi: tipX, root: rs.w * .5, wheelbase: G.type === 'tri' ? mainZ - (FU.noseZ - .45) : mainZ - FU.tailZ - .35, nodes: Object.fromEntries([...NODES.values()].map(n => [n.name, { abs: n.abs, t: n.parent ? n.abs.map((v, i) => v - NODES.get(n.parent).abs[i]) : n.abs }])) } };
   }
 
   // flight-model numbers from the book figures: thrust and drag that give the type's top speed and climb rate

@@ -1231,7 +1231,13 @@ window.BoploSim = (() => {
       acShader = new C.CustomShader({ uniforms: {
           u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
           u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 },
-          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 }, u_micro: { type: C.UniformType.FLOAT, value: GFX === 'fast' ? 0 : 1 } },
+          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 }, u_micro: { type: C.UniformType.FLOAT, value: GFX === 'fast' ? 0 : 1 },
+          u_flex: { type: C.UniformType.FLOAT, value: 0 }, u_semi: { type: C.UniformType.FLOAT, value: AC.rig?.semi || 10 }, u_root: { type: C.UniformType.FLOAT, value: AC.rig?.root || 1 }, u_ice: { type: C.UniformType.FLOAT, value: 0 } },
+        // wing flex: vertices outboard of the wing root rise (or droop) with the square of the distance along the span
+        vertexShaderText: `void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {
+          float ax = abs(vsInput.attributes.positionMC.x);
+          if (u_flex != 0.0 && ax > u_root) { float k = clamp((ax - u_root) / max(u_semi - u_root, 0.1), 0.0, 1.0); vsOutput.positionMC.y += u_flex * k * k; }
+        }`,
         fragmentShaderText: `float hsh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(hsh(i), hsh(i + vec2(1.0, 0.0)), f.x), mix(hsh(i + vec2(0.0, 1.0)), hsh(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -1245,7 +1251,7 @@ window.BoploSim = (() => {
           // ---- skin detail on painted and metal surfaces (not glass or the prop disc): panel seams, rivet rows, fine
           // scratches in the clear coat and a little grime, all in the model's own coordinates (metres) so they stay put.
           // The seams and rivets bend the normal (bump mapping without tangents), so they catch the light for real.
-          if (u_micro > 0.0 && material.roughness > 0.05 && material.alpha > 0.5) {
+          if (u_micro > 0.0 && material.roughness > 0.05 && material.alpha > 0.998) {
             vec3 q = fsInput.attributes.positionMC, an = abs(normalize((czm_inverseModelView * vec4(N, 0.0)).xyz));
             vec2 sv = an.x > an.y && an.x > an.z ? q.zy : (an.y > an.z ? q.zx : q.xy);
             vec2 fw = fwidth(sv); float fp = max(fw.x, fw.y); // metres per pixel
@@ -1279,6 +1285,13 @@ window.BoploSim = (() => {
           float gd = max(dot(Rw, u_glintW), 0.0), glint = pow(gd, 900.0) * 3.0 + pow(gd, 60.0) * 0.12;
           material.diffuse *= 1.0 - k * 0.25;
           material.emissive += env * k + u_sunc * glint * gl2 * u_refl;
+          // see-through glass: the reflection makes it more opaque at grazing angles, and ice frosts it over
+          if (material.alpha < 0.6) {
+            vec3 qm = fsInput.attributes.positionMC;
+            float frost = u_ice > 0.0 ? smoothstep(0.35, 0.8, vn(qm.zx * 55.0) * 0.6 + vn(qm.xy * 23.0 + 3.1) * 0.4 + u_ice * 0.45) * u_ice : 0.0;
+            material.alpha = clamp(material.alpha + k * 1.3 + glint * 0.4 + frost * 0.8, 0.0, 0.96);
+            material.diffuse = mix(material.diffuse, vec3(0.85, 0.9, 0.95), frost); material.roughness = mix(material.roughness, 0.6, frost);
+          }
         }` });
       model.customShader = acShader;
     } catch (e) { console.warn('aircraft shader', e); acShader = null; } }
@@ -1444,15 +1457,83 @@ window.BoploSim = (() => {
         .forEach(({ a, xz }) => labels.add({ ...labelStyle, text: a.code, position: LLH(xz[0], xz[1], a.elev * FT + geoN + 45), fillColor: C.Color.fromCssColorString('#CFE8FF'), font: '600 13px Archivo, system-ui, sans-serif' }));
     });
 
+
+    /* ---- rig: the model's moving parts bound to the flight model. Each channel eases towards its target as a critically
+       damped spring (so nothing snaps), the struts are spring-dampers that take the aircraft's weight and kick on touchdown,
+       the wheels spin with the ground speed and run down slowly once airborne, the wings bend with the g-load and turbulence,
+       and the cockpit's controls and instruments follow the same numbers the physics uses. ---- */
+    const RIG = AC.rig || null, rigN = {}, chan = {}, struts = {}; let rigReady = false, lastTouch = null, ckShown = true, iceAmt = 0, flexV = 0, flexX = 0;
+    const ease = (k, target, w, dt) => { const c = chan[k] || (chan[k] = { x: target, v: 0 }); const a = w * w * (target - c.x) - 2 * w * c.v; c.v += a * dt; c.x += c.v * dt; return c.x; };
+    const M3I = C.Matrix3.IDENTITY, tmpM = new C.Matrix4(), tmpV = new C.Cartesian3();
+    function nodeSet(name, R, dx = 0, dy = 0, dz = 0) { const n = rigN[name]; if (!n) return; const t = RIG.nodes[name].t; tmpV.x = t[0] + dx; tmpV.y = t[1] + dy; tmpV.z = t[2] + dz; n.matrix = C.Matrix4.fromRotationTranslation(R || M3I, tmpV, tmpM); }
+    const rotX = a => C.Matrix3.fromRotationX(a * D2R), rotZ = a => C.Matrix3.fromRotationZ(a * D2R);
+    // physics of the gear legs: called before the aircraft is placed, so the body can sit down on its compressed struts
+    function rigStruts(dt) {
+      if (!RIG) return { sink: 0, dPitch: 0 };
+      const ias = (fs.ias || 0) / KT, lift = clamp((ias / ((PF.vs || 50) * 1.15)) ** 2, 0, 1), gnd = !!fs.ground, gs = fs.gs ?? st.gs ?? 0;
+      const touch = fs.touch && fs.touch.t !== lastTouch ? fs.touch : null; if (touch) lastTouch = touch.t;
+      let mainC = 0, nm = 0, noseC = 0;
+      for (const w of RIG.wheels) {
+        const S = struts[w.id] || (struts[w.id] = { c: 0, v: 0, ang: 0, om: 0 });
+        // static deflection under its share of the weight, less what the wings already carry; the nose leg dips under braking
+        const tgt = gnd ? .045 * (w.main ? 1 : .75) * (1 - lift) * (fs.g || 1) + (w.id === 'N' ? clamp(fc.brake || 0, 0, 1) * .035 * (gs > 1 ? 1 : 0) : 0) : -.012;
+        if (touch && (w.main || w.id === 'T')) S.v += Math.max(0, -(touch.fpm || 0)) * .00508 * .8;
+        const W = 16, a = W * W * (tgt - S.c) - 2 * .32 * W * S.v; S.v += a * dt; S.c = clamp(S.c + S.v * dt, -.02, .16); if (S.c === .16 || S.c === -.02) S.v = 0;
+        // wheels: rolling with the ground speed on the ground, running down slowly in the air
+        S.om = gnd ? lerp(S.om, gs / w.r, 1 - Math.exp(-dt * 30)) : S.om * Math.exp(-dt * .3); S.ang = (S.ang + S.om * dt * R2D) % 360;
+        if (w.main) { mainC += S.c; nm++; } else noseC = S.c;
+      }
+      mainC /= nm || 1;
+      return { sink: gnd || st.agl < 2 ? mainC : 0, dPitch: RIG.wheels.some(w => w.id === 'N') ? -Math.atan2(noseC - mainC, RIG.wheelbase || 1.5) * R2D : 0 };
+    }
+    function rigDraw(dt) {
+      if (!RIG || !model) return;
+      if (!rigReady) { if (!model.ready) return; for (const k of Object.keys(RIG.nodes)) { const n = model.getNode(k); if (n) rigN[k] = n; } rigReady = true; }
+      // detail by on-screen size: the cockpit only draws (and its instruments only update) when it could be seen
+      const fr = camera.frustum, ty = Math.tan((fr.fovy || .9) / 2), d = Math.max(1, C.Cartesian3.distance(camera.positionWC, C.Matrix4.getTranslation(model.modelMatrix, tmpV))), px = (AC.type?.span || 10) / (d * 2 * ty) * (scene.canvas.clientHeight || 600);
+      const want = cockpit() || (ckShown ? px > 200 : px > 240); if (rigN.cockpit && want !== ckShown) { rigN.cockpit.show = want; ckShown = want; }
+      if (acShader) acShader.setUniform('u_micro', GFX !== 'fast' && px > 110 ? 1 : 0);
+      for (const w of RIG.wheels) { const S = struts[w.id]; if (!S) continue; nodeSet(w.strut, null, 0, S.c, 0); if (px > 40) nodeSet(w.node, rotX(S.ang)); }
+      // wing flex: tip deflection grows with the load factor (droops on the ground with no lift) and shakes in turbulence
+      if (acShader) {
+        const ias = (fs.ias || 0) / KT, lift = fs.ground ? clamp((ias / ((PF.vs || 50) * 1.15)) ** 2, 0, 1) : 1, tb = clamp(WX.turb || 0, 0, 1) + clamp((WX.gust || 0) / 25, 0, .6);
+        const shake = tb * (Math.sin(st.t * 7.1) * .5 + Math.sin(st.t * 12.7 + 1.3) * .3 + Math.sin(st.t * 3.3) * .2) * .35;
+        const tgt = RIG.semi * .007 * ((fs.g || 1) * lift - 1 + shake);
+        const a = 120 * (tgt - flexX) - 2 * .25 * 11 * flexV; flexV += a * dt; flexX += flexV * dt;
+        acShader.setUniform('u_flex', clamp(flexX, -.25, .25));
+        // icing: builds on the glass flying in cloud above the freezing level (about 7,000 ft on a standard day), clears below it
+        const inCloud = cloudLayers.some(L => /BKN|OVC|VV/.test(L.cover) && st.alt / FT > +L.base && st.alt / FT < +L.base + 2500);
+        iceAmt = clamp(iceAmt + (inCloud && st.alt / FT > 7000 ? dt / 90 : -dt / 45), 0, 1); acShader.setUniform('u_ice', iceAmt);
+      }
+      // flying controls, both seats
+      const ail = ease('ail', fc.aileron || 0, 18, dt), ele = ease('ele', fc.elevator || 0, 18, dt), rud = ease('rud', fs.rud ?? fc.rudder ?? 0, 14, dt), pwr = ease('pwr', fs.power ?? fc.throttle ?? 0, 10, dt);
+      if (ckShown) {
+        for (const c of RIG.controls) {
+          if (c.kind === 'yoke') nodeSet(c.node, rotZ(ail * 40), 0, 0, -ele * .07);
+          else if (c.kind === 'stick') nodeSet(c.node, C.Matrix3.multiply(rotZ(ail * 14), rotX(-ele * 14), new C.Matrix3()));
+          else if (c.kind === 'pedal') nodeSet(c.node, null, 0, 0, -c.side * rud * .045);
+          else if (c.kind === 'plunger') nodeSet(c.node, null, 0, 0, -(1 - pwr) * .06);
+          else if (c.kind === 'lever') nodeSet(c.node, rotX((pwr - .5) * 50));
+        }
+        // instruments, each with a little needle lag
+        const kt = ease('asi', (fs.ias || 0) / KT, 6, dt), ft = st.alt / FT, fpm = ease('vsi', (fs.vs || 0) * 196.85, 3, dt), rpm = ease('rpm', fs.rpm || 0, 6, dt);
+        nodeSet('nASI', rotZ(clamp(kt, 0, 200) / 200 * 330));
+        nodeSet('nALT', rotZ((ft % 1000 + 1000) % 1000 / 1000 * 360)); nodeSet('nALT2', rotZ((ft % 10000 + 10000) % 10000 / 10000 * 360));
+        nodeSet('nVSI', rotZ(-90 + clamp(fpm / 2000, -1, 1) * 165)); nodeSet('nRPM', rotZ(-135 + clamp(rpm / 3000, 0, 1) * 270));
+        nodeSet('aiBall', rotZ(-(st.bank || 0)), 0, clamp(-(st.att ?? st.pitch ?? 0) * .0009, -.022, .022), 0);
+        nodeSet('dgCard', rotZ(-(st.hdg || 0))); nodeSet('tcPlane', rotZ(clamp((fs.turn || 0) / 3, -1.5, 1.5) * 20));
+      }
+    }
     let upN = 0;
     function placeAircraft() {
       if (!model) return;
-      const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop);
+      const gearSit = rigStruts(Math.min(.05, realDt));
+      const pos = LLH(st.x, st.z, st.alt + AC.wheelDrop - gearSit.sink);
       const sx = F.sx(st.z), th = Math.abs(sx - 1) < 1e-4 ? st.hdg : Math.atan2(Math.sin(st.hdg * D2R) * sx, Math.cos(st.hdg * D2R)) * R2D;
-      const hpr = new C.HeadingPitchRoll(C.Math.toRadians(th - 90), C.Math.toRadians(st.att ?? st.pitch), C.Math.toRadians(st.bank));
+      const hpr = new C.HeadingPitchRoll(C.Math.toRadians(th - 90), C.Math.toRadians((st.att ?? st.pitch) + gearSit.dPitch), C.Math.toRadians(st.bank));
       C.Transforms.headingPitchRollToFixedFrame(pos, hpr, C.Ellipsoid.WGS84, undefined, model.modelMatrix);
       if (acShader && ++upN % 30 === 1) { try { acShader.setUniform('u_up', C.Ellipsoid.WGS84.geodeticSurfaceNormal(pos, new C.Cartesian3())); } catch { } }
-      model.show = !st.crashed && !cockpit(); lights.show = !cockpit();
+      model.show = !st.crashed && (!cockpit() || !!AC.cockpit); lights.show = !cockpit();
       // nav lights: model frame after axis conversion is x forward, y left, z up
       const at = ([gx, gy, gz]) => C.Matrix4.multiplyByPoint(model.modelMatrix, new C.Cartesian3(gz, gx, gy), new C.Cartesian3());
       // where the aircraft is, for the atmosphere pass (it skips the haze and ground detail on the aircraft itself)
@@ -1504,6 +1585,7 @@ window.BoploSim = (() => {
       propA = (propA + rpm / 60 * 2 * Math.PI * realDt * (rpm > 1200 ? .07 : 1)) % (Math.PI * 2);
       if (bladeNode) bladeNode.matrix = C.Matrix4.multiply(C.Matrix4.fromTranslation(new C.Cartesian3(...AC.hub)), C.Matrix4.fromRotationTranslation(C.Matrix3.fromRotationZ(propA)), new C.Matrix4());
       if (discNode) discNode.show = rpm > 1200;
+      rigDraw(Math.min(.05, realDt));
     }
     let propA = 0, fanA = 0, realDt = .016, gateT = 0;
     function updateGates() {
