@@ -147,7 +147,7 @@ window.BoploAircraft = (() => {
     }
 
     // pilot's eye: left seat, a little below the top of the cabin, about mid-canopy
-    const eyeS = secAt(cv.t[0] + (cv.t[1] - cv.t[0]) * .5), eye = [T.W * .22, eyeS.cy + eyeS.h * (cv.type === 'bubble' ? .32 : .22), eyeS.z];
+    const eyeS = secAt(cv.t[0] + (cv.t[1] - cv.t[0]) * .5), eye = [T.W * .22, cv.type === 'bubble' ? eyeS.cy + eyeS.h / 2 + .04 : eyeS.cy + eyeS.h / 2 - .13, eyeS.z]; // (high enough to see over the cowl)
     // ---- wing, with separate flaps and ailerons that the simulator can move ----
     const WG = T.wing, rootT = (FU.noseZ - WG.le) / T.len, rs = secAt(rootT);
     const rootY = WG.pos === 'high' ? rs.cy + rs.h / 2 - .1 : rs.cy - rs.h / 2 + .14;
