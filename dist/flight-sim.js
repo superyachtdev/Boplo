@@ -1238,7 +1238,7 @@ window.BoploSim = (() => {
           // scratches in the clear coat and a little grime, all in the model's own coordinates (metres) so they stay put.
           // The seams and rivets bend the normal (bump mapping without tangents), so they catch the light for real.
           if (u_micro > 0.0 && material.roughness > 0.05 && material.alpha > 0.5) {
-            vec3 q = fsInput.attributes.positionMC, an = abs(normalize(fsInput.attributes.normalMC));
+            vec3 q = fsInput.attributes.positionMC, an = abs(normalize((czm_inverseModelView * vec4(N, 0.0)).xyz));
             vec2 sv = an.x > an.y && an.x > an.z ? q.zy : (an.y > an.z ? q.zx : q.xy);
             vec2 fw = fwidth(sv); float fp = max(fw.x, fw.y); // metres per pixel
             float seam = 0.0, riv = 0.0, kS = 1.0 - smoothstep(0.012, 0.035, fp), kR = 1.0 - smoothstep(0.0025, 0.007, fp);
