@@ -438,3 +438,59 @@
 @media (max-width:1320px){.sim-tod{top:calc(env(safe-area-inset-top) + 118px)}}
 @media (max-width:760px){.sim-tod{top:calc(env(safe-area-inset-top) + 106px);right:10px}}
 @media (max-height:520px){.sim-tod{top:calc(env(safe-area-inset-top) + 56px)}}
+
+/* ===== flight display, second pass: glass controls, a menu for the secondary settings, gear status lights ===== */
+/* Glass: a dark, see-through key with a hairline edge. Real backdrop blur only where it's cheap (mouse and trackpad machines,
+   and only on small surfaces); phones keep the plain translucent fill so the 3D view keeps its frame rate. */
+.sim{--glass:rgba(10,14,26,.46);--glass-hi:rgba(10,14,26,.62);--glass-edge:rgba(255,255,255,.12);--glass-blur:none}
+@media (hover:hover) and (pointer:fine){.sim{--glass-blur:blur(14px) saturate(1.4)}}
+@media (prefers-reduced-transparency:reduce){.sim{--glass:rgba(10,14,26,.86);--glass-hi:rgba(10,14,26,.94);--glass-blur:none}}
+.pfd{--key:var(--glass);--key-hi:var(--glass-hi)}
+.sim.hud-on .sim-b,.sim.hud-on .sim-route,.ibar,.pfd-thr-track,.pfd-lever,.pfd-fl,.pfd-dk,.sim.hud-on .sim-nmap,.sim-menu{background:var(--glass);box-shadow:inset 0 0 0 1px var(--glass-edge);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur)}
+.sim.hud-on .sim-b:hover,.pfd-dk:hover{background:var(--glass-hi)}
+.sim.hud-on .sim-b[aria-pressed=true],.pfd-dk.on{background:#fff;color:#0B1020;box-shadow:none}
+/* the secondary buttons live in the menu while the flight display is up */
+.sim.hud-on [data-todb],.sim.hud-on [data-setb],.sim.hud-on [data-mute]{display:none}
+.sim-menub{display:none}
+.sim.hud-on .sim-menub{display:inline-flex}
+.sim-menub[aria-expanded=true]{background:#fff!important;color:#0B1020!important}
+.sim-menu{position:absolute;z-index:6;top:calc(env(safe-area-inset-top) + 66px);right:calc(env(safe-area-inset-right) + 14px);width:min(330px,calc(100vw - 28px));padding:14px;border-radius:20px;color:#fff;display:grid;gap:12px;transform-origin:top right;animation:simMenuIn .18s cubic-bezier(.2,.8,.2,1)}
+.sim-menu[hidden]{display:none}
+@keyframes simMenuIn{from{opacity:0;transform:translateY(-6px) scale(.97)}}
+@media (prefers-reduced-motion:reduce){.sim-menu{animation:none}}
+.sim-menu-h{display:flex;align-items:center;justify-content:space-between}
+.sim-menu-h b{font-weight:700;font-size:15px}
+.sim-menu-x{width:30px;height:30px;border:0;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:18px;line-height:1;cursor:pointer}
+.sim-menu-g{display:grid;gap:7px}
+.sim-menu-g>span{font-size:10.5px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:rgba(235,240,250,.62)}
+.sim-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:3px;border-radius:12px;background:rgba(255,255,255,.08)}
+.sim-seg button{height:32px;border:0;border-radius:9px;background:none;color:rgba(255,255,255,.82);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background-color .15s,color .15s}
+.sim-seg button[aria-pressed=true]{background:#fff;color:#0B1020}
+.sim-menu-l{display:grid;gap:2px}
+.sim-menu-l button{display:grid;grid-template-columns:22px 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;text-align:left;padding:9px 10px;border:0;border-radius:12px;background:none;color:#fff;font:inherit;cursor:pointer}
+.sim-menu-l button:hover,.sim-menu-l button:focus-visible{background:rgba(255,255,255,.08);outline:none}
+.sim-menu-l svg{grid-row:span 2;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.sim-menu-l span{font-size:14px;font-weight:600}
+.sim-menu-l small{font-size:12px;color:rgba(235,240,250,.6)}
+.sim-menu-f{font-size:11.5px;color:rgba(235,240,250,.55);line-height:1.45}
+.ibar.flash{animation:ibFlash 1.2s ease}
+@keyframes ibFlash{30%{box-shadow:inset 0 0 0 2px var(--hud-sel),0 0 0 4px rgba(62,224,255,.25)}}
+/* head-up display: cockpit view by default, or every view, or off */
+.sim.hud-always .hud,.sim.hud-always .pfd-tape{display:block}
+.sim.hud-hide .hud,.sim.hud-hide .pfd-tape{display:none!important}
+/* landing gear: a status light rather than a white key. Green down and locked, amber while it moves, dark when up */
+.pfd-dk[data-pf=gear]{background:var(--glass);color:#fff}
+.pfd-dk[data-pf=gear]::after{content:'';position:absolute;top:8px;right:11px;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.22);box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
+.pfd-dk[data-pf=gear][data-state=down]::after{background:#3BE37A;box-shadow:0 0 8px #3BE37A}
+.pfd-dk[data-pf=gear][data-state=moving]::after{background:var(--hud-amb);box-shadow:0 0 8px var(--hud-amb);animation:gearBlink .6s steps(2) infinite}
+.pfd-dk[data-pf=gear][data-state=moving]{color:var(--hud-amb)}
+@keyframes gearBlink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.pfd-dk[data-pf=gear][data-state=moving]::after{animation:none}}
+/* keys press in */
+.pfd-dk,.sim.hud-on .sim-b{transition:background-color .15s,color .15s,transform .12s}
+.pfd-dk:active,.sim.hud-on .sim-b:active{transform:scale(.94)}
+/* throttle: the handle glides, grows while held, and the power reading sits beside it */
+.pfd-thr-track b{transition:bottom .12s ease-out,height .15s,left .15s,right .15s,box-shadow .15s}
+.pfd-thr-track i{transition:height .12s ease-out}
+.pfd-thr-track:active b{left:1px;right:1px;height:18px;margin-bottom:-9px;box-shadow:0 0 0 4px rgba(141,255,176,.25),0 2px 8px rgba(0,0,0,.6)}
+.pfd-thr-track:active{box-shadow:inset 0 0 0 1px rgba(141,255,176,.45)}
