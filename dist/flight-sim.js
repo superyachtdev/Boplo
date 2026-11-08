@@ -919,7 +919,7 @@ window.BoploSim = (() => {
               // aerial perspective: light scattered into the line of sight, and the scenery dimmed by the air in between
               if (!onAircraft || dist > 60.0) {
                 vec3 L = scatter(u_h, mu, muS, nu, dist, u_aN, 2, u_mie, T);
-                base = base * T + expose(L) + (nightSky(max(mu, 0.0)) * u_night + twilight(max(mu, 0.0), nu) * u_twi) * (1.0 - T);
+                base = base * T + expose(L) + (nightSky(max(mu, 0.0)) * u_night + twilight(max(mu, 0.0), nu) * u_twi) * (1.0 - T * T * T);
               }
             }
             out_FragColor = vec4(base, cc.a);
