@@ -919,7 +919,10 @@ window.BoploSim = (() => {
               // aerial perspective: light scattered into the line of sight, and the scenery dimmed by the air in between
               if (!onAircraft || dist > 60.0) {
                 vec3 L = scatter(u_h, mu, muS, nu, dist, u_aN, 2, u_mie, T);
-                base = base * T + expose(L) + (nightSky(max(mu, 0.0)) * u_night + twilight(max(mu, 0.0), nu) * u_twi) * (1.0 - T * T * T);
+                // (the scenery is lit dimmer than the sky's own scale, so nearby haze is scaled down to match it; far off, where the
+                // scenery has faded away, it reaches the full sky brightness, so land and sky meet at the horizon without a seam)
+                float fade = 1.0 - dot(T, vec3(0.3, 0.5, 0.2));
+                base = base * T + expose(L * mix(0.4, 1.0, fade * fade)) + (nightSky(max(mu, 0.0)) * u_night + twilight(max(mu, 0.0), nu) * u_twi) * (1.0 - T * T * T);
               }
             }
             out_FragColor = vec4(base, cc.a);
