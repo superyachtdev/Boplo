@@ -21,3 +21,22 @@ How they are made:
 3. `build_all.py` runs both for every aircraft, writes `dist/aircraft-models/<id>.glb` with a placeholder in place of each livery texture, and `dist/aircraft-models/<id>/<livery>-<n>.jpg` for each livery. The simulator (`dist/flight-jets.js`) drops the chosen livery into the model at load time.
 
 Run: clone the FlightGear repositories above into a folder, then `FG_SRC=<that folder> python3 build_all.py` (needs numpy and Pillow).
+
+# Trainer models
+
+Most trainers are FlightGear aircraft too, converted by `build_trainers.py` (same `ac2glb.py`, with each model's textures kept inside the GLB):
+
+| Boplo id | Model | Source | Licence |
+|---|---|---|---|
+| c172 | Cessna 172P (Custom Callsign 1 livery) | https://github.com/c172p-team/c172p | GPL v2 |
+| c152 | Cessna 152 | https://github.com/FGMEMBERS/c152 | GPL v2 |
+| pa28 | Piper PA-28-161 | https://github.com/FGMEMBERS/PA28-161 | GPL v2 (FlightGear base package) |
+| dr400 | Robin DR400 | https://github.com/FGMEMBERS/dr400 | GPL v2 |
+| da40 | Diamond DA40 | https://github.com/FGMEMBERS/Diamond-DA40 | GPL v2 |
+| da20 | Diamond DA20 Katana | https://github.com/FGMEMBERS/Katana | GPL v2 |
+| cub | Piper J-3 Cub | https://github.com/FGMEMBERS/J3Cub | GPL v3 |
+
+The Tecnam P2008 and Cirrus SR20 have no usable FlightGear model, so they are still built in code (`dist/flight-aircraft.js`), with the 3D cockpit.
+Interiors are left out: in the cockpit view these models show the 2D instrument panel. The picker images in `dist/aircraft/` are renders of the same models.
+
+Run: clone the repositories above into a folder, then `FG_SRC=<that folder> python3 build_trainers.py [ids]`.

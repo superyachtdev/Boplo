@@ -24,6 +24,7 @@ ap.add_argument('--tex', action='append', default=[])
 ap.add_argument('--droptex', default=r'(?i)lights?/|glass_shader|fog|lightmap|surge|windows-lights')
 ap.add_argument('--maxtex', type=int, default=2048)
 ap.add_argument('--keep', default='')
+ap.add_argument('--taildragger', action='store_true', help='main gear ahead, tailwheel aft: the forward group is the main gear')
 a = ap.parse_args()
 texmap = dict(t.split('=', 1) for t in a.tex)
 SURF = [tuple(r.split('=', 1)) for r in a.surf]
@@ -196,6 +197,7 @@ cx = (bmn[0] + bmx[0]) / 2
 if len(gearP):
     gz = gearP[:, 2]; mid = (gz.min() + gz.max()) / 2
     mainZ = gz[gz < mid].mean(); noseZ = gz[gz >= mid].mean()
+    if a.taildragger: mainZ = gz[gz >= mid].mean(); noseZ = mainZ + 1.5
 else:
     mainZ = bmn[2] + (bmx[2] - bmn[2]) * .45; noseZ = bmx[2] - (bmx[2] - bmn[2]) * .12
 cz = mainZ + .08 * (noseZ - mainZ)

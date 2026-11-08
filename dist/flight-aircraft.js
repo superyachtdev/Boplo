@@ -72,7 +72,32 @@ window.BoploAircraft = (() => {
     }, stations: fam.map(([t]) => t) };
   }
 
-  function build(id) {
+  // ---- 3D models from FlightGear (GPL): most trainers are real modelled aircraft with their own textures, converted to glTF by
+  // tools/aircraft/build_trainers.py. Their key dimensions are here so the simulator can place lights, cameras and the gear
+  // before the file arrives; control surfaces and the propeller come from the file itself. Types without one are built in code.
+  const FGM = {"c172":{"span":11.27,"yMin":-1.19,"mainZ":-0.13,"noseZ":1.51,"tailZ":-5.67,"noseTip":2.55,"tip":[5.64,0.75,0.37],"fin":[0.0,1.27,-5.08]},"c152":{"span":9.93,"yMin":-1.24,"mainZ":-0.13,"noseZ":1.46,"tailZ":-5.0,"noseTip":2.45,"tip":[4.96,0.64,0.2],"fin":[-0.01,1.15,-4.48]},"pa28":{"span":10.33,"yMin":-1.13,"mainZ":-0.14,"noseZ":1.63,"tailZ":-4.26,"noseTip":2.72,"tip":[5.17,0.03,-0.45],"fin":[-0.0,1.64,-4.24]},"dr400":{"span":8.71,"yMin":-1.19,"mainZ":-0.12,"noseZ":1.41,"tailZ":-4.61,"noseTip":2.36,"tip":[4.35,-0.09,0.2],"fin":[0.0,1.03,-4.18]},"da40":{"span":11.9,"yMin":-1.04,"mainZ":-0.14,"noseZ":1.62,"tailZ":-5.44,"noseTip":2.65,"tip":[5.95,0.11,-0.36],"fin":[0.0,0.93,-4.98]},"da20":{"span":10.83,"yMin":-1.18,"mainZ":-0.13,"noseZ":1.53,"tailZ":-4.97,"noseTip":2.26,"tip":[5.41,0.17,0.02],"fin":[0.0,1.07,-4.17]},"cub":{"span":10.65,"yMin":-1.33,"mainZ":-0.12,"noseZ":1.38,"tailZ":-5.43,"noseTip":1.43,"tip":[5.32,0.65,-0.72],"fin":[0.02,1.41,-4.88]}}, FG_V = 1, fgCache = new Map();
+  function buildFG(T) {
+    const m = FGM[T.id], tip = m.tip, tail = T.gear.type === 'tail';
+    const AC = { glb: null, S: T.span / 3.24, hub: [0, 0, m.noseTip], wheelDrop: -m.yMin, groundAtt: tail ? 11.5 : 0, surfaces: {}, fg: true, perf: T.perf, type: T,
+      eye: [.26, .4, tail ? -.6 : (T.wing.pos === 'high' ? .05 : -.25)],
+      tips: { left: tip, right: [-tip[0], tip[1], tip[2]], tail: [0, m.fin[1], m.fin[2] - .1] }, land: [tip[0] * .38, tip[1] - .08, tip[2] + .25],
+      credit: 'Aircraft model from FlightGear (GPL), converted by Boplo',
+      load: async () => {
+        const url = `/aircraft-models/${T.id}.glb?v=${FG_V}`;
+        if (!fgCache.has(url)) fgCache.set(url, fetch(url).then(r => { if (!r.ok) throw new Error('model ' + r.status); return r.arrayBuffer(); }).catch(e => { fgCache.delete(url); throw e; }));
+        const buf = await fgCache.get(url), dv = new DataView(buf), jl = dv.getUint32(12, true), J = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
+        for (const sf of J.asset?.extras?.surfaces || []) {
+          AC.surfaces[sf.node] = { kind: sf.kind, side: sf.side, pivot: sf.pivot, axis: sf.axis, max: sf.kind === 'ail' ? 18 : sf.kind === 'elev' ? (T.tail.stabilator ? 14 : 24) : sf.kind === 'rud' ? 25 : 40 };
+          if (sf.kind === 'fan') AC.hub = sf.pivot;
+        }
+        AC.glb = new Uint8Array(buf);
+      } };
+    return AC;
+  }
+
+  function build(id) { const T = byId(id); return FGM[T.id] ? buildFG(T) : buildCode(id); }
+  // the aircraft built in code (also the fallback if a model file can't be fetched)
+  function buildCode(id) {
     const T = byId(id);
     // ---- mesh hierarchy: every part lives in a named node ("node:material", or just a name for both), so the simulator can
     // move each one: control surfaces about their hinges, gear struts up and down, wheels round their axles, and a cockpit
@@ -386,5 +411,5 @@ window.BoploAircraft = (() => {
     return `<svg viewBox="0 0 ${w} ${h}" class="ac-svg" aria-hidden="true"><g class="b">${wheels}<path d="${path}"/>${fin}</g><g class="w">${wing}</g>${canopy}</svg>`;
   }
 
-  return { TYPES, byId, match, build, model, profileSVG };
+  return { TYPES, byId, match, build, buildCode, model, profileSVG };
 })();
