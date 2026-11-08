@@ -2635,92 +2635,126 @@
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   // worldwide route planner: pick airports and runways on a map, then fly or replay the route in the simulator
   const loadRouteLib = () => window.BoploRoute ? Promise.resolve(window.BoploRoute) : loadScript('/flight-route.js?v=6', () => !!window.BoploRoute).then(() => window.BoploRoute);
-  async function openRoutePlanner() {
+  async function openRoutePlanner(onPick) {
     const btn = $('[data-rpopen]'); if (btn) btn.disabled = true;
     try {
       const [R] = await Promise.all([loadRouteLib(), loadAircraftLib().catch(() => { })]);
       const A = window.BoploAircraft, id = simAircraft({ aircraft: state.profile.aircraft }), t = A?.byId?.(id);
       await R.open({
         home: upper(state.profile.airport), country: countryCodeOf(state.profile), jet: t?.kind === 'jet', speedKt: t?.perf?.cruise || 110,
-        onFly: (r, mode) => openSim({ id: 'route-' + r.name, name: r.name, points: r.points, inp: { alt: r.alt, wdir: '', wspd: '' }, depEnd: r.depEnd, arrEnd: r.arrEnd, aircraft: state.profile.aircraft }, mode)
+        onFly: (r, mode) => onPick ? onPick(r, mode) : openSim({ id: 'route-' + r.name, name: r.name, points: r.points, inp: { alt: r.alt, wdir: '', wspd: '' }, depEnd: r.depEnd, arrEnd: r.arrEnd, aircraft: state.profile.aircraft }, mode)
       });
     } catch (e) { toast(e.message || 'The map couldn’t open.'); }
     finally { const b = $('[data-rpopen]'); if (b) b.disabled = false; }
   }
+  // ---- the simulator page, one step at a time: what to fly, where, in what, and in what conditions ----
+  const SIM_STEPS = [['what', 'Flight'], ['where', 'Where'], ['ac', 'Aircraft'], ['go', 'Conditions']];
   function simPage() {
-    const list = simmable(), plans = navStore().logs || [];
-    const card = (f, i) => `<article class="tile sim-pick">
-        <div class="sim-thumb">${f.points?.length > 1 ? trackSVG([f], 320, 180) : `<div class="mini-empty"><b>${esc(upper(f.departure))}</b>A circuit from this airfield</div>`}</div>
-        <div class="sim-pick-body"><b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc([fmtDate(f.date, { day: 'numeric', month: 'short', year: 'numeric' }), f.lesson || f.aircraft, hm(f.minutes) + ' h'].filter(Boolean).join(' · '))}</small></div>
-        <div class="sim-pick-actions"><button class="btn btn-line btn-sm" data-simr="${i}">Replay</button><button class="btn btn-blue btn-sm" data-simf="${i}">Fly it</button></div>
-      </article>`;
-    shell('sim', { title: 'Simulator', sub: 'Fly your logged routes again over real 3D terrain. Watch a replay, or take the controls yourself.' },
-      `<section class="tile dark sim-hero">${contours('a')}
-        <div><span class="kicker">Mini flight simulator</span><h2 class="display">Your routes, flown again.</h2><p>Every route you log or plan can be replayed or flown: take off, follow the gates, and land. Works with a keyboard, a gamepad, or your phone’s touch and tilt.</p></div>
-        <form class="sim-opts" data-simopts>
-          <fieldset><legend>Start</legend><div class="segmented">${[['ground', 'On the runway'], ['air', 'In the air']].map(([v, l]) => `<label><input type="radio" name="start" value="${v}" ${ui.sim.start === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
-          <fieldset><legend>Weather</legend><select name="wx" class="sim-wxsel">${[['live', 'Live at departure (METAR)'], ['clear', 'Clear skies'], ['fair', 'Fair, a few cumulus'], ['scattered', 'Scattered cloud, light bumps'], ['broken', 'Broken cloud'], ['overcast', 'Low overcast'], ['hazy', 'Hazy, 4 km visibility'], ['gusty', 'Gusty crosswind (16 G26 kt)']].map(([v, l]) => `<option value="${v}" ${ui.sim.wx === v ? 'selected' : ''}>${l}</option>`).join('')}</select></fieldset>
-          <fieldset><legend>Time of day</legend><div class="segmented">${[['day', 'Day'], ['golden', 'Golden hour'], ['night', 'Night']].map(([v, l]) => `<label><input type="radio" name="time" value="${v}" ${(ui.sim.time || 'day') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
-          <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${ui.sim.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
-          <fieldset><legend>Graphics</legend><div class="segmented">${[['fast', 'Fast'], ['balanced', 'Balanced'], ['detailed', 'Detailed 3D']].map(([v, l]) => `<label><input type="radio" name="gfx" value="${v}" ${(ui.sim.gfx || simGfx()) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
-        </form>
-      </section>
-      <section class="tile rp-box" aria-labelledby="rp-h">
-        <div class="rp-box-art" aria-hidden="true"><svg viewBox="0 0 320 150"><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#9ED8FF" stroke-width="2.4" stroke-dasharray="1 0"/><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#0A62FF" stroke-width="9" opacity=".35"/><g fill="#040B22" stroke="#9ED8FF" stroke-width="2"><circle cx="30" cy="118" r="6"/><circle cx="290" cy="52" r="6"/><circle cx="160" cy="44" r="4"/></g><path d="M18 128l26-20M280 62l22-18" stroke="#DDEBFF" stroke-width="4"/></svg></div>
-        <div class="rp-box-t"><h2 class="section-h" id="rp-h">Fly anywhere in the world</h2><p class="hint">Open the world map, tap a departure and an arrival, pick the runways and add waypoints. Every airport on Earth with real runway headings and lengths. The autopilot can follow the route.</p>
-        <div class="rp-box-act"><button type="button" class="btn btn-blue" data-rpopen>${ico('map')}Open the world map</button>${(() => { try { const r = JSON.parse(localStorage.getItem('boplo-route') || 'null'); const a = r?.points?.[0]?.code, b = r?.points?.length > 1 ? r.points[r.points.length - 1].code : ''; return a && b ? `<span class="rp-last">Last route: <b>${esc(a)} → ${esc(b)}</b></span>` : ''; } catch { return ''; } })()}</div></div>
-      </section>
-      <section class="tile pr-box" aria-labelledby="pr-h">
-        <div class="pr-head"><div><h2 class="section-h" id="pr-h">Practise at any airfield</h2><p class="hint">Take-offs, circuits and approaches on real runways anywhere in ${esc(state.profile.country || 'your country')}. You get a debrief against checkride standards.</p></div></div>
+    const list = simmable(), plans = navStore().logs || [], S = ui.sim;
+    S.step = Math.max(0, Math.min(3, S.step || 0)); if (!S.what) S.step = 0;
+    const WHAT = [['practice', 'Practise at an airfield', 'Take-offs, circuits, long and short finals on a real runway, with a debrief against checkride standards.', 'sim'],
+      ['world', 'Fly anywhere in the world', 'Pick a departure and an arrival on the world map, choose the runways and add waypoints.', 'map'],
+      ...(list.length ? [['flight', 'Fly one of my flights', `Replay or fly a route you logged. ${list.length} ${list.length === 1 ? 'flight' : 'flights'} ready.`, 'logbook']] : []),
+      ...(plans.length ? [['plan', 'Fly a nav plan', `${plans.length} ${plans.length === 1 ? 'plan' : 'plans'} from your nav log.`, 'navlog']] : [])];
+    // what has been chosen at the "where" step, and whether it's complete
+    const route = S.what === 'world' ? S.route : null, flight = S.what === 'flight' ? list[S.sel] : S.what === 'plan' ? plans[S.sel] : null;
+    const whereOK = S.what === 'practice' ? !!(S.prAp && S.prk) : S.what === 'world' ? !!route : !!flight;
+    const reach = i => i === 0 || (i === 1 && !!S.what) || (i >= 2 && !!S.what && whereOK);
+    const whereLabel = S.what === 'practice' ? (S.prAp && S.prk ? `${PRACTICE[S.prk]} · ${S.prAp}${S.prRw ? ' ' + S.prRw : ''}` : '') : S.what === 'world' ? (route ? `${route.points[0]?.code || 'Start'} → ${route.points[route.points.length - 1]?.code || 'End'}` : '') : flight ? (S.what === 'plan' ? flight.name || 'Plan' : `${upper(flight.departure)} → ${upper(flight.arrival)}`) : '';
+    const stepper = `<ol class="sw-steps">${SIM_STEPS.map(([k, l], i) => `<li><button type="button" data-swgo="${i}" ${reach(i) ? '' : 'disabled'} ${i === S.step ? 'aria-current="step"' : ''}><span class="sw-n">${i < S.step && reach(i) ? '✓' : i + 1}</span><span class="sw-l">${l}</span></button></li>`).join('')}</ol>`;
+    const pick = (f, i, kind) => `<button type="button" class="tile sim-pick sw-sel ${S.sel === i ? 'on' : ''}" data-swsel="${i}" aria-pressed="${S.sel === i}">
+        <div class="sim-thumb">${kind === 'plan' ? trackSVG([{ id: 'p' + i, points: f.points, departure: f.points[0]?.code, arrival: f.points[f.points.length - 1]?.code, routeKind: 'route' }], 320, 180) : f.points?.length > 1 ? trackSVG([f], 320, 180) : `<div class="mini-empty"><b>${esc(upper(f.departure))}</b>A circuit from this airfield</div>`}</div>
+        <div class="sim-pick-body">${kind === 'plan' ? `<b>${esc(f.name || 'Plan')}</b><small>${esc(f.points.map(x => x.code).filter(Boolean).join(' → ') || f.points.length + ' points')}${f.inp?.alt ? ` · ${esc(f.inp.alt)} ft` : ''}</small>` : `<b>${esc(upper(f.departure))} → ${esc(upper(f.arrival))}</b><small>${esc([fmtDate(f.date, { day: 'numeric', month: 'short', year: 'numeric' }), f.lesson || f.aircraft, hm(f.minutes) + ' h'].filter(Boolean).join(' · '))}</small>`}</div></button>`;
+    const modeSeg = `<div class="segmented sw-mode" role="group" aria-label="Fly or replay">${[['fly', 'Fly it myself'], ['replay', 'Watch a replay']].map(([v, l]) => `<label><input type="radio" name="swmode" value="${v}" ${(S.mode || 'fly') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
+    let body = '';
+    if (S.step === 0) body = `<div class="sw-what">${WHAT.map(([k, l, d, ic]) => `<button type="button" class="sw-choice ${S.what === k ? 'on' : ''}" data-swwhat="${k}" aria-pressed="${S.what === k}"><span class="sw-ico">${ico(ic)}</span><b>${l}</b><small>${esc(d)}</small></button>`).join('')}</div>
+      ${list.length ? '' : `<p class="hint sw-tip">Log a flight with a route or GPS track and you can fly it again here. <button type="button" class="linkish" data-add>Log a flight</button></p>`}`;
+    else if (S.step === 1 && S.what === 'practice') body = `<div class="pr-box sw-card">
         <div class="pr-row">
-          <label class="pr-f"><span>Airfield</span><input type="text" list="pr-afs" data-prap value="${esc(ui.sim.prAp || upper(state.profile.airport).split(/[\s·]/)[0] || '')}" placeholder="Search by code or name" autocomplete="off" spellcheck="false"><datalist id="pr-afs" data-prlist></datalist></label>
+          <label class="pr-f"><span>Airfield</span><input type="text" list="pr-afs" data-prap value="${esc(S.prAp || upper(state.profile.airport).split(/[\s·]/)[0] || '')}" placeholder="Search by code or name" autocomplete="off" spellcheck="false"><datalist id="pr-afs" data-prlist></datalist></label>
           <label class="pr-f"><span>Runway</span><select data-prrw><option value="">Longest runway</option></select></label>
         </div>
-        <label class="sim-radio-opt"><input type="checkbox" data-prradio ${ui.sim.radio !== false ? 'checked' : ''}> <span><b>Radio calls</b> Make your calls out loud as you fly (or type them) and get each one checked, with the controller’s replies. Advanced.</span></label>
-        <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap']].map(([k, l, d]) => `<button type="button" class="pr-kind" data-prk="${k}"><span class="pr-tag" hidden></span><b>${l}</b><small>${d}</small></button>`).join('')}</div>
-      </section>
-      <section class="ac-pick" aria-labelledby="ac-h"><div class="ac-head"><div><h2 class="section-h" id="ac-h">Aircraft</h2><p class="hint" data-acnote></p></div><button type="button" class="ac-auto-btn" data-acauto aria-pressed="false">${ico('logbook')}Match my logbook</button></div><div class="ac-grid" data-acgrid><p class="hint">Loading aircraft…</p></div></section>
-      <p class="footnote" style="margin:10px 2px 18px">A game-like practice toy for fun and route familiarisation. It isn’t an approved training device, and its flight model is simplified.</p>
-      ${list.length ? `<h2 class="section-h">Logged flights</h2><div class="sim-grid">${list.slice(0, 24).map(card).join('')}</div>` : `<div class="tile empty center"><h3>Log a flight to fly it again.</h3><p>Flights with a plotted route or a GPS track replay best. A flight from a known airfield gives you a circuit.</p><button class="btn btn-blue btn-has-spark" data-add>Log a flight ${spark}</button></div>`}
-      ${plans.length ? `<h2 class="section-h">Nav plans</h2><div class="sim-grid">${plans.map((s, i) => `<article class="tile sim-pick"><div class="sim-thumb">${trackSVG([{ id: 'p' + i, points: s.points, departure: s.points[0]?.code, arrival: s.points[s.points.length - 1]?.code, routeKind: 'route' }], 320, 180)}</div><div class="sim-pick-body"><b>${esc(s.name || 'Plan')}</b><small>${esc(s.points.map(x => x.code).filter(Boolean).join(' → ') || s.points.length + ' points')}${s.inp?.alt ? ` · ${esc(s.inp.alt)} ft` : ''}</small></div><div class="sim-pick-actions"><button class="btn btn-line btn-sm" data-simpr="${i}">Replay</button><button class="btn btn-blue btn-sm" data-simpf="${i}">Fly it</button></div></article>`).join('')}</div>` : ''}`);
-    const paintAc = () => {
-      const A = window.BoploAircraft, grid = $('[data-acgrid]'); if (!A || !grid) return;
-      const auto = A.match(state.profile.aircraft), cur = ui.sim.ac || 'auto', shown = cur === 'auto' ? auto : cur;
-      const tog = $('[data-acauto]'); if (tog) { tog.setAttribute('aria-pressed', String(cur === 'auto')); tog.onclick = () => { ui.sim.ac = 'auto'; try { localStorage.setItem('boplo-sim-ac', 'auto'); } catch { } paintAc(); }; }
-      const card = t => `<button type="button" class="ac-card ${shown === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${shown === t.id}">
-          <span class="ac-img"><img src="/aircraft/${t.id}.webp?v=4" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : t.kind === 'jet' ? `<span class="ac-badge jet">${esc(t.cat)}</span>` : ''}</span>
-          <span class="ac-txt"><b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf">${t.kind === 'jet' ? `<span>Approach ${t.perf.appr} kt</span><span>${t.perf.climb} fpm</span><span>Rotate ${t.perf.vr} kt</span>` : `<span>${t.perf.cruise} kt</span><span>${t.perf.climb} fpm</span><span>Vs ${t.perf.vs} kt</span>`}</span></span></button>`;
-      const trainers = A.TYPES.filter(t => t.kind !== 'jet'), jets = A.TYPES.filter(t => t.kind === 'jet'), LV = A.LIVERIES || {};
-      const shownJet = jets.find(t => t.id === shown), livNow = ui.sim.livery && LV[ui.sim.livery] ? ui.sim.livery : shownJet?.livery;
-      grid.innerHTML = `<h3 class="ac-group">Trainers</h3>${trainers.map(card).join('')}${jets.length ? `<h3 class="ac-group">Jets <small>Just for fun: bigger aircraft with jet engines, retractable gear and spoilers.</small></h3>${jets.map(card).join('')}${shownJet ? `<div class="ac-liv" role="group" aria-label="Livery"><span>Livery</span>${Object.entries(LV).map(([k, l]) => `<button type="button" data-liv="${k}" aria-pressed="${k === livNow}"><i style="background:${l.tail}"></i>${esc(l.name)}</button>`).join('')}</div>` : ''}` : ''}`;
-      $$('[data-liv]').forEach(b => b.onclick = () => { ui.sim.livery = b.dataset.liv; try { localStorage.setItem('boplo-sim-liv', ui.sim.livery); } catch { } paintAc(); });
-      $$('[data-ac]').forEach(b => b.onclick = () => { ui.sim.ac = b.dataset.ac; try { localStorage.setItem('boplo-sim-ac', ui.sim.ac); } catch { } paintAc(); });
-      const note = $('[data-acnote]'); if (note) note.textContent = cur === 'auto' ? 'Each flight flies in the aircraft you logged for it.' + (auto ? '' : ' Unknown types use the Cessna 172.') : `Every flight flies in the ${A.byId(cur).name}.`;
-    };
-    loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
-    const fo = $('[data-simopts]'); fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); ui.sim.start = v.start; ui.sim.wind = v.wind; ui.sim.wx = v.wx; ui.sim.time = v.time; ui.sim.gfx = v.gfx; try { localStorage.setItem('boplo-sim-wx', v.wx); localStorage.setItem('boplo-sim-gfx', v.gfx); } catch { } };
-    // practice picker: airfields in the pilot's country, runway ends from the surveyed runway data
-    { const cc = countryCodeOf(state.profile), inp = $('[data-prap]'), sel = $('[data-prrw]'), dl = $('[data-prlist]');
+        <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap']].map(([k, l, d]) => `<button type="button" class="pr-kind ${S.prk === k ? 'on' : ''}" data-prk="${k}" aria-pressed="${S.prk === k}"><span class="pr-tag" hidden></span><b>${l}</b><small>${d}</small></button>`).join('')}</div>
+        <label class="sim-radio-opt"><input type="checkbox" data-prradio ${S.radio !== false ? 'checked' : ''}> <span><b>Radio calls</b> Make your calls out loud as you fly (or type them) and get each one checked, with the controller’s replies. Advanced.</span></label>
+      </div>`;
+    else if (S.step === 1 && S.what === 'world') body = `<div class="tile rp-box sw-card">
+        <div class="rp-box-art" aria-hidden="true"><svg viewBox="0 0 320 150"><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#9ED8FF" stroke-width="2.4"/><path d="M30 118 C 90 40, 170 30, 290 52" fill="none" stroke="#0A62FF" stroke-width="9" opacity=".35"/><g fill="#040B22" stroke="#9ED8FF" stroke-width="2"><circle cx="30" cy="118" r="6"/><circle cx="290" cy="52" r="6"/><circle cx="160" cy="44" r="4"/></g></svg></div>
+        <div class="rp-box-t">${route ? `<h2 class="section-h">${esc(whereLabel)}</h2><p class="hint">${route.points.length} points${route.alt ? ` · ${esc(route.alt)} ft` : ''}. ${S.mode === 'replay' ? 'You’ll watch a replay.' : 'You’ll fly it yourself.'}</p>` : `<h2 class="section-h">Plan your route</h2><p class="hint">Every airport on Earth, with real runway headings and lengths. Tap a departure and an arrival, pick the runways and add waypoints; the autopilot can follow the route.</p>`}
+        <div class="rp-box-act"><button type="button" class="btn ${route ? 'btn-line' : 'btn-blue'}" data-rpopen>${ico('map')}${route ? 'Change the route' : 'Open the world map'}</button></div></div>
+      </div>`;
+    else if (S.step === 1) body = `${modeSeg}<div class="sim-grid">${(S.what === 'plan' ? plans : list).slice(0, 24).map((f, i) => pick(f, i, S.what)).join('')}</div>`;
+    else if (S.step === 2) body = `<section class="ac-pick"><div class="ac-head"><div><p class="hint" data-acnote></p></div><button type="button" class="ac-auto-btn" data-acauto aria-pressed="false">${ico('logbook')}Match my logbook</button></div><div class="ac-grid" data-acgrid><p class="hint">Loading aircraft…</p></div></section>`;
+    else body = `<section class="tile dark sw-dark">${contours('b')}<form class="sim-opts sw-opts" data-simopts>
+          ${S.what === 'practice' ? '' : `<fieldset><legend>Start</legend><div class="segmented">${[['ground', 'On the runway'], ['air', 'In the air']].map(([v, l]) => `<label><input type="radio" name="start" value="${v}" ${S.start === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>`}
+          <fieldset><legend>Weather</legend><select name="wx" class="sim-wxsel">${[['live', 'Live at departure (METAR)'], ['clear', 'Clear skies'], ['fair', 'Fair, a few cumulus'], ['scattered', 'Scattered cloud, light bumps'], ['broken', 'Broken cloud'], ['overcast', 'Low overcast'], ['hazy', 'Hazy, 4 km visibility'], ['gusty', 'Gusty crosswind (16 G26 kt)']].map(([v, l]) => `<option value="${v}" ${S.wx === v ? 'selected' : ''}>${l}</option>`).join('')}</select></fieldset>
+          <fieldset><legend>Time of day</legend><div class="segmented">${[['day', 'Day'], ['golden', 'Golden hour'], ['night', 'Night']].map(([v, l]) => `<label><input type="radio" name="time" value="${v}" ${(S.time || 'day') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Wind</legend><div class="segmented">${[['calm', 'Calm'], ['live', 'Live at departure']].map(([v, l]) => `<label><input type="radio" name="wind" value="${v}" ${S.wind === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Graphics</legend><div class="segmented">${[['fast', 'Fast'], ['balanced', 'Balanced'], ['detailed', 'Detailed 3D']].map(([v, l]) => `<label><input type="radio" name="gfx" value="${v}" ${(S.gfx || simGfx()) === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></fieldset>
+        </form></section>`;
+    const acName = (() => { const A = window.BoploAircraft; if (!A) return ''; const id = !S.ac || S.ac === 'auto' ? null : S.ac; return id ? A.byId(id)?.name || '' : 'Your logged aircraft'; })();
+    const summary = [whereLabel, S.step > 2 ? acName : ''].filter(Boolean).join(' · ');
+    const goLabel = S.what === 'practice' ? 'Start practice' : (S.what === 'world' ? route?.mode : S.mode) === 'replay' ? 'Start replay' : 'Start flying';
+    const titles = ['What would you like to fly?', S.what === 'practice' ? 'Pick the airfield, runway and exercise' : S.what === 'world' ? 'Plan your route' : S.what === 'plan' ? 'Pick a nav plan' : 'Pick a flight', 'Choose your aircraft', 'Set the conditions'];
+    shell('sim', { title: 'Simulator', sub: 'Fly your logged routes again over real 3D terrain, practise at any airfield, or fly anywhere in the world.' },
+      `<section class="tile dark sw-head">${contours('a')}${stepper}<h2 class="sw-title">${titles[S.step]}</h2>${summary ? `<p class="sw-sum">${esc(summary)}</p>` : ''}</section>
+      <div class="sw-body">${body}</div>
+      <div class="sw-nav">${S.step ? `<button type="button" class="btn btn-line" data-swback>Back</button>` : '<span></span>'}${S.step < 3 ? `<button type="button" class="btn btn-blue" data-swnext ${(S.step === 0 ? S.what : S.step === 1 ? whereOK : true) ? '' : 'disabled'}>Continue</button>` : `<button type="button" class="btn btn-blue btn-has-spark" data-swstart>${goLabel} ${spark}</button>`}</div>
+      <p class="footnote" style="margin:10px 2px 18px">A game-like practice toy for fun and route familiarisation. It isn’t an approved training device, and its flight model is simplified.</p>`);
+    const go = i => { S.step = i; simPage(); window.scrollTo?.({ top: 0, behavior: 'smooth' }); };
+    $$('[data-swgo]').forEach(b => b.onclick = () => go(+b.dataset.swgo));
+    const back = $('[data-swback]'); if (back) back.onclick = () => go(S.step - 1);
+    const next = $('[data-swnext]'); if (next) next.onclick = () => go(S.step + 1);
+    // step 1: choosing a kind of flight moves straight on
+    $$('[data-swwhat]').forEach(b => b.onclick = () => { if (S.what !== b.dataset.swwhat) { S.what = b.dataset.swwhat; S.sel = null; } go(1); });
+    // step 2: logged flights and plans
+    $$('[data-swsel]').forEach(b => b.onclick = () => { S.sel = +b.dataset.swsel; simPage(); });
+    $$('input[name="swmode"]').forEach(r => r.onchange = () => { S.mode = r.value; });
+    const rp = $('[data-rpopen]'); if (rp) rp.onclick = () => openRoutePlanner((r, mode) => { S.route = { ...r, mode }; S.mode = mode; simPage(); });
+    // step 2: practice picker (airfields in the pilot's country, runway ends from the surveyed runway data)
+    if ($('[data-prap]')) { const cc = countryCodeOf(state.profile), inp = $('[data-prap]'), sel = $('[data-prrw]'), dl = $('[data-prlist]');
       let afs = [];
       const fillRw = async () => {
-        const c = upper(inp.value).split(/[\s·]/)[0]; ui.sim.prAp = c; const ap = afs.find(a => a.code === c) || (c ? await anyAirfield(c) : null);
+        const c = upper(inp.value).split(/[\s·]/)[0]; S.prAp = c; const ap = afs.find(a => a.code === c) || (c ? await anyAirfield(c) : null);
         sel.innerHTML = '<option value="">Longest runway</option>'; if (!ap) return;
-        // start the exact-runway lookup now, while the student is still choosing, so the sim has it when it opens
-        loadSimLib().then(S => S.prefetch?.({ code: ap.code, lat: ap.lat, lng: ap.lng, cc: ap.cc || cc })).catch(() => { });
+        loadSimLib().then(L => L.prefetch?.({ code: ap.code, lat: ap.lat, lng: ap.lng, cc: ap.cc || cc })).catch(() => { });
         const rows = ((await fetch(`/runways/${ap.cc || cc}.json`).then(r => r.ok ? r.json() : {}).catch(() => ({}))).rows || {})[ap.code] || [];
         const ends = rows.length ? rows.flatMap(r => [[r[0], r[6]], [r[1], r[6]]]) : (ap.runways || []).flatMap(r => String(r[0] || '').split('/').map(x => [x, r[1]]));
-        sel.innerHTML += ends.filter(x => x[0]).map(([id, l]) => `<option value="${esc(id)}" ${ui.sim.prRw === id ? 'selected' : ''}>Runway ${esc(id)}${l ? ` · ${Math.round(l)} m` : ''}</option>`).join('');
+        sel.innerHTML += ends.filter(x => x[0]).map(([id, l]) => `<option value="${esc(id)}" ${S.prRw === id ? 'selected' : ''}>Runway ${esc(id)}${l ? ` · ${Math.round(l)} m` : ''}</option>`).join('');
+        const nx = $('[data-swnext]'); if (nx) nx.disabled = !(S.prAp && S.prk);
       };
-      if (window.BoploMap && cc) BoploMap.airfields(cc).then(l => { afs = l.map(a => ({ ...a, cc })); dl.innerHTML = afs.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); fillRw(); });
-      inp.onchange = fillRw; sel.onchange = () => { ui.sim.prRw = sel.value; };
-      const rr = $('[data-prradio]'); if (rr) rr.onchange = () => { ui.sim.radio = rr.checked; };
+      if (window.BoploMap && cc) BoploMap.airfields(cc).then(l => { afs = l.map(a => ({ ...a, cc })); dl.innerHTML = afs.filter(a => a.type !== 'W').map(a => `<option value="${esc(a.code)} · ${esc(a.name)}"></option>`).join(''); fillRw(); }); else fillRw();
+      inp.onchange = fillRw; sel.onchange = () => { S.prRw = sel.value; };
+      const rr = $('[data-prradio]'); if (rr) rr.onchange = () => { S.radio = rr.checked; };
       paintFree(); if (!isAdv() && !preview) api('sim/usage').then(r => { if (!r.unlimited) { simFreeLeft = r.left; paintFree(); } }).catch(() => { });
-      $$('[data-prk]').forEach(b => b.onclick = () => { const c = upper(inp.value).split(/[\s·]/)[0]; if (!c) { inp.focus(); toast('Pick an airfield first.'); return; } openPractice(c, sel.value, b.dataset.prk); }); }
-    $('[data-rpopen]').onclick = () => openRoutePlanner();
-    $$('[data-simr]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simr], 'replay'));
-    $$('[data-simf]').forEach(b => b.onclick = () => openSim(list[+b.dataset.simf], 'fly'));
-    $$('[data-simpr]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpr], 'replay'));
-    $$('[data-simpf]').forEach(b => b.onclick = () => openSim(plans[+b.dataset.simpf], 'fly'));
+      $$('[data-prk]').forEach(b => b.onclick = () => {
+        if (!isAdv() && b.dataset.prk !== 'short') return upgradeSheet('Take-offs, circuits and long finals are part of Advanced. Free includes two short finals a day.');
+        S.prk = b.dataset.prk; $$('[data-prk]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }); const nx = $('[data-swnext]'); if (nx) nx.disabled = !(S.prAp && S.prk);
+      }); }
+    // step 3: aircraft
+    if ($('[data-acgrid]')) {
+      const paintAc = () => {
+        const A = window.BoploAircraft, grid = $('[data-acgrid]'); if (!A || !grid) return;
+        const auto = A.match(state.profile.aircraft), cur = S.ac || 'auto', shown = cur === 'auto' ? auto : cur;
+        const tog = $('[data-acauto]'); if (tog) { tog.setAttribute('aria-pressed', String(cur === 'auto')); tog.onclick = () => { S.ac = 'auto'; try { localStorage.setItem('boplo-sim-ac', 'auto'); } catch { } paintAc(); }; }
+        const card = t => `<button type="button" class="ac-card ${shown === t.id ? 'on' : ''}" data-ac="${t.id}" aria-pressed="${shown === t.id}">
+            <span class="ac-img"><img src="/aircraft/${t.id}.webp?v=4" alt="" width="640" height="360" loading="lazy" decoding="async">${cur === 'auto' && auto === t.id ? '<span class="ac-badge">Your aircraft</span>' : t.kind === 'jet' ? `<span class="ac-badge jet">${esc(t.cat)}</span>` : ''}</span>
+            <span class="ac-txt"><b>${esc(t.name)}</b><small>${esc(t.blurb)}</small><span class="ac-perf">${t.kind === 'jet' ? `<span>Approach ${t.perf.appr} kt</span><span>${t.perf.climb} fpm</span><span>Rotate ${t.perf.vr} kt</span>` : `<span>${t.perf.cruise} kt</span><span>${t.perf.climb} fpm</span><span>Vs ${t.perf.vs} kt</span>`}</span></span></button>`;
+        const trainers = A.TYPES.filter(t => t.kind !== 'jet'), jets = A.TYPES.filter(t => t.kind === 'jet'), LV = A.LIVERIES || {};
+        const shownJet = jets.find(t => t.id === shown), livNow = S.livery && LV[S.livery] ? S.livery : shownJet?.livery;
+        grid.innerHTML = `<h3 class="ac-group">Trainers</h3>${trainers.map(card).join('')}${jets.length ? `<h3 class="ac-group">Jets <small>Just for fun: bigger aircraft with jet engines, retractable gear and spoilers.</small></h3>${jets.map(card).join('')}${shownJet ? `<div class="ac-liv" role="group" aria-label="Livery"><span>Livery</span>${Object.entries(LV).map(([k, l]) => `<button type="button" data-liv="${k}" aria-pressed="${k === livNow}"><i style="background:${l.tail}"></i>${esc(l.name)}</button>`).join('')}</div>` : ''}` : ''}`;
+        $$('[data-liv]').forEach(b => b.onclick = () => { S.livery = b.dataset.liv; try { localStorage.setItem('boplo-sim-liv', S.livery); } catch { } paintAc(); });
+        $$('[data-ac]').forEach(b => b.onclick = () => { S.ac = b.dataset.ac; try { localStorage.setItem('boplo-sim-ac', S.ac); } catch { } paintAc(); });
+        const note = $('[data-acnote]'); if (note) note.textContent = cur === 'auto' ? 'Each flight flies in the aircraft you logged for it.' + (auto ? '' : ' Unknown types use the Cessna 172.') : `You’ll fly the ${A.byId(cur).name}.`;
+      };
+      loadAircraftLib().then(paintAc).catch(() => { const g = $('[data-acgrid]'); if (g) g.innerHTML = '<p class="hint">Aircraft didn’t load. You’ll fly the standard trainer.</p>'; });
+    }
+    // step 4: conditions, then go
+    const fo = $('[data-simopts]'); if (fo) fo.onchange = () => { const v = Object.fromEntries(new FormData(fo)); if (v.start) S.start = v.start; S.wind = v.wind; S.wx = v.wx; S.time = v.time; S.gfx = v.gfx; try { localStorage.setItem('boplo-sim-wx', v.wx); localStorage.setItem('boplo-sim-gfx', v.gfx); } catch { } };
+    const st = $('[data-swstart]'); if (st) st.onclick = () => {
+      if (S.what === 'practice') return openPractice(S.prAp, S.prRw || '', S.prk);
+      if (S.what === 'world' && route) return openSim({ id: 'route-' + route.name, name: route.name, points: route.points, inp: { alt: route.alt, wdir: '', wspd: '' }, depEnd: route.depEnd, arrEnd: route.arrEnd, aircraft: state.profile.aircraft }, route.mode || 'fly');
+      if (flight) return openSim(flight, S.mode || 'fly');
+    };
   }
 
   /* ================= community: Q&A, landing leaderboards, students nearby ================= */
