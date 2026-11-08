@@ -1233,7 +1233,7 @@ window.BoploSim = (() => {
       acShader = new C.CustomShader({ uniforms: {
           u_up: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_top: { type: C.UniformType.VEC3, value: V3(.35, .55, .9) }, u_hor: { type: C.UniformType.VEC3, value: V3(.85, .9, .95) },
           u_gnd: { type: C.UniformType.VEC3, value: V3(.16, .17, .14) }, u_sunc: { type: C.UniformType.VEC3, value: V3(1, .97, .9) }, u_refl: { type: C.UniformType.FLOAT, value: 1 },
-          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 }, u_micro: { type: C.UniformType.FLOAT, value: GFX === 'fast' || AC.fg ? 0 : 1 },
+          u_glintW: { type: C.UniformType.VEC3, value: V3(0, 0, 1) }, u_cabin: { type: C.UniformType.FLOAT, value: 0 }, u_micro: { type: C.UniformType.FLOAT, value: GFX === 'fast' || !AC.rig ? 0 : 1 },
           u_flex: { type: C.UniformType.FLOAT, value: 0 }, u_semi: { type: C.UniformType.FLOAT, value: AC.rig?.semi || 10 }, u_root: { type: C.UniformType.FLOAT, value: AC.rig?.root || 1 }, u_ice: { type: C.UniformType.FLOAT, value: 0 } },
         // wing flex: vertices outboard of the wing root rise (or droop) with the square of the distance along the span
         vertexShaderText: `void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {
@@ -2536,7 +2536,7 @@ window.BoploSim = (() => {
       // the atmosphere and effects step down with the rest: fewer scattering samples, then no heat shimmer, multisampling or ground detail
       AN.N = Math.max(5, FXQ.N - 2 * qi); AN.aN = Math.max(2, FXQ.aN - qi); HT.on = qi < 3; AN.detail = qi < 4 && !(GFX === 'fast' && coarse) ? 1 : 0;
       try { const ms = qi >= 2 ? 1 : MSAA0; if (scene.msaaSamples !== ms) scene.msaaSamples = ms; } catch { }
-      if (acShader) try { acShader.setUniform('u_micro', GFX !== 'fast' && !AC.fg && qi < 4 ? 1 : 0); } catch { } };
+      if (acShader) try { acShader.setUniform('u_micro', GFX !== 'fast' && !!AC.rig && qi < 4 ? 1 : 0); } catch { } };
     let shadowsOK = !(coarse && GFX === 'fast'); applyQ();
     function loop(now) {
       if (!alive) return;
