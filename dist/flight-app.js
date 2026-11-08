@@ -2544,7 +2544,8 @@
 
   /* ================= simulator ================= */
   ui.sim = ui.sim || { wind: 'calm', start: 'ground', wx: (() => { try { return localStorage.getItem('boplo-sim-wx') || 'clear'; } catch { return 'clear'; } })(), time: 'day', ac: (() => { try { return localStorage.getItem('boplo-sim-ac') || 'auto'; } catch { return 'auto'; } })(), livery: (() => { try { return localStorage.getItem('boplo-sim-liv') || null; } catch { return null; } })() };
-  const loadScript = (src, ok) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : rej(new Error('The simulator couldn’t load.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
+  // loads a script once; if it arrives but doesn't run (a stale or broken copy held in a cache), it tries once more past the cache
+  const loadScript = (src, ok, retry = true) => new Promise((res, rej) => { if (ok()) return res(); const s = document.createElement('script'); s.src = src; s.onload = () => ok() ? res() : retry ? loadScript(src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(), ok, false).then(res, rej) : rej(new Error('The simulator couldn’t load. Reload the page and try again.')); s.onerror = () => rej(new Error('The simulator couldn’t load. Check your connection.')); document.head.append(s); });
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=5', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=10', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
