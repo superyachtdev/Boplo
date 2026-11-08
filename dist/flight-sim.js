@@ -1038,7 +1038,7 @@ window.BoploSim = (() => {
       // (below a few degrees the hand-tuned sunset key takes over, since the real sun is then partly behind the horizon)
       if (atmo) {
         let vis = 60000; try { if (WX.visM) vis = clamp(WX.visM, 800, 60000); } catch { } AN.mie = mieFromVis(vis);
-        const Ts = sunTransmittance(600, Math.max(e, .5), AN.mie), m = Math.max(...Ts, 1e-4), phys = Ts.map(v => Math.pow(v / m, .75)), w = clamp((e - 1) / 5, 0, 1);
+        const Ts = sunTransmittance(600, Math.max(e, .5), AN.mie), m = Math.max(...Ts, 1e-4), phys = Ts.map(v => Math.pow(v / m, .45)), w = clamp((e - 1) / 5, 0, 1) * .7;
         K.lc = K.lc.map((v, i) => lerp(v, phys[i], w));
         // eye adaptation: the sky is exposed brighter as the light fades, until only the night gradient and stars are left
         AN.exp = e > 8 ? 1.7 : e > 2 ? lerp(2.1, 1.7, (e - 2) / 6) : e > -2 ? lerp(9, 2.1, (e + 2) / 4) : e > -6 ? lerp(40, 9, (e + 6) / 4) : lerp(90, 40, (e + 10) / 4);
