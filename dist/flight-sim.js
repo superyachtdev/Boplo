@@ -848,6 +848,8 @@ window.BoploSim = (() => {
     const anchorW = C.Cartesian3.fromDegrees(startLL[0], startLL[1], 0), anchorM = C.Transforms.eastNorthUpToFixedFrame(anchorW);
     const anchorE = C.Matrix4.multiplyByPointAsVector(anchorM, C.Cartesian3.UNIT_X, new C.Cartesian3()), anchorN = C.Matrix4.multiplyByPointAsVector(anchorM, C.Cartesian3.UNIT_Y, new C.Cartesian3());
     const atmoUp = new C.Cartesian3(), atmoTan = new C.Cartesian2(), atmoMoon = new C.Cartesian3(0, 0, 1);
+    // the depth buffer's frustum, read when the passes run (the scene renders in one logarithmic-depth frustum)
+    const depthNear = () => scene.context.uniformState.currentFrustum?.x ?? camera.frustum.near, depthL2 = () => scene.context.uniformState.log2FarDepthFromNearPlusOne || 22;
     let atmo = null;
     try {
       atmo = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_atmosphere', uniforms: {
@@ -857,12 +859,12 @@ window.BoploSim = (() => {
           u_h: () => clamp(camera.positionCartographic.height, 1, 59e3), u_mie: () => AN.mie, u_exp: () => AN.exp, u_N: () => AN.N, u_M: () => AN.M, u_aN: () => AN.aN,
           u_night: () => AN.night, u_twi: () => AN.twi, u_stars: () => AN.stars, u_moonW: () => atmoMoon, u_moonB: () => AN.moonB, u_cloudL: () => AN.cloudL,
           u_camRel: () => C.Cartesian3.subtract(camera.positionWC, anchorW, AN.camRel), u_east: anchorE, u_north: anchorN, u_ac: () => AN.ac, u_acR: () => AN.acR,
-          u_relief: () => AN.relief, u_detail: () => AN.detail },
+          u_relief: () => AN.relief, u_detail: () => AN.detail, u_near: depthNear, u_l2: depthL2 },
         fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; in vec2 v_textureCoordinates;
           uniform vec3 u_cd; uniform vec3 u_cu; uniform vec3 u_cr; uniform vec3 u_up; uniform vec3 u_sun; uniform vec2 u_tan;
           uniform float u_h; uniform float u_mie; uniform float u_exp; uniform int u_N; uniform int u_M; uniform int u_aN;
           uniform float u_night; uniform float u_twi; uniform float u_stars; uniform vec3 u_moonW; uniform float u_moonB; uniform float u_cloudL;
-          uniform vec3 u_camRel; uniform vec3 u_east; uniform vec3 u_north; uniform vec3 u_ac; uniform float u_acR; uniform float u_relief; uniform float u_detail;
+          uniform vec3 u_camRel; uniform vec3 u_east; uniform vec3 u_north; uniform vec3 u_ac; uniform float u_acR; uniform float u_relief; uniform float u_detail; uniform float u_near; uniform float u_l2;
           ${ATM_GLSL}
           float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
           float hash3(vec3 q) { return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
@@ -872,13 +874,16 @@ window.BoploSim = (() => {
           // what's left of the sky once the sun is well down: a faint blue night gradient
           vec3 nightSky(float mu) { return mix(vec3(0.045, 0.06, 0.12), vec3(0.006, 0.01, 0.03), smoothstep(0.0, 0.45, mu)); }
           vec3 twilight(float mu, float nu) { return mix(vec3(0.17, 0.2, 0.32), vec3(0.06, 0.11, 0.27), smoothstep(0.0, 0.6, mu)) * (0.8 + 0.2 * nu); }
-          vec3 eyePos(vec2 fc, float d) { return czm_windowToEyeCoordinates(fc, d).xyz; }
+          // distance along the view axis from the logarithmic depth buffer (the scene's single frustum), and the unnormalised
+          // view ray, so positions come out in metres relative to the camera without relying on the pass's view matrices
+          float viewZ(vec2 uv) { return pow(2.0, texture(depthTexture, uv).r * u_l2) - 1.0 + u_near; }
+          vec3 rayU(vec2 uv) { return u_cd + (uv.x * 2.0 - 1.0) * u_tan.x * u_cr + (uv.y * 2.0 - 1.0) * u_tan.y * u_cu; }
           void main() {
             vec2 uv = v_textureCoordinates; vec4 cc = texture(colorTexture, uv); vec3 base = cc.rgb;
-            vec3 dir = normalize(u_cd + (uv.x * 2.0 - 1.0) * u_tan.x * u_cr + (uv.y * 2.0 - 1.0) * u_tan.y * u_cu);
+            vec3 ru = rayU(uv), dir = normalize(ru);
             float mu = dot(dir, u_up), muS = dot(u_sun, u_up), nu = dot(dir, u_sun);
-            float dep = czm_readDepth(depthTexture, uv); vec3 T;
-            if (dep >= 0.9999) {
+            float raw = texture(depthTexture, uv).r; vec3 T;
+            if (raw >= 0.999999) {
               // open sky. The scene behind is black, so whatever is there already (clouds, lights) is premultiplied over it.
               vec3 L = scatter(u_h, mu, muS, nu, 1e9, u_N, u_M, u_mie, T);
               bool ground = toGround(u_h, mu) > 0.0;
@@ -890,19 +895,18 @@ window.BoploSim = (() => {
               float a = clamp(dot(base, vec3(0.3, 0.5, 0.2)) / max(u_cloudL, 0.04), 0.0, 1.0);
               base = sky * (1.0 - a) + base;
             } else {
-              vec3 pe = eyePos(gl_FragCoord.xy, dep); float dist = length(pe);
-              vec3 rel = u_camRel + u_cr * pe.x + u_cu * pe.y - u_cd * pe.z;
+              vec3 off = ru * viewZ(uv); float dist = length(off);
+              vec3 rel = u_camRel + off;
               bool onAircraft = length(rel - u_ac) < u_acR;
               // relief: the satellite terrain has no normals of its own, so take them from the depth of the neighbouring pixels
               // and light the slopes from the actual sun direction (fading out close in and far away, and at night)
               if (u_relief > 0.0 && !onAircraft && dist > 120.0 && dist < 26000.0) {
                 vec2 px = 1.0 / vec2(textureSize(depthTexture, 0));
-                float dR = czm_readDepth(depthTexture, uv + vec2(px.x, 0.0)), dU = czm_readDepth(depthTexture, uv + vec2(0.0, px.y));
-                if (dR < 0.9999 && dU < 0.9999) {
-                  vec3 pR = eyePos(gl_FragCoord.xy + vec2(1.0, 0.0), dR), pU = eyePos(gl_FragCoord.xy + vec2(0.0, 1.0), dU);
+                vec2 uR = uv + vec2(px.x, 0.0), uU = uv + vec2(0.0, px.y);
+                if (texture(depthTexture, uR).r < 0.999999 && texture(depthTexture, uU).r < 0.999999) {
+                  vec3 pR = rayU(uR) * viewZ(uR), pU = rayU(uU) * viewZ(uU);
                   if (abs(length(pR) - dist) < dist * 0.03 && abs(length(pU) - dist) < dist * 0.03) {
-                    vec3 nE = normalize(cross(pR - pe, pU - pe)); if (dot(nE, -pe) < 0.0) nE = -nE;
-                    vec3 nW = normalize(u_cr * nE.x + u_cu * nE.y - u_cd * nE.z);
+                    vec3 nW = normalize(cross(pR - off, pU - off)); if (dot(nW, -off) < 0.0) nW = -nW;
                     float rl = clamp(dot(nW, u_sun) / max(muS, 0.12), 0.3, 1.75);
                     float k = u_relief * smoothstep(120.0, 400.0, dist) * (1.0 - smoothstep(12000.0, 26000.0, dist)) * smoothstep(-0.04, 0.08, muS);
                     base *= mix(1.0, rl, 0.45 * k);
@@ -934,9 +938,9 @@ window.BoploSim = (() => {
     const HT = { e: [0, 1, 2, 3].map(() => new C.Cartesian4()), d: new C.Cartesian4(), r: new C.Cartesian4(), k: 0, on: true };
     let heat = null;
     if (O.jet && GFX !== 'fast') { try {
-      heat = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_heat', uniforms: { u_e0: () => HT.e[0], u_e1: () => HT.e[1], u_e2: () => HT.e[2], u_e3: () => HT.e[3], u_ed: () => HT.d, u_er: () => HT.r, u_k: () => HT.on ? HT.k : 0, u_t: () => performance.now() / 1000 % 1000, u_asp: () => camera.frustum.aspectRatio || 1 },
+      heat = scene.postProcessStages.add(new C.PostProcessStage({ name: 'boplo_heat', uniforms: { u_e0: () => HT.e[0], u_e1: () => HT.e[1], u_e2: () => HT.e[2], u_e3: () => HT.e[3], u_ed: () => HT.d, u_er: () => HT.r, u_k: () => HT.on ? HT.k : 0, u_t: () => performance.now() / 1000 % 1000, u_asp: () => camera.frustum.aspectRatio || 1, u_near: depthNear, u_l2: depthL2 },
         fragmentShader: `uniform sampler2D colorTexture; uniform sampler2D depthTexture; in vec2 v_textureCoordinates;
-          uniform vec4 u_e0; uniform vec4 u_e1; uniform vec4 u_e2; uniform vec4 u_e3; uniform vec4 u_ed; uniform vec4 u_er; uniform float u_k; uniform float u_t; uniform float u_asp;
+          uniform vec4 u_e0; uniform vec4 u_e1; uniform vec4 u_e2; uniform vec4 u_e3; uniform vec4 u_ed; uniform vec4 u_er; uniform float u_k; uniform float u_t; uniform float u_asp; uniform float u_near; uniform float u_l2;
           float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
           float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
             return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -947,8 +951,8 @@ window.BoploSim = (() => {
           void main() {
             vec2 uv = v_textureCoordinates; float w = 0.0;
             if (u_k > 0.0) {
-              vec2 p = uv * vec2(u_asp, 1.0); float dep = czm_readDepth(depthTexture, uv);
-              float dist = dep >= 0.9999 ? 1e9 : length(czm_windowToEyeCoordinates(gl_FragCoord.xy, dep).xyz);
+              vec2 p = uv * vec2(u_asp, 1.0); float raw = texture(depthTexture, uv).r;
+              float dist = raw >= 0.999999 ? 1e9 : pow(2.0, raw * u_l2) - 1.0 + u_near; // (depth along the view axis)
               if (u_ed.x > 0.0 && dist > u_ed.x) w = max(w, plume(p, u_e0, u_er.x));
               if (u_ed.y > 0.0 && dist > u_ed.y) w = max(w, plume(p, u_e1, u_er.y));
               if (u_ed.z > 0.0 && dist > u_ed.z) w = max(w, plume(p, u_e2, u_er.z));
@@ -996,8 +1000,9 @@ window.BoploSim = (() => {
             return c;
           }
           void main() { vec4 cc = texture(colorTexture, v_textureCoordinates); vec3 base = cc.rgb;
-            float dep = czm_readDepth(depthTexture, v_textureCoordinates);
-            if (dep >= 0.9999) { base.g = min(base.g, 0.5 * (base.r + base.b) + 0.08); if (u_sky > 0.0) {
+            // open sky only (the raw logarithmic depth is exactly 1 there; reverse-mapped depth reaches 0.9999 a few km out)
+            float dep = texture(depthTexture, v_textureCoordinates).r;
+            if (dep >= 0.999999) { base.g = min(base.g, 0.5 * (base.r + base.b) + 0.08); if (u_sky > 0.0) {
               // clouds don't write depth, so they'd be painted over too: leave bright, colourless pixels (cloud) alone
               float mx = max(base.r, max(base.g, base.b)), sat = (mx - min(base.r, min(base.g, base.b))) / max(mx, 0.001), lum = dot(base, vec3(0.3, 0.5, 0.2));
               float keep = smoothstep(0.5, 0.75, lum) * (1.0 - smoothstep(0.05, 0.2, sat));
