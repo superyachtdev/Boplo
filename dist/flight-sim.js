@@ -1484,7 +1484,7 @@ window.BoploSim = (() => {
         if (w.main) { mainC += S.c; nm++; } else noseC = S.c;
       }
       mainC /= nm || 1;
-      return { sink: gnd || st.agl < 2 ? mainC : 0, dPitch: RIG.wheels.some(w => w.id === 'N') ? -Math.atan2(noseC - mainC, RIG.wheelbase || 1.5) * R2D : 0 };
+      return { sink: gnd || st.agl < 2 ? mainC : 0, dPitch: RIG.wheels.some(w => w.id === 'N') ? -Math.atan2(noseC - mainC, Math.abs(RIG.wheelbase || 1.5)) * R2D : 0 };
     }
     function rigDraw(dt) {
       if (!RIG || !model) return;
