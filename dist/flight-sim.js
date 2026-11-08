@@ -1631,6 +1631,13 @@ window.BoploSim = (() => {
       const ch = (camH + orb.yaw) * D2R, f = [Math.sin(ch), Math.cos(ch)];
       let ex = -f[0] * B * orb.zoom, ez = -f[1] * B * orb.zoom;
       let ey = Hc * (orb.zoom > 1 ? orb.zoom : 1) + AC.wheelDrop + Math.tan(orb.pitch * D2R) * B * orb.zoom;
+      // chase: sit right behind the aircraft along its nose, climbing and diving with it (only the horizon stays level)
+      if (camName0() === 'Chase' && fs.F) {
+        const a = chF.init ? Math.min(1, dt * 4) : 1; chF.init = true; for (let i = 0; i < 3; i++) chF[i] += (fs.F[i] - chF[i]) * a;
+        const hl = Math.hypot(chF[0], chF[2]) || 1, yw = orb.yaw * D2R, hx = chF[0] / hl, hz = chF[2] / hl, fx = hx * Math.cos(yw) + hz * Math.sin(yw), fz = hz * Math.cos(yw) - hx * Math.sin(yw);
+        const el = clamp(Math.atan2(chF[1], hl) - orb.pitch * D2R, -1.35, 1.35), d = B * orb.zoom;
+        ex = -Math.cos(el) * fx * d; ez = -Math.cos(el) * fz * d; ey = -Math.sin(el) * d + Hc * (orb.zoom > 1 ? orb.zoom : 1) + AC.wheelDrop;
+      }
       // keep the outside cameras out of the scenery: if a hillside, building or trees sit on the sight line back from the aircraft,
       // pull the camera in in front of them; then keep it a few metres above the ground under it and tilt down to keep the aircraft framed
       let camLiftDeg = 0;
@@ -1678,7 +1685,9 @@ window.BoploSim = (() => {
       } else {
         if (camName === 'Orbit' && !paused) orb.yaw = (orb.yaw + dt * 9) % 360;
         if (camera.frustum.fov !== C.Math.toRadians(66)) { camera.frustum.fov = C.Math.toRadians(66); camera.frustum.near = .5; }
-        camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: { heading: ch, pitch: C.Math.toRadians(-clamp(dep + camLiftDeg, -30, 85)), roll: 0 } });
+        // chase looks straight at the aircraft (a little above it); the other outside cameras keep their own framing
+        const chase = camName === 'Chase', ty = Hc * .35 + AC.wheelDrop * .5, hd = Math.max(1, Math.hypot(ex, ez));
+        camera.setView({ destination: LLH(st.x + ex, st.z + ez, st.alt + ey), orientation: chase ? { heading: Math.atan2(-ex, -ez), pitch: Math.atan2(ty - ey, hd), roll: 0 } : { heading: ch, pitch: C.Math.toRadians(-clamp(dep + camLiftDeg, -30, 85)), roll: 0 } });
         if (orb.px) camera.moveRight(orb.px); if (orb.py) camera.moveUp(orb.py);
       }
       placeAircraft();
@@ -2106,7 +2115,7 @@ window.BoploSim = (() => {
     const score = { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: st.alt, dist: 0, n: 0 };
     let lastFlown = 0, lastX = st.x, lastZ = st.z;
 
-    let camH = st.hdg, camD = 8.5, camPitchLag = 0, camK = 1, camKt = 1, camN = 0, camLift = 0; const camName0 = () => CAMS[camI][0];
+    const chF = [0, 0, 1]; let camH = st.hdg, camD = 8.5, camPitchLag = 0, camK = 1, camKt = 1, camN = 0, camLift = 0; const camName0 = () => CAMS[camI][0];
 
     /* ---- HUD ---- */
     let apT = 0;
