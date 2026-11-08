@@ -1289,7 +1289,7 @@ window.BoploSim = (() => {
           if (material.alpha < 0.6) {
             vec3 qm = fsInput.attributes.positionMC;
             float frost = u_ice > 0.0 ? smoothstep(0.35, 0.8, vn(qm.zx * 55.0) * 0.6 + vn(qm.xy * 23.0 + 3.1) * 0.4 + u_ice * 0.45) * u_ice : 0.0;
-            material.alpha = clamp(material.alpha + k * 1.3 + glint * 0.4 + frost * 0.8, 0.0, 0.96);
+            material.alpha = clamp(material.alpha + k * 0.6 + glint * 0.3 + frost * 0.8, 0.0, 0.96);
             material.diffuse = mix(material.diffuse, vec3(0.85, 0.9, 0.95), frost); material.roughness = mix(material.roughness, 0.6, frost);
           }
         }` });
@@ -2354,7 +2354,7 @@ window.BoploSim = (() => {
       g.fillStyle = 'rgba(222,233,255,.85)'; g.textAlign = 'left'; g.fillText('N', 8, 16);
     }
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
-    function applyView() { const six = (showSix || cockpit()) && !AC.jet; root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
+    function applyView() { const six = (showSix || (cockpit() && !AC.cockpit)) && !AC.jet; // (a 3D cockpit has its own panel; the 2D one stays on request) root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
     function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; towerAt = null; flyAt = null; applyView(); }
     // drag the view to orbit (chase cameras) or look around (cockpit and wing); wheel or pinch to zoom; double-click to reset
     { const mapEl = $('[data-map]'); let drag = null; const pts = new Map();
