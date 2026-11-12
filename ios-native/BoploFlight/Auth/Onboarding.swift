@@ -432,6 +432,8 @@ struct TrialGateView: View {
     @State private var yearly = true
     @State private var trialDays = 0
     @State private var eligible = true
+    @State private var loading = true
+    var onSkip: () -> Void = {}
 
     private var selected: Product? { yearly ? store.yearly : store.monthly }
     private var trial: Bool { trialDays > 0 && eligible }
@@ -485,10 +487,20 @@ struct TrialGateView: View {
                         .buttonStyle(.plain)
                         .disabled(store.busy)
                         Text(fine(p)).font(.archivo(11.5)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.6)).multilineTextAlignment(.center)
-                    } else {
+                    } else if loading {
                         ProgressView().tint(.white)
-                        Button("Load plans again") { Task { await store.loadProducts() } }
+                    } else {
+                        // The App Store sent no plans (offline, or the store is unavailable): never leave someone stuck here.
+                        Text("Plans couldn’t load from the App Store right now.").font(.archivo(14)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.8))
+                        Button("Try again") { Task { loading = true; await store.loadProducts(); await loadTrial(); loading = false } }
                             .font(.archivo(15, .semibold)).foregroundStyle(.white)
+                        Button { onSkip() } label: {
+                            Text("Continue with the free plan")
+                                .font(.archivo(17, .semibold)).foregroundStyle(Theme.ink)
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                                .background(Capsule().fill(.white))
+                        }
+                        .buttonStyle(.plain)
                     }
                     if let m = store.message { Text(m).font(.archivo(13.5)).foregroundStyle(Color(hex: 0xFF9BA6)).multilineTextAlignment(.center) }
                     HStack(spacing: 18) {
@@ -501,7 +513,11 @@ struct TrialGateView: View {
             }
         }
         .task(id: yearly) { await loadTrial() }
-        .task { if store.products.isEmpty { await store.loadProducts(); await loadTrial() } }
+        .task {
+            if store.products.isEmpty { await store.loadProducts() }
+            await loadTrial()
+            loading = false
+        }
         .sensoryFeedback(.selection, trigger: yearly)
     }
 
