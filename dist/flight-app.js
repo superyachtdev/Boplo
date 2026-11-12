@@ -439,82 +439,181 @@
   }
 
 
-  /* ---------------- onboarding ---------------- */
-  const STEPS = ['About you', 'Your goal', 'Aircraft', 'Hours so far', 'Review'];
-  function onboard() {
-    document.title = 'Set up your desk · Boplo Flight';
-    iosStatus('light');
-    const p = state.profile || {}, s = ui.step;
-    const screens = [
-      ['Let’s set up your flight desk.', 'A few details keep everything in the right context. You can change any of this later.',
-        input('Your name', 'name', p.name || state.user?.display_name || '', 'text', 'required maxlength="100" autocomplete="name"') +
-        countrySelect(countryCodeOf(p)) +
-        regimeSelect(regimeOf(p)) +
+  /* ---------------- onboarding: one question per screen ---------------- */
+  const OB = [
+    { id: 'name', t: 'What should we call you?', l: 'This is how Boplo greets you. Nobody else sees it unless you share.',
+      f: p => input('Your name', 'name', p.name || state.user?.display_name || '', 'text', 'required maxlength="100" autocomplete="name" autofocus') },
+    { id: 'where', t: 'Where are you learning to fly?', l: 'Rules, minimum hours and weather all depend on where you train.',
+      f: p => countrySelect(countryCodeOf(p)) + regimeSelect(regimeOf(p)) +
         input('Licensing authority', 'authority', p.authority && !R.legacyRegime(p.authority) ? p.authority : (R.authorityFor(countryCodeOf(p)) || ''), 'text', 'required maxlength="100" placeholder="e.g. your national aviation authority"', false, 'Filled in from your country. Change it if yours is different.') +
-        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true) + '<datalist id="home-af"></datalist>' +
-        input('School or club', 'school', p.school, 'text', 'maxlength="200"', true)],
-      ['What are you working toward?', 'Your target is your own planning date. Your school decides the training sequence and when you’re ready.',
-        licenceSelect(regimeOf(p), licenceOf(p)) +
-        input('Target date', 'target', p.target, 'date', '', true) +
-        `<div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>` +
-        input('Hours goal', 'goalHours', p.goalHours || R.licence(regimeOf(p), licenceOf(p))?.minHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'Starts at the published minimum. Set it to whatever you want to track against.') +
-        input('Next lesson', 'nextLesson', p.nextLesson, 'text', 'maxlength="200" placeholder="e.g. Lesson 12 · Navigation"', true) +
-        input('Next lesson date', 'lessonDate', p.lessonDate, 'date', '', true)],
-      ['What do you usually fly?', 'These fill in new flight records for you.',
-        input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200" placeholder="e.g. PA-28 Warrior"', true) +
-        input('Registration', 'registration', p.registration, 'text', 'maxlength="200" placeholder="e.g. G-ABCD"', true) +
-        select('How often do you fly?', 'frequency', FREQ, p.frequency || 'Still deciding') +
-        input('Theory to revisit', 'topics', p.topics, 'text', 'maxlength="200" placeholder="e.g. Air law, meteorology"', true) +
-        input('Aircraft cost per hour', 'rateAircraft', p.rateAircraft || '', 'number', 'min="0" max="5000" step="0.01" inputmode="decimal"', true, 'From your school’s price list. Used to track spending.') +
-        input('Instructor cost per hour', 'rateInstructor', p.rateInstructor || '', 'number', 'min="0" max="2000" step="0.01" inputmode="decimal"', true, 'Leave blank if it’s included in the aircraft rate.')],
-      ['Bring the hours you already have.', 'Add the total from your logbook, or leave it at zero and log flights as you go. These hours are kept separate from your dated flights.',
-        duration('Existing flight time', 'openingMinutes', p.openingMinutes || 0, false) +
-        input('Anything to remember', 'notes', p.notes, 'textarea', '', true)],
-      ['Your desk is ready.', 'Check the details below. Everything can be changed later in your profile.',
-        `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', R.licence(regimeOf(p), p.licence)?.label || p.licence], ['Hours goal', p.goalHours ? p.goalHours + ' h' : 'Not set'], ['Target date', p.target ? fmtDate(p.target, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
-         <p class="callout" style="grid-column:1/-1">Everything you enter is self-reported. Boplo organises your records and preparation; it doesn’t assess your eligibility or readiness.</p>`]
-    ];
-    const [title, lead, fields] = screens[s];
-    root.innerHTML = `<div class="onboard">
-      <aside class="onboard-side night">${contours('b')}
-        ${brand()}
-        <ol class="steps" aria-label="Setup steps">${STEPS.map((t, i) => `<li class="${i === s ? 'current' : i < s ? 'done' : ''}" ${i === s ? 'aria-current="step"' : ''}><b>${i < s ? '✓' : i + 1}</b><span>${t}</span></li>`).join('')}</ol>
-        <div class="foot"><span>${preview ? 'Example desk · not saved' : 'Saved after each step'}</span><button data-logout>${preview ? 'Leave' : 'Sign out'}</button></div>
-      </aside>
-      <main class="onboard-main"><form class="onboard-form" novalidate>
-        <p class="kicker">Step ${s + 1} of ${STEPS.length}</p>
-        <h1 class="display" tabindex="-1">${title}</h1>
-        <p class="lead">${lead}</p>
-        <div class="fields">${fields}</div>
-        <p class="form-error" role="alert"></p>
-        <div class="actions">
-          ${s ? '<button type="button" class="btn btn-line" data-back>Back</button>' : '<span></span>'}
-          <div class="right"><button class="btn btn-blue btn-has-spark" type="submit">${s === 4 ? 'Open my flight desk' : 'Continue'} ${spark}</button></div>
+        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true) + '<datalist id="home-af"></datalist>' },
+    { id: 'goal', t: 'What are you working toward?', l: 'We track your hours against this goal. Your school decides when you’re ready.',
+      f: p => licenceSelect(regimeOf(p), licenceOf(p)) + `<div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>` +
+        input('Hours goal', 'goalHours', p.goalHours || R.licence(regimeOf(p), licenceOf(p))?.minHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'Starts at the published minimum. Most students fly more.') },
+    { id: 'pace', t: 'How often will you fly?', l: 'Flying often is the biggest thing that keeps the total cost down.',
+      f: p => choice('frequency', FREQ.map(v => [v, { 'Still deciding': 'I’m still working it out', Weekly: 'About once a week', 'Twice a week': 'Two or more lessons a week', Monthly: 'A couple of times a month or less', 'Intensive course': 'Full-time, every day I can' }[v]]), p.frequency || 'Still deciding') +
+        input('Target date', 'target', p.target, 'date', '', true, 'When you’d like to have your licence. Your own planning date.') },
+    { id: 'fly', t: 'What do you fly?', l: 'Boplo fills these into every new flight so logging takes seconds.', opt: true,
+      f: p => input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200" placeholder="e.g. Cessna 172"', true) +
+        input('Registration', 'registration', p.registration, 'text', 'maxlength="200" placeholder="e.g. N12345"', true) +
+        input('School or club', 'school', p.school, 'text', 'maxlength="200"', true) },
+    { id: 'cost', t: 'What does an hour cost you?', l: 'From your school’s price list. Boplo uses it to forecast what your licence will really cost.', opt: true,
+      f: p => input('Aircraft per hour', 'rateAircraft', p.rateAircraft || '', 'number', 'min="0" max="5000" step="0.01" inputmode="decimal"', true) +
+        input('Instructor per hour', 'rateInstructor', p.rateInstructor || '', 'number', 'min="0" max="2000" step="0.01" inputmode="decimal"', true, 'Leave blank if it’s included.') },
+    { id: 'hours', t: 'How many hours have you flown?', l: 'Add the total from your logbook, or leave it at zero if you’re just starting.',
+      f: p => duration('Flight time so far', 'openingMinutes', p.openingMinutes || 0, false) },
+    { id: 'review', t: 'Looks good?', l: 'Everything can be changed later in your profile.',
+      f: p => `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', R.licence(regimeOf(p), p.licence)?.label || p.licence], ['Hours goal', p.goalHours ? p.goalHours + ' h' : 'Not set'], ['Flying', p.frequency || 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
+         <p class="callout" style="grid-column:1/-1">Everything you enter is self-reported. Boplo organises your records and preparation; it doesn’t assess your eligibility or readiness.</p>` }
+  ];
+  const choice = (name, opts, value) => `<div class="field full ob-choices" role="radiogroup">${opts.map(([v, l]) => `<label class="ob-choice"><input type="radio" name="${name}" value="${esc(v)}" ${v === value ? 'checked' : ''}><span><b>${esc(v)}</b><small>${esc(l)}</small></span></label>`).join('')}</div>`;
+  function onboard() {
+    document.title = 'Set up · Boplo Flight'; document.body.classList.add('ob-mode');
+    iosStatus('light');
+    const p = state.profile || {}, s = Math.max(0, Math.min(OB.length - 1, ui.step || 0)), sc = OB[s], last = s === OB.length - 1;
+    root.innerHTML = `<div class="ob">
+      <header class="ob-top">
+        ${s ? `<button type="button" class="ob-back" data-back aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>` : `<span class="ob-back" aria-hidden="true"></span>`}
+        <div class="ob-bar" role="progressbar" aria-valuemin="1" aria-valuemax="${OB.length}" aria-valuenow="${s + 1}" aria-label="Setup progress"><i style="width:${Math.round((s + 1) / OB.length * 100)}%"></i></div>
+        <button type="button" class="ob-out" data-logout>${preview ? 'Leave' : 'Sign out'}</button>
+      </header>
+      <form class="ob-form" novalidate>
+        <div class="ob-body ${ui.obDir === 'back' ? 'from-left' : 'from-right'}">
+          <p class="ob-kicker">${s + 1} of ${OB.length}</p>
+          <h1 class="display" tabindex="-1">${sc.t}</h1>
+          <p class="lead">${sc.l}</p>
+          <div class="fields ob-fields">${sc.f(p)}</div>
+          <p class="form-error" role="alert"></p>
         </div>
-      </form></main></div>`;
+        <footer class="ob-foot">
+          <button class="btn btn-blue btn-has-spark ob-next" type="submit">${last ? 'Build my flight desk' : 'Continue'} ${spark}</button>
+          ${sc.opt ? '<button type="button" class="ob-skip" data-skip>Skip for now</button>' : ''}
+        </footer>
+      </form></div>`;
     $('[data-logout]').onclick = logout;
-    const back = $('[data-back]'); if (back) back.onclick = () => { ui.step--; onboard(); $('h1').focus(); };
+    const back = $('[data-back]'); if (back) back.onclick = () => { ui.step = s - 1; ui.obDir = 'back'; onboard(); };
     const form = $('form');
     bindTraining(form, p);
-    form.onsubmit = async e => {
-      e.preventDefault();
+    const go = async (skip) => {
       const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
-      const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim());
-      if (bad) { err.textContent = 'Fill in the required fields to continue.'; bad.focus(); return; }
-      const v = Object.fromEntries(new FormData(form));
+      if (!skip) { const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim()); if (bad) { err.textContent = 'Fill this in to continue.'; bad.focus(); return; } }
+      const v = skip ? {} : Object.fromEntries(new FormData(form));
       if (v.countryCode) v.country = R.nameFor(v.countryCode);
-      if (form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
+      if (!skip && form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
       if ('goalHours' in v) v.goalHours = Number(v.goalHours || 0);
       ['rateAircraft', 'rateInstructor'].forEach(k => { if (k in v) v[k] = Number(v[k] || 0); });
       if (v.countryCode && !p.currency) v.currency = CURRENCY_BY[v.countryCode] || (EURO.includes(v.countryCode) ? 'EUR' : 'USD');
       btn.disabled = true;
       try {
-        await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, 4), complete: s === 4 });
-        if (s === 4) { location.hash = 'overview'; render(); toast('Your flight desk is ready.'); }
-        else { ui.step++; onboard(); $('h1').focus(); }
+        await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, OB.length - 1), complete: last });
+        if (last) { await buildingScreen(); location.hash = 'overview'; render(); if (!(nativeApp() && trialGateNeeded())) toast('Your flight desk is ready.'); }
+        else { ui.step = s + 1; ui.obDir = 'fwd'; onboard(); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
+    form.onsubmit = e => { e.preventDefault(); go(false); };
+    const sk = $('[data-skip]'); if (sk) sk.onclick = () => go(true);
+    form.querySelectorAll('.ob-choice input').forEach(r => r.addEventListener('change', () => { try { window.Capacitor?.Plugins?.Haptics?.selectionChanged?.(); } catch { } }));
     hideNativeSplash();
+  }
+  // a short "building" moment between the last question and the desk: it shows what the answers turned into
+  function buildingScreen() {
+    const p = state.profile || {}, lic = R.licence(regimeOf(p), p.licence)?.label || p.licence || 'licence';
+    const rows = [`Your ${lic} route`, p.goalHours ? `${p.goalHours} h goal and progress` : 'Hours goal and progress', p.airport ? `Live weather for ${String(p.airport).split(' · ')[0]}` : 'Live weather at any airport', Number(p.openingMinutes) ? `Logbook with ${hrs(p.openingMinutes)} h carried over` : 'Your logbook', p.rateAircraft ? 'Your real cost forecast' : 'Lesson prep and mock checkride'];
+    iosStatus('dark'); document.body.classList.add('ob-mode');
+    root.innerHTML = `<main class="ob-build" aria-live="polite">${contours('b')}
+      <div class="ob-build-in"><div class="ob-ring" aria-hidden="true"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52"/><circle class="arc" cx="60" cy="60" r="52"/></svg>${ico('sim')}</div>
+      <h1 class="display">Building your flight desk</h1>
+      <ul>${rows.map((r, i) => `<li style="animation-delay:${0.25 + i * 0.42}s">${ico('check')}<span>${esc(r)}</span></li>`).join('')}</ul></div></main>`;
+    hideNativeSplash();
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return new Promise(r => setTimeout(r, reduce ? 600 : 0.25e3 + rows.length * 420 + 700));
+  }
+
+  /* ---------------- iOS: intro screens before sign-in ---------------- */
+  const INTRO = [
+    ['logbook', 'Your whole licence in one place', 'Logbook, hours, progress and costs, set up for the rules where you train.'],
+    ['sim', 'Practise before you pay for the hour', 'Fly circuits and approaches at your own airfield, and rehearse your radio calls out loud.'],
+    ['ask', 'Walk into your checkride ready', 'A mock checkride that questions you like a real examiner, friendly or strict.']
+  ];
+  function iosIntro(done) {
+    let i = 0;
+    iosSignedOut(true); iosStatus('dark'); document.title = 'Welcome · Boplo';
+    const paint = dir => {
+      const [ic, t, l] = INTRO[i];
+      root.innerHTML = `<main class="ios-intro">${contours('b')}
+        <button type="button" class="ios-intro-skip" data-skip>Skip</button>
+        <div class="ios-intro-art ${dir}" aria-hidden="true"><div class="glow"></div><div class="orb">${ico(ic)}</div></div>
+        <div class="ios-intro-copy ${dir}"><h1 class="display">${t}</h1><p>${l}</p></div>
+        <div class="ios-intro-foot"><div class="dots">${INTRO.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+        <button type="button" class="btn btn-blue btn-has-spark" data-next>${i === INTRO.length - 1 ? 'Get started' : 'Continue'} ${spark}</button></div></main>`;
+      const finish = () => { try { localStorage.setItem('boplo-intro-seen', '1'); } catch { } done(); };
+      $('[data-skip]').onclick = finish;
+      $('[data-next]').onclick = () => { if (i < INTRO.length - 1) { i++; paint('from-right'); } else finish(); };
+      let x0 = null; const m = $('.ios-intro');
+      m.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+      m.addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (dx < -50 && i < INTRO.length - 1) { i++; paint('from-right'); } else if (dx > 50 && i > 0) { i--; paint('from-left'); } }, { passive: true });
+      hideNativeSplash();
+    };
+    paint('');
+  }
+  const introSeen = () => { try { return localStorage.getItem('boplo-intro-seen') === '1'; } catch { return true; } };
+
+  /* ---------------- iOS: the app needs Advanced (trial or subscription); the website keeps a free plan ---------------- */
+  const trialGateNeeded = () => nativeApp() && !preview && !embedded && B().plan !== 'advanced' && B().enforced !== false;
+  async function storeProducts() {
+    if (ui.storeProducts) return ui.storeProducts;
+    try { const pl = nativePlugin(); if (pl?.products) ui.storeProducts = await pl.products(); } catch { }
+    return ui.storeProducts || {};
+  }
+  async function trialGate() {
+    document.title = 'Start your free trial · Boplo'; document.body.classList.add('ob-mode');
+    iosStatus('dark');
+    const sp = await storeProducts(), iv = ui.billInterval === 'monthly' ? 'monthly' : 'yearly', b = B();
+    const price = k => sp[k]?.displayPrice || money2(b.prices[k].amount, b.prices[k].currency);
+    const days = sp[iv]?.trialDays || 0, trial = days > 0 && sp[iv]?.eligibleForTrial !== false;
+    const perMonth = sp.yearly?.price ? (() => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: sp.yearly.currency || 'USD' }).format(sp.yearly.price / 12); } catch { return ''; } })() : money2(Math.round(b.prices.yearly.amount / 12));
+    const save = sp.yearly?.price && sp.monthly?.price ? Math.round((1 - sp.yearly.price / (sp.monthly.price * 12)) * 100) : Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100);
+    const name = (state.profile?.name || '').split(' ')[0];
+    root.innerHTML = `<main class="gate">${contours('b')}
+      <div class="gate-top"><button type="button" class="gate-link" data-restore>Restore</button><button type="button" class="gate-link" data-logout>Sign out</button></div>
+      <div class="gate-hero"><span class="gate-badge">Boplo Advanced</span>
+        <h1 class="display">${trial ? `${name ? esc(name) + ', try' : 'Try'} everything free for ${days} days` : 'Unlock your full flight desk'}</h1>
+        <ul class="gate-list">${[['logbook', 'Unlimited logbook, progress and cost forecast'], ['ask', 'Mock checkride and Ask Boplo study assistant'], ['sim', 'Unlimited simulator at your own airfield'], ['radio', 'Radio practice with every call checked'], ['study', 'Study by subject and timed mock exams']].map(([ic, t]) => `<li>${ico(ic)}<span>${t}</span></li>`).join('')}</ul>
+      </div>
+      ${trial ? `<ol class="gate-time"><li><b>Today</b><span>Everything unlocks. No charge.</span></li><li><b>Before day ${days}</b><span>Cancel any time in Settings → Subscriptions and you pay nothing.</span></li><li><b>Day ${days}</b><span>Your plan starts at ${iv === 'yearly' ? price('yearly') + ' a year' : price('monthly') + ' a month'}.</span></li></ol>` : ''}
+      <div class="gate-plans" role="radiogroup" aria-label="Plan">
+        <button type="button" role="radio" data-iv="yearly" aria-checked="${iv === 'yearly'}"><span class="gate-save">Save ${save}%</span><b>Yearly</b><span>${price('yearly')} a year${perMonth ? ` · ${perMonth}/mo` : ''}</span></button>
+        <button type="button" role="radio" data-iv="monthly" aria-checked="${iv === 'monthly'}"><b>Monthly</b><span>${price('monthly')} a month</span></button>
+      </div>
+      <div class="gate-foot">
+        <button type="button" class="btn btn-light btn-has-spark gate-cta" data-buy>${trial ? `Start my ${days}-day free trial` : `Continue for ${price(iv)}`} ${spark}</button>
+        <p class="gate-fine">${trial ? `${days} days free, then ${price(iv)} ${iv === 'yearly' ? 'per year' : 'per month'}. ` : ''}Payment is charged to your Apple ID${trial ? ' when the trial ends' : ''}. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage it in Settings → Apple ID → Subscriptions.</p>
+        <p class="gate-legal"><a href="/terms.html">Terms of Use</a><a href="/privacy.html">Privacy policy</a></p>
+      </div></main>`;
+    root.querySelectorAll('[data-iv]').forEach(x => x.onclick = () => { ui.billInterval = x.dataset.iv; trialGate(); });
+    $('[data-logout]').onclick = logout;
+    $('[data-restore]').onclick = () => iosRestore(() => render());
+    const buy = $('[data-buy]'); buy.onclick = async () => { buy.disabled = true; await iosPurchase(iv, () => { render(); toast(trial ? `Your free trial has started. Enjoy Advanced.` : 'You’re on Advanced.'); }); buy.disabled = false; };
+    hideNativeSplash();
+  }
+
+  /* ---------------- iOS: ask for an App Store rating ----------------
+     Apple's own sheet. Apple decides if it shows (at most 3 times a year, never once the user has turned it off),
+     and apps can't see whether someone already rated. We only ask a settled user, on app open, every 4 months at most. */
+  function maybeAskReview() {
+    if (!nativeApp() || preview || embedded) return;
+    try {
+      const now = Date.now(), first = Number(localStorage.getItem('boplo-first-open') || 0) || (localStorage.setItem('boplo-first-open', String(now)), now);
+      const opens = Number(localStorage.getItem('boplo-opens') || 0) + 1; localStorage.setItem('boplo-opens', String(opens));
+      const last = Number(localStorage.getItem('boplo-review-asked') || 0);
+      if (opens < 4 || now - first < 2 * 864e5 || now - last < 120 * 864e5) return;
+      setTimeout(() => {
+        if (sheet.open || document.querySelector('#sim[open]') || !state.profile?.complete || trialGateNeeded()) return;
+        const pl = nativePlugin(); if (!pl?.requestReview) return;
+        localStorage.setItem('boplo-review-asked', String(Date.now()));
+        Promise.resolve(pl.requestReview()).catch(() => { });
+      }, 3500);
+    } catch { }
   }
 
   async function logout() {
@@ -3130,7 +3229,7 @@
     sheet.showModal();
   }
   const gateOr = (what, fn) => (...a) => { if (isAdv()) return fn(...a); upgradeSheet(`${what} is part of Advanced.`); };
-  async function iosPurchase(interval) {
+  async function iosPurchase(interval, after) {
     const plugin = nativePlugin();
     if (!plugin?.purchase) { toast('App Store purchases aren’t available in this build yet.'); return; }
     const productId = B().products?.[interval] || IAP[interval];
@@ -3140,11 +3239,12 @@
       if (result?.pending) { toast('The App Store is still approving that purchase.'); return; }
       if (!result?.signedTransaction) throw new Error('The App Store didn’t return a receipt.');
       state.billing = await api('billing/apple', 'POST', { signedTransaction: result.signedTransaction });
+      if (after) { after(); return; }
       toast('You’re on Advanced.');
       planPage();
     } catch (x) { toast(x.message || 'The purchase didn’t go through.'); }
   }
-  async function iosRestore() {
+  async function iosRestore(after) {
     const plugin = nativePlugin();
     if (!plugin?.restore) { toast('Restore isn’t available in this build yet.'); return; }
     try {
@@ -3153,6 +3253,7 @@
       if (!signed.length) { toast('No App Store subscription was found for this Apple ID.'); return; }
       state.billing = await api('billing/apple', 'POST', { signedTransactions: signed });
       toast(state.billing.plan === 'advanced' ? 'Purchases restored. You’re on Advanced.' : 'No active Boplo subscription was found.');
+      if (after) { after(); return; }
       planPage();
     } catch (x) { toast(x.message || 'Restore didn’t work.'); }
   }
@@ -4043,9 +4144,10 @@
   }
   /* ---------------- router ---------------- */
     function render() {
-    iosSignedOut(false);
+    iosSignedOut(false); document.body.classList.remove('ob-mode');
     if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
-    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(4, state.profile?.step || 0); onboard(); return; }
+    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(OB.length - 1, state.profile?.step || 0); onboard(); return; }
+    if (trialGateNeeded()) { trialGate(); return; }
     const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; }
     if (embedded && (k === 'plan' || k === 'more')) { bridge({ type: k === 'plan' ? 'upgrade' : 'close' }); if (history.length > 1) history.back(); return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
@@ -4169,11 +4271,12 @@
       if (q.get('setup_intent') || q.get('payment_intent')) { history.replaceState(null, '', location.pathname + '#plan'); render(); finishCheckout(); return; }
       try { const intent = JSON.parse(localStorage.getItem('boplo-intent') || 'null'); if (intent?.plan && ws.profile?.complete) { localStorage.removeItem('boplo-intent'); ui.billInterval = intent.plan === 'monthly' ? 'monthly' : 'yearly'; if (B().plan !== 'advanced') location.hash = '#plan'; } } catch { }
       render();
+      maybeAskReview();
     }
     catch (e) {
       const snap = isOffline(e) ? loadSnapshot() : null;
       if (snap?.user) { state = snap; state.billing = snap.billing || null; state.offline = true; const q = outbox(); if (q.length) state.flights = [...q.map(x => ({ ...x.data, id: x.id, pending: true })), ...state.flights.filter(f => !q.some(x => x.id === f.id))]; render(); return; }
-      if (e.status === 401) { if (nativeApp()) iosAuth(); else auth(); } else failure(e);
+      if (e.status === 401) { if (nativeApp()) { if (introSeen()) iosAuth(); else iosIntro(() => iosAuth()); } else auth(); } else failure(e);
     }
   }
   start();

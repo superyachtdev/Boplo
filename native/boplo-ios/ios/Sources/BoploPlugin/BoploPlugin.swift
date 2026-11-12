@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 import StoreKit
 import AuthenticationServices
@@ -19,7 +20,9 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
         CAPPluginMethod(name: "getPoints", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "registerPush", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPushToken", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "unlockInteraction", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "unlockInteraction", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "products", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestReview", returnType: CAPPluginReturnPromise)
     ]
 
     private let yearly = "app.boplo.flight.advanced.yearly"
@@ -139,6 +142,46 @@ public class BoploPlugin: CAPPlugin, CAPBridgedPlugin, ASAuthorizationController
                 case .failure(let error): call.reject(error.localizedDescription)
                 }
             }
+        }
+    }
+
+    /// Prices as the App Store shows them in the user's storefront, and whether this Apple ID can still take the free trial.
+    @objc func products(_ call: CAPPluginCall) {
+        Task {
+            var out: [String: Any] = [:]
+            do {
+                let list = try await Product.products(for: [yearly, monthly])
+                for product in list {
+                    var item: [String: Any] = ["id": product.id, "displayPrice": product.displayPrice, "price": NSDecimalNumber(decimal: product.price).doubleValue, "currency": product.priceFormatStyle.currencyCode]
+                    if let sub = product.subscription {
+                        item["eligibleForTrial"] = await sub.isEligibleForIntroOffer
+                        if let intro = sub.introductoryOffer, intro.paymentMode == .freeTrial {
+                            let unit = intro.period.unit
+                            let days = unit == .day ? intro.period.value : unit == .week ? intro.period.value * 7 : unit == .month ? intro.period.value * 30 : intro.period.value * 365
+                            item["trialDays"] = days
+                        }
+                    }
+                    out[product.id == self.yearly ? "yearly" : "monthly"] = item
+                }
+            } catch {}
+            let payload = out
+            DispatchQueue.main.async { call.resolve(payload) }
+        }
+    }
+
+    /// Apple decides whether the rating sheet actually appears (at most three times a year, never if the user turned it off).
+    @objc func requestReview(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
+                call.resolve(["requested": false])
+                return
+            }
+            if #available(iOS 16.0, *) {
+                AppStore.requestReview(in: scene)
+            } else {
+                SKStoreReviewController.requestReview(in: scene)
+            }
+            call.resolve(["requested": true])
         }
     }
 
