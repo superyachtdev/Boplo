@@ -559,7 +559,8 @@
   const introSeen = () => { try { return localStorage.getItem('boplo-intro-seen') === '1'; } catch { return true; } };
 
   /* ---------------- iOS: the app needs Advanced (trial or subscription); the website keeps a free plan ---------------- */
-  const trialGateNeeded = () => nativeApp() && !preview && !embedded && B().plan !== 'advanced' && B().enforced !== false;
+  // only builds whose plugin can read store prices and trial eligibility get the gate; older App Store builds keep the free plan
+  const trialGateNeeded = () => nativeApp() && !preview && !embedded && !!nativePlugin()?.products && B().plan !== 'advanced' && B().enforced !== false;
   async function storeProducts() {
     if (ui.storeProducts) return ui.storeProducts;
     try { const pl = nativePlugin(); if (pl?.products) ui.storeProducts = await pl.products(); } catch { }
