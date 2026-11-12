@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 @main
 struct BoploFlightApp: App {
@@ -44,6 +45,7 @@ struct RootView: View {
     @State private var coldLaunch = true
     /// The take-off has reached white-out, so the app can mount underneath.
     @State private var aboveCloud = false
+    @AppStorage("boplo.introSeen") private var introSeen = false
 
     private var playing: Bool { coldLaunch || model.takeoff }
 
@@ -75,14 +77,16 @@ struct RootView: View {
             case .loading:
                 LaunchView()
             case .signedOut:
-                SignInView()
+                if introSeen { SignInView() } else { IntroPagesView { withAnimation(.easeInOut(duration: 0.35)) { introSeen = true } } }
             case .setup:
-                SetupView()
+                OnboardingFlow()
             case .ready:
-                MainTabs()
+                // The iPhone app needs Advanced: a free trial or a subscription. Owners, school members and web subscribers are already Advanced.
+                if model.billing != nil && !model.isAdvanced { TrialGateView() } else { MainTabs() }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: model.phase)
+        .animation(.easeInOut(duration: 0.35), value: model.isAdvanced)
     }
 }
 
@@ -90,16 +94,46 @@ struct LaunchView: View {
     var body: some View {
         ZStack {
             RadialGradient(colors: [Color(hex: 0x0B1E4E), Theme.night], center: .top, startRadius: 0, endRadius: 600).ignoresSafeArea()
-            VStack(spacing: 18) {
+            Contours(seed: 0.7).opacity(0.35).ignoresSafeArea()
+            VStack(spacing: 26) {
                 BoploWordmark(height: 40)
-                ProgressView().tint(.white)
+                RouteArc()
+                    .frame(width: 260, height: 60)
+                Text("Opening your flight desk").font(.archivo(14.5)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.7))
             }
         }
     }
 }
 
+/// A dashed route with a glowing trail running along it, for loading moments.
+struct RouteArc: View {
+    @State private var t: CGFloat = 0
+    var body: some View {
+        GeometryReader { g in
+            let path = Path { p in
+                p.move(to: CGPoint(x: 4, y: g.size.height - 4))
+                p.addQuadCurve(to: CGPoint(x: g.size.width - 4, y: g.size.height - 4), control: CGPoint(x: g.size.width / 2, y: -g.size.height * 0.9))
+            }
+            ZStack {
+                path.stroke(Theme.ice.opacity(0.25), style: StrokeStyle(lineWidth: 2, dash: [4, 7]))
+                path.trim(from: max(0, t - 0.35), to: t)
+                    .stroke(Theme.electricHi, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .shadow(color: Theme.electricHi.opacity(0.9), radius: 6)
+                Circle().fill(Theme.ice).frame(width: 7, height: 7).position(x: 4, y: g.size.height - 4)
+                Circle().fill(Theme.ice).frame(width: 7, height: 7).position(x: g.size.width - 4, y: g.size.height - 4)
+            }
+        }
+        .onAppear {
+            guard !UIAccessibility.isReduceMotionEnabled else { t = 1; return }
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: false)) { t = 1.35 }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.requestReview) private var requestReview
     @State private var celebrating: Milestone?
 
     var body: some View {
@@ -143,6 +177,7 @@ struct MainTabs: View {
         }
         .fullScreenCover(item: $celebrating) { MilestoneMoment(milestone: $0) }
         .task(id: model.flights.count) { await checkMilestones() }
+        .task { await ReviewAsk.maybe(requestReview) }
     }
 }
 
