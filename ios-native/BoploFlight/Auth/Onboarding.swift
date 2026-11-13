@@ -451,22 +451,19 @@ struct TrialGateView: View {
                 .padding(.horizontal, 22).padding(.top, 6)
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Boplo Advanced")
-                            .font(.archivo(13, .semibold)).foregroundStyle(Color(hex: 0xBFD6FF))
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Capsule().fill(Theme.electricHi.opacity(0.2)).overlay(Capsule().strokeBorder(Theme.ice.opacity(0.25))))
-                        Text(headline).font(Theme.display(36)).tracking(-1.2).foregroundStyle(.white)
+                    VStack(alignment: .leading, spacing: 18) {
+                        Text(headline).font(Theme.display(34)).tracking(-1.1).foregroundStyle(.white)
                             .fixedSize(horizontal: false, vertical: true)
-                        VStack(alignment: .leading, spacing: 12) {
-                            feature("book.closed", "Unlimited logbook, progress and cost forecast")
-                            feature("checkmark.seal", "Mock checkride and Ask Boplo study assistant")
+                        planReady
+                        VStack(alignment: .leading, spacing: 11) {
+                            feature("checkmark.seal.fill", "Mock checkride that grills you like an examiner")
                             feature("airplane", "Unlimited simulator at your own airfield")
                             feature("dot.radiowaves.left.and.right", "Radio practice with every call checked")
-                            feature("graduationcap", "Study by subject and timed mock exams")
+                            feature("graduationcap.fill", "Study by subject and timed mock exams")
+                            feature("book.closed.fill", "Unlimited logbook, progress and cost forecast")
                         }
-                        if trial, let p = selected { timeline(p) }
                         plans
+                        if trial, let p = selected { timeline(p) }
                     }
                     .padding(.horizontal, 22).padding(.top, 14).padding(.bottom, 20)
                 }
@@ -486,6 +483,10 @@ struct TrialGateView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(store.busy)
+                        if trial {
+                            Label("No payment due today · Cancel anytime", systemImage: "checkmark.shield.fill")
+                                .font(.archivo(13.5, .semibold)).foregroundStyle(Color(hex: 0x4DD49A))
+                        }
                         Text(fine(p)).font(.archivo(11.5)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.6)).multilineTextAlignment(.center)
                     } else if loading {
                         ProgressView().tint(.white)
@@ -524,7 +525,34 @@ struct TrialGateView: View {
     private var headline: String {
         let first = (model.profile?.name ?? "").split(separator: " ").first.map(String.init) ?? ""
         if trial { return first.isEmpty ? "Try everything free for \(trialDays) days" : "\(first), try everything free for \(trialDays) days" }
-        return "Unlock your full flight desk"
+        return first.isEmpty ? "Unlock your full flight desk" : "\(first), unlock your full flight desk"
+    }
+
+    /// What setup produced, so the paywall feels like the next step of their plan rather than a toll.
+    private var planReady: some View {
+        let p = model.profile
+        let licence = SetupView.licences(for: p?.regime ?? "faa").first(where: { $0.id == p?.licence })?.label ?? p?.licence ?? "Licence"
+        let chips: [(String, String)] = [
+            ("scope", licence),
+            ("clock", (p?.goalHours ?? 0) > 0 ? "\(Int(p?.goalHours ?? 0)) h goal" : "Hours goal"),
+            ("location.fill", (p?.airport ?? "").isEmpty ? "Your airfield" : String((p?.airport ?? "").prefix(12)))
+        ]
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("Your flight desk is ready", systemImage: "sparkles")
+                .font(.archivo(13.5, .semibold)).foregroundStyle(Color(hex: 0xBFD6FF))
+            HStack(spacing: 8) {
+                ForEach(chips, id: \.1) { c in
+                    Label(c.1, systemImage: c.0)
+                        .font(.archivo(13, .medium)).foregroundStyle(.white).lineLimit(1)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(Capsule().fill(.white.opacity(0.08)).overlay(Capsule().strokeBorder(Theme.ice.opacity(0.18))))
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.electricHi.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.ice.opacity(0.2))))
     }
 
     private func feature(_ symbol: String, _ text: String) -> some View {
@@ -553,15 +581,15 @@ struct TrialGateView: View {
     }
 
     private var plans: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 10) {
             if let y = store.yearly {
-                planCard(title: "Yearly", price: "\(y.displayPrice) a year", sub: "\((y.price / 12).formatted(y.priceFormatStyle))/mo", badge: saving.map { "Save \($0)%" }, on: yearly) { yearly = true }
+                planRow(title: "Yearly", main: "\((y.price / 12).formatted(y.priceFormatStyle))/mo", sub: "\(y.displayPrice) billed yearly", badge: saving.map { "Best value · Save \($0)%" } ?? "Best value", on: yearly) { yearly = true }
             }
             if let m = store.monthly {
-                planCard(title: "Monthly", price: "\(m.displayPrice) a month", sub: nil, badge: nil, on: !yearly) { yearly = false }
+                planRow(title: "Monthly", main: "\(m.displayPrice)/mo", sub: "\(m.displayPrice) billed monthly", badge: nil, on: !yearly) { yearly = false }
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 4)
     }
 
     private var saving: Int? {
@@ -572,23 +600,28 @@ struct TrialGateView: View {
         return s > 0 ? s : nil
     }
 
-    private func planCard(title: String, price: String, sub: String?, badge: String?, on: Bool, tap: @escaping () -> Void) -> some View {
+    private func planRow(title: String, main: String, sub: String, badge: String?, on: Bool, tap: @escaping () -> Void) -> some View {
         Button(action: tap) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.archivo(16.5, .semibold)).foregroundStyle(.white)
-                Text(price).font(.archivo(13)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.75))
-                if let sub { Text(sub).font(.archivo(13)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.75)) }
+            HStack(spacing: 14) {
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 24)).foregroundStyle(on ? Color(hex: 0x4D8DFF) : Theme.ice.opacity(0.4))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.archivo(17, .semibold)).foregroundStyle(.white)
+                    Text(trial ? "\(trialDays) days free, then \(sub.lowercased())" : sub)
+                        .font(.archivo(13)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.72))
+                }
+                Spacer(minLength: 0)
+                Text(main).font(.archivo(17, .semibold)).foregroundStyle(.white)
             }
-            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(on ? Theme.electricHi.opacity(0.2) : .white.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color(hex: 0x4D8DFF) : Theme.ice.opacity(0.2), lineWidth: on ? 2 : 1)))
+            .padding(.horizontal, 16).padding(.vertical, 16)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(on ? Theme.electricHi.opacity(0.2) : .white.opacity(0.05))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(on ? Color(hex: 0x4D8DFF) : Theme.ice.opacity(0.2), lineWidth: on ? 2 : 1)))
             .overlay(alignment: .topTrailing) {
                 if let badge {
                     Text(badge).font(.archivo(11.5, .bold)).foregroundStyle(Color(hex: 0x002222))
                         .padding(.horizontal, 9).padding(.vertical, 3)
                         .background(Capsule().fill(Color(hex: 0x4DD49A)))
-                        .offset(x: -8, y: -10)
+                        .offset(x: -12, y: -10)
                 }
             }
         }
