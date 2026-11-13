@@ -1,0 +1,24 @@
+.mx-form label{display:block;font-weight:620;color:var(--ink);margin-bottom:8px}
+.mx-row{display:flex;gap:10px}
+.mx-row input{flex:1;min-width:0;height:52px;border-radius:14px;border:1px solid var(--hair-l);padding:0 16px;font:500 17px/1 'Archivo',sans-serif;letter-spacing:.02em;background:#fff;color:var(--ink)}
+.mx-row input:focus{outline:3px solid rgba(10,98,255,.25);border-color:var(--electric)}
+.mx-row .btn{height:52px;padding:0 22px}
+.mx-try{margin-top:10px;font-size:14px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mx-try button{font:inherit;font-size:13.5px;padding:5px 11px;border-radius:99px;background:var(--well);color:var(--ink);border:1px solid var(--hair-l);cursor:pointer}
+#mx-out{margin-top:22px}
+.mx-meta{font-size:13.5px;color:var(--ink-3)}
+.mx-raw{white-space:pre-wrap;word-break:break-word;font:500 15px/1.5 ui-monospace,Menlo,monospace;background:#071433;color:#DEE9FF;padding:14px 16px;border-radius:14px;margin:8px 0 14px}
+.mx-cat{display:inline-flex;gap:10px;align-items:baseline;padding:8px 14px;border-radius:12px;margin-bottom:12px;color:#fff}
+.mx-cat b{font-size:18px}.mx-cat span{font-size:14px;opacity:.9}
+.mx-vfr{background:#1F9D55}.mx-mvfr{background:#2563EB}.mx-ifr{background:#DC2626}.mx-lifr{background:#A21CAF}
+.mx-list{display:grid;gap:0;border-top:1px solid var(--hair-l)}
+.mx-list>div{display:grid;grid-template-columns:minmax(0,220px) 1fr;gap:14px;padding:12px 0;border-bottom:1px solid var(--hair-l)}
+.mx-list dt{display:grid;gap:3px}
+.mx-list dt code{font:600 14px ui-monospace,Menlo,monospace;color:var(--electric);word-break:break-all}
+.mx-list dt span{font-size:13px;color:var(--ink-3)}
+.mx-list dd{margin:0;color:var(--ink);font-size:15.5px;line-height:1.5}
+.mx-err{color:#B42318;font-weight:550}
+.mx-cta{margin-top:26px}.mx-cta p{margin:6px 0 12px}
+.mx-note{font-size:13.5px;color:var(--ink-3);margin-top:18px}
+.g code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:var(--well);padding:1px 5px;border-radius:5px}
+@media (max-width:560px){.mx-list>div{grid-template-columns:1fr;gap:4px}.mx-row{flex-direction:column}.mx-row .btn{width:100%}}

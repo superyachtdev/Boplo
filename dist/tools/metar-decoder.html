@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>METAR decoder: read any METAR in plain English (free) · Boplo</title>
+  <meta name="description" content="Free METAR decoder for pilots. Type an airport code or paste a METAR and get wind, visibility, clouds, temperature, altimeter and flight category in plain English.">
+  <link rel="canonical" href="https://boplo.app/tools/metar-decoder">
+  <meta name="theme-color" content="#020611">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Boplo Flight">
+  <meta property="og:url" content="https://boplo.app/tools/metar-decoder">
+  <meta property="og:title" content="Free METAR decoder · Boplo Flight">
+  <meta property="og:description" content="Type an airport code or paste a METAR and read it in plain English.">
+  <meta property="og:image" content="https://boplo.app/assets/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="/flight-app.css?v=38">
+  <link rel="stylesheet" href="/guides/guide.css?v=1">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"METAR decoder","url":"https://boplo.app/tools/metar-decoder","applicationCategory":"UtilitiesApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Boplo"}}</script>
+  <link rel="stylesheet" href="/tools/metar.css?v=1">
+  <script src="/hit.js?v=1" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6.3 3.9 10.4 12 12-8.1 1.6-11.4 5.7-12 12-.6-6.3-3.9-10.4-12-12C8.1 10.4 11.4 6.3 12 0Z"/></symbol></svg>
+  <header class="g-hero night">
+    <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a><div class="links"><a href="/guides/">Guides</a><a href="/plan">Cost planner</a><a class="btn btn-ghost btn-sm" href="/flight-app.html">Open flight desk</a></div></nav>
+    <p class="crumbs"><a href="/">Boplo Flight</a> / Tools / METAR decoder</p>
+    <h1 class="display">METAR decoder</h1>
+    <p class="lede">Type an airport code for the latest report, or paste any METAR. Every group is translated into plain English, with the flight category worked out for you.</p>
+  </header>
+  <main class="g"><article class="tile">
+    <form class="mx-form" id="mx-form" autocomplete="off">
+      <label for="mx-in">Airport code or METAR</label>
+      <div class="mx-row"><input id="mx-in" name="q" placeholder="KJFK, EGLL or a full METAR" spellcheck="false" autocapitalize="characters"><button class="btn btn-blue" type="submit">Decode</button></div>
+      <p class="mx-try">Try <button type="button" data-q="KJFK">KJFK</button><button type="button" data-q="KSFO">KSFO</button><button type="button" data-q="EGLL">EGLL</button><button type="button" data-q="KDEN 131953Z 30018G27KT 10SM FEW080 SCT250 03/M14 A3002 RMK AO2 PK WND 30032/1907 SLP182">a gusty example</button></p>
+    </form>
+    <div id="mx-out" aria-live="polite"></div>
+    <div class="mx-cta box"><b>Learning to read weather for your checkride?</b><p>Boplo Flight shows live weather for your home airfield, quizzes you on reports like this one, and runs a mock checkride oral. Search <strong>Boplo Flight</strong> on the App Store.</p><a class="btn btn-blue" href="https://apps.apple.com/app/id6830231732">Get the iPhone app</a></div>
+    <h2>How to read a METAR</h2>
+    <p>A METAR is a routine airport weather observation, usually issued every hour. The groups always come in the same order:</p>
+    <ol><li><strong>Station and time</strong>: the ICAO code, then day and time in UTC (Zulu). <code>131953Z</code> is the 13th at 19:53 UTC.</li><li><strong>Wind</strong>: direction in degrees true, speed in knots, and gusts after a G. <code>30018G27KT</code> is from 300° at 18 knots, gusting 27.</li><li><strong>Visibility</strong>: statute miles in the US (<code>10SM</code>), metres elsewhere (<code>9999</code> means 10 km or more).</li><li><strong>Weather</strong>: <code>-</code> light, <code>+</code> heavy, then codes like RA rain, SN snow, BR mist, FG fog, TS thunderstorm.</li><li><strong>Clouds</strong>: FEW, SCT, BKN or OVC plus the base in hundreds of feet. <code>BKN015</code> is broken cloud at 1,500 ft above ground.</li><li><strong>Temperature and dew point</strong> in °C. An M means minus.</li><li><strong>Altimeter</strong>: <code>A3002</code> is 30.02 inHg; <code>Q1013</code> is 1013 hPa.</li><li><strong>Remarks</strong> after RMK, such as AO2 (automated station with a precipitation sensor) or SLP (sea-level pressure).</li></ol>
+    <h2>Flight categories</h2>
+    <div class="tw"><table><tr><th>Category</th><th>Ceiling</th><th>Visibility</th></tr><tr><td>VFR</td><td>above 3,000 ft</td><td>more than 5 SM</td></tr><tr><td>MVFR</td><td>1,000–3,000 ft</td><td>3–5 SM</td></tr><tr><td>IFR</td><td>500 to below 1,000 ft</td><td>1 to below 3 SM</td></tr><tr><td>LIFR</td><td>below 500 ft</td><td>below 1 SM</td></tr></table></div>
+    <p>The ceiling is the lowest broken (BKN) or overcast (OVC) layer, or vertical visibility (VV). The worse of ceiling and visibility sets the category. These are the categories used by the <a href="https://aviationweather.gov/" target="_blank" rel="noopener">Aviation Weather Center</a>.</p>
+    <p class="mx-note">Live reports come from aviationweather.gov (NOAA). This decoder is a study aid, not an official weather briefing. Always get an official briefing before you fly.</p>
+  </article></main>
+  <footer class="gf"><span>© 2026 Boplo</span><a href="/">Boplo Flight</a><a href="/guides/">Guides</a><a href="/plan">Cost planner</a><a href="/schools">For schools</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></footer>
+  <script src="/tools/metar.js?v=1" defer></script>
+</body>
+</html>
