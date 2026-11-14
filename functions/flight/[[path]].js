@@ -147,7 +147,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
   try{await env.DB.prepare('DELETE FROM darts_users WHERE id=?').bind(user.id).run();}catch{await env.DB.prepare("UPDATE darts_users SET email=?,display_name='' WHERE id=?").bind('deleted-'+user.id+'@deleted.invalid',user.id).run().catch(()=>{});}
   return new Response(JSON.stringify({ok:true}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store','Set-Cookie':'boplo_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax'}});}
  return json({error:'Not found.'},404);
- }catch(error){if(error.status)return json({error:error.message},error.status);console.error('Flight request failed',request.method,new URL(request.url).pathname,error.message);if(new URL(request.url).pathname.startsWith('/flight/billing'))return json({error:'Checkout hit a problem on our side. Please try again in a minute.'},503);return json({error:'Your flight desk could not load. Check the Flight database migration and try again.'},503);}
+ }catch(error){if(error.status)return json({error:error.message},error.status);console.error('Flight request failed',request.method,new URL(request.url).pathname,error.message);if(new URL(request.url).pathname.startsWith('/flight/billing')){const ref=String(error?.message||'').slice(0,120);return json({error:'Checkout hit a problem on our side. Please try again in a minute.'+(ref?` [${ref}]`:'')},503);}return json({error:'Your flight desk could not load. Check the Flight database migration and try again.'},503);}
 }
 
 // ---------- weather: nearest METAR/TAF from aviationweather.gov (NOAA), for learning only ----------

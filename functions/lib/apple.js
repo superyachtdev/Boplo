@@ -191,6 +191,8 @@ export function rootPem(env) {
 export async function verifyAppleJws(env, jws) {
   const crypto = await import('node:crypto').catch(() => null);
   if (!crypto?.X509Certificate) fail(503, 'App Store receipt checks need the nodejs_compat flag on Cloudflare Pages.');
+  // Buffer is only a global on newer compatibility dates, so load it explicitly.
+  const { Buffer } = await import('node:buffer');
   const parts = String(jws || '').split('.');
   if (parts.length !== 3) fail(400, 'That App Store receipt isn’t valid.');
   let header;
