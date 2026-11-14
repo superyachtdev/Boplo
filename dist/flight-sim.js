@@ -666,7 +666,7 @@ window.BoploSim = (() => {
     const GFX = ['fast', 'balanced', 'detailed'].includes(O.gfx) ? O.gfx : 'fast';
     // antialiasing: multisampling is cheap on phone GPUs (tile-based), so phones get it too above the fast setting; FXAA on top
     const MSAA0 = GFX === 'fast' ? (coarse ? 1 : 2) : GFX === 'detailed' ? 4 : 2;
-    const SSE0 = GFX === 'detailed' ? (coarse ? 18 : 12) : (coarse ? 32 : 24), RES0 = GFX === 'detailed' && !coarse ? Math.min(1, 1.5 / (window.devicePixelRatio || 1)) : 1;
+    const SSE0 = GFX === 'detailed' ? (coarse ? 18 : 12) : (coarse ? 32 : 24), RES0 = Math.min(1, (coarse ? (GFX === 'detailed' ? 2 : GFX === 'balanced' ? 1.75 : 1.5) : 1.5) / (window.devicePixelRatio || 1));
     const audio = engineAudio(O.jet);
     const cleanups = [];
     const on = (t, ev, fn, o) => { t.addEventListener(ev, fn, o); cleanups.push(() => t.removeEventListener(ev, fn, o)); };
@@ -812,7 +812,7 @@ window.BoploSim = (() => {
     try {
       viewer = new C.CesiumWidget($('[data-map]'), {
         baseLayer: false, skyAtmosphere: new C.SkyAtmosphere(), shadows: !(coarse && GFX === 'fast'), terrainShadows: C.ShadowMode.RECEIVE_ONLY, useDefaultRenderLoop: false,
-        useBrowserRecommendedResolution: GFX !== 'detailed' || !!coarse, msaaSamples: MSAA0, creditContainer: $('[data-credits]'), requestRenderMode: false, showRenderLoopErrors: false
+        useBrowserRecommendedResolution: false, msaaSamples: MSAA0, creditContainer: $('[data-credits]'), requestRenderMode: false, showRenderLoopErrors: false
       });
     } catch (e) { fail('Your browser couldn’t start 3D graphics (WebGL). Try an up-to-date Chrome, Edge or Safari.'); wireX(); return { close: destroy }; }
     const scene = viewer.scene, camera = scene.camera;
@@ -2574,8 +2574,8 @@ window.BoploSim = (() => {
     /* ---- loop ---- */
     let prev = performance.now(), hudT = 0;
     // adaptive quality: hold a smooth frame rate by trading scenery detail, render resolution and shadows
-    const QUAL = [{ sse: SSE0, res: RES0, sh: true }, { sse: SSE0 * 1.4, res: RES0 * .9, sh: true }, { sse: SSE0 * 1.9, res: RES0 * .8, sh: false }, { sse: SSE0 * 2.5, res: RES0 * .7, sh: false }, { sse: SSE0 * 3.2, res: RES0 * .6, sh: false }];
-    let qi = 0, fpsN = 0, fpsT = performance.now(), calm = 0;
+    const QUAL = [{ sse: SSE0, res: RES0, sh: true }, { sse: SSE0 * 1.4, res: RES0 * .9, sh: true }, { sse: SSE0 * 1.9, res: RES0 * .8, sh: false }, { sse: SSE0 * 2.5, res: RES0 * .7, sh: false }, { sse: SSE0 * 3.2, res: RES0 * .6, sh: false }].map(q => ({ ...q, res: Math.max(q.res, Math.min(1, 1.2 / (window.devicePixelRatio || 1))) }));
+    let qi = 0, fpsN = 0, fpsT = performance.now(), calm = 0, peak = 30;
     const applyQ = () => { const q = QUAL[qi]; if (tileset) tileset.maximumScreenSpaceError = q.sse; else scene.globe.maximumScreenSpaceError = 2 * q.sse / SSE0; viewer.resolutionScale = q.res; shadowsOK = q.sh && !(coarse && GFX === 'fast');
       // the atmosphere and effects step down with the rest: fewer scattering samples, then no heat shimmer, multisampling or ground detail
       AN.N = Math.max(5, FXQ.N - 2 * qi); AN.aN = Math.max(2, FXQ.aN - qi); HT.on = qi < 3; AN.detail = qi < 4 && !(GFX === 'fast' && coarse) ? 1 : 0;
@@ -2586,7 +2586,7 @@ window.BoploSim = (() => {
       if (!alive) return;
       raf = requestAnimationFrame(loop); pumping = false;
       fpsN++; if (now - fpsT > 2000) { const fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now;
-        if (!document.hidden && !paused) { if (fps < 40 && qi < QUAL.length - 1) { qi++; applyQ(); calm = 0; } else if (fps > 57 && qi > 0 && ++calm > 4) { qi--; applyQ(); calm = 0; } } }
+        if (!document.hidden && !paused) { peak = Math.max(peak * .97, fps); if (fps < Math.min(40, peak * .8) && qi < QUAL.length - 1) { qi++; applyQ(); calm = 0; } else if (fps > Math.min(57, peak * .93) && qi > 0 && ++calm > 4) { qi--; applyQ(); calm = 0; } } }
       const real = Math.min(.1, (now - prev) / 1000); prev = now;
       if (!paused && !ended) {
         let simT = real * rate;

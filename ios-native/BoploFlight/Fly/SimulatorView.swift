@@ -49,6 +49,8 @@ struct SimulatorView: View {
             .padding(.top, 6)
             .accessibilityLabel("Close simulator")
         }
-        .onDisappear { Task { await model.refresh() } }
+        // The simulator can turn to landscape; the rest of the app stays portrait.
+        .onAppear { Orientation.allow(.allButUpsideDown) }
+        .onDisappear { Orientation.allow(.portrait); Task { await model.refresh() } }
     }
 }

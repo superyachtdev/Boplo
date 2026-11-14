@@ -3,6 +3,7 @@ import StoreKit
 
 @main
 struct BoploFlightApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @State private var store = StoreModel()
 
