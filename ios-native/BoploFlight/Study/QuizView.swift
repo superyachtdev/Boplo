@@ -1,10 +1,12 @@
 import SwiftUI
+import StoreKit
 
 /// One practice session: question, shuffled answers, explanation, then a result with what to look at again.
 struct QuizView: View {
     let session: QuizSession
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.requestReview) private var requestReview
 
     @State private var index = 0
     @State private var picked: Int?
@@ -220,5 +222,7 @@ struct QuizView: View {
         if let bank = QuestionBank.shared?.pack(for: model.regime) { readinessAfter = st.readiness(bank.questions) }
         withAnimation { finished = true }
         try? await model.saveProfile(["study": st.json()])
+        // A good score is a good moment to ask for a rating.
+        if !early && answers.count >= 5 && resultScore >= 70 { await ReviewAsk.afterWin(requestReview) }
     }
 }

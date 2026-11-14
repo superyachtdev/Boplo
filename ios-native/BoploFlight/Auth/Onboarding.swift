@@ -655,19 +655,26 @@ struct TrialGateView: View {
 
 // MARK: - App Store rating
 
-/// Apple's own rating sheet, asked on app open once someone has settled in (4 opens over 2+ days),
-/// at most every 4 months. Apple decides whether it actually shows: at most 3 times a year, and never
-/// once the user has turned it off. Apps can't see whether someone has already rated.
+/// Apple's own rating sheet, asked right after a win (a flight logged, a quiz passed) once someone has
+/// used the app on 2+ opens across at least a day, and at most every 4 months. Apple decides whether it
+/// actually shows: at most 3 times a year, never once the user turned it off. Apps can't see whether
+/// someone has already rated.
 enum ReviewAsk {
+    /// Called on app open: only counts opens, never asks.
     @MainActor
-    static func maybe(_ request: RequestReviewAction) async {
+    static func noteOpen() {
+        let d = UserDefaults.standard
+        if d.double(forKey: "boplo.firstOpen") == 0 { d.set(Date().timeIntervalSince1970, forKey: "boplo.firstOpen") }
+        d.set(d.integer(forKey: "boplo.opens") + 1, forKey: "boplo.opens")
+    }
+
+    /// Called at a good moment. Waits so the win can land first, then asks if the user is settled in.
+    @MainActor
+    static func afterWin(_ request: RequestReviewAction, delay: Double = 1.5) async {
         let d = UserDefaults.standard, now = Date().timeIntervalSince1970
-        if d.double(forKey: "boplo.firstOpen") == 0 { d.set(now, forKey: "boplo.firstOpen") }
-        let opens = d.integer(forKey: "boplo.opens") + 1
-        d.set(opens, forKey: "boplo.opens")
         let first = d.double(forKey: "boplo.firstOpen"), last = d.double(forKey: "boplo.reviewAsked")
-        guard opens >= 4, now - first >= 2 * 86_400, now - last >= 120 * 86_400 else { return }
-        try? await Task.sleep(for: .seconds(3.5))
+        guard first > 0, d.integer(forKey: "boplo.opens") >= 2, now - first >= 86_400, now - last >= 120 * 86_400 else { return }
+        try? await Task.sleep(for: .seconds(delay))
         d.set(Date().timeIntervalSince1970, forKey: "boplo.reviewAsked")
         request()
     }

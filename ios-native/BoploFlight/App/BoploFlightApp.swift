@@ -137,6 +137,7 @@ struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @Environment(\.requestReview) private var requestReview
     @State private var celebrating: Milestone?
+    @State private var flightCount: Int?
 
     var body: some View {
         @Bindable var model = model
@@ -178,8 +179,17 @@ struct MainTabs: View {
             NavigationStack { FlightDetailView(flight: flight) }
         }
         .fullScreenCover(item: $celebrating) { MilestoneMoment(milestone: $0) }
-        .task(id: model.flights.count) { await checkMilestones() }
-        .task { await ReviewAsk.maybe(requestReview) }
+        .task(id: model.flights.count) {
+            await checkMilestones()
+            // A flight was just logged: a good moment to ask for a rating (skipped while a milestone is celebrating).
+            let n = model.flights.count
+            if let before = flightCount, n > before {
+                try? await Task.sleep(for: .seconds(2.5))
+                if celebrating == nil { await ReviewAsk.afterWin(requestReview, delay: 0) }
+            }
+            flightCount = n
+        }
+        .task { ReviewAsk.noteOpen() }
     }
 }
 
