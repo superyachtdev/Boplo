@@ -1674,3 +1674,6 @@ button.ob-back{background:#fff;box-shadow:0 1px 0 rgba(5,11,31,.06),0 0 0 1px rg
 @media (prefers-reduced-motion:reduce){.ob-body,.ios-intro .from-right,.ios-intro .from-left,.ob-build li,.ob-ring .arc,.ios-intro-art .glow,.gate-cta,.boot .boot-route .trail{animation:none !important;opacity:1}.ob-ring .arc{stroke-dashoffset:0}}
 body.ob-mode .bradio,body.ob-mode .dock{display:none !important}
 .gate-foot{position:sticky;bottom:0;margin:0 -22px calc(-1 * (env(safe-area-inset-bottom) + 16px));padding:18px 22px calc(env(safe-area-inset-bottom) + 14px);background:linear-gradient(rgba(2,6,17,0),var(--night) 22%)}
+
+/* the simulator opens full screen in the iPhone app: clear the status bar and the app's close button */
+.embed-sim .page{padding-top:calc(env(safe-area-inset-top, 0px) + 64px)}

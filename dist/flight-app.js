@@ -745,8 +745,8 @@
   function embedShell(page, head, body) {
     const plain = String(head.title || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
     document.title = plain;
-    root.innerHTML = `<div class="shell embed-shell"><main class="main"><div class="page">
-        ${head.sub ? `<p class="embed-sub">${head.sub}</p>` : ''}
+    root.innerHTML = `<div class="shell embed-shell embed-${page}"><main class="main"><div class="page">
+        ${head.sub && page !== 'sim' ? `<p class="embed-sub">${head.sub}</p>` : ''}
         ${head.actions ? `<div class="head-actions embed-actions">${head.actions}</div>` : ''}
         ${body}
       </div></main></div>`;
