@@ -212,7 +212,18 @@ export async function verifyAppleJws(env, jws) {
     signer = cert;
   }
   const leaf = certs[0];
-  const ok = crypto.verify('sha256', Buffer.from(`${parts[0]}.${parts[1]}`), { key: leaf.publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(parts[2], 'base64url'));
+  const data = Buffer.from(`${parts[0]}.${parts[1]}`), sig = Buffer.from(parts[2], 'base64url');
+  // ES256 JWS signatures are raw r||s, which is exactly what WebCrypto expects. Cloudflare's node:crypto
+  // verify() rejects a KeyObject, so check with WebCrypto first and fall back to a PEM string.
+  let ok = false;
+  const spki = leaf.publicKey.export({ type: 'spki', format: 'der' });
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const key = await subtle.importKey('spki', new Uint8Array(spki), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    ok = await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, new Uint8Array(sig), new Uint8Array(data));
+  } else {
+    ok = crypto.verify('sha256', data, { key: leaf.publicKey.export({ type: 'spki', format: 'pem' }), dsaEncoding: 'ieee-p1363' }, sig);
+  }
   if (!ok) fail(400, 'That App Store receipt isn’t valid.');
   try { return JSON.parse(Buffer.from(parts[1], 'base64url').toString()); } catch { fail(400, 'That App Store receipt isn’t valid.'); }
 }
