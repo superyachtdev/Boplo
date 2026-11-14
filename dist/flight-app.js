@@ -2687,7 +2687,9 @@
       const subtitle = PRc ? (dep?.name || '') : isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
       let googleKey = state.mapsKey || '';
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
-      Sim.open({
+      // tell the iPhone app a flight is running, so it hides its own close button (the simulator has one)
+      bridge({ type: 'sim', active: true });
+      Sim.open({ onClose: () => bridge({ type: 'sim', active: false }),
         googleKey,
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day', gfx: ui.sim.gfx || simGfx(),
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,

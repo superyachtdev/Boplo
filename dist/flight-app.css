@@ -1677,3 +1677,6 @@ body.ob-mode .bradio,body.ob-mode .dock{display:none !important}
 
 /* the simulator opens full screen in the iPhone app: clear the status bar and the app's close button */
 .embed-sim .page{padding-top:calc(env(safe-area-inset-top, 0px) + 64px)}
+/* the iPhone app runs the simulator in landscape: keep the setup clear of the notch and the home bar */
+.embed-sim .page{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media (orientation:landscape) and (max-height:500px){.embed-sim .page{padding-top:calc(env(safe-area-inset-top,0px) + 56px)}}

@@ -18,10 +18,8 @@ enum Orientation {
         for scene in UIApplication.shared.connectedScenes {
             guard let ws = scene as? UIWindowScene else { continue }
             ws.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
-            if mask == .portrait {
-                // Turn back upright when leaving the simulator.
-                ws.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
-            }
+            // Rotate straight away: into landscape for the simulator, back upright when it closes.
+            ws.requestGeometryUpdate(.iOS(interfaceOrientations: mask == .portrait ? .portrait : .landscapeRight)) { _ in }
         }
     }
 }

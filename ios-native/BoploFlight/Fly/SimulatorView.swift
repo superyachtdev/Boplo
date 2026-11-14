@@ -9,6 +9,8 @@ struct SimulatorView: View {
     @State private var loading = true
     @State private var failed = false
     @State private var token = 0
+    /// True while a flight is running: the simulator draws its own close button then.
+    @State private var flying = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -19,6 +21,7 @@ struct SimulatorView: View {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.upgrade(message["message"] as? String) }
                 case "close": dismiss()
+                case "sim": withAnimation(.easeInOut(duration: 0.2)) { flying = (message["active"] as? Bool) ?? false }
                 default: break
                 }
             }
@@ -48,9 +51,11 @@ struct SimulatorView: View {
             .padding(.trailing, 16)
             .padding(.top, 6)
             .accessibilityLabel("Close simulator")
+            .opacity(flying ? 0 : 1)
+            .allowsHitTesting(!flying)
         }
-        // The simulator can turn to landscape; the rest of the app stays portrait.
-        .onAppear { Orientation.allow(.allButUpsideDown) }
+        // The simulator is landscape only; the rest of the app stays portrait.
+        .onAppear { Orientation.allow(.landscape) }
         .onDisappear { Orientation.allow(.portrait); Task { await model.refresh() } }
     }
 }
