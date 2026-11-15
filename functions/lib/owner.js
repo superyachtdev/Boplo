@@ -217,9 +217,34 @@ async function ttInfo(id, fetcher) {
     const j = await r.json(); return { id, title: String(j.title || '').slice(0, 220), thumb: /^https:\/\//.test(j.thumbnail_url || '') ? j.thumbnail_url : '', at: Date.now() };
   } catch { return { id }; }
 }
+// New posts are picked up on their own: once an hour the server reads TikTok's public creator embed for
+// @boploflight, which lists the newest post links in order. Anything it can't read leaves the saved list as it was.
+const TT_SYNC = 'tiktok:sync';
+async function ttLatest(fetcher) {
+  try {
+    const r = await fetcher('https://www.tiktok.com/embed/@boploflight', { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', 'Accept-Language': 'en' }, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return [];
+    const html = await r.text(), ids = [];
+    for (const m of html.matchAll(/@boploflight\/(?:video|photo)\/(\d{15,22})/g)) if (!ids.includes(m[1])) ids.push(m[1]);
+    return ids.slice(0, 12);
+  } catch { return []; }
+}
 export async function tiktokFeed(env, fetcher = fetch) {
   await ensure(env);
   let videos = []; try { videos = JSON.parse((await one(env, 'SELECT v FROM flight_kv WHERE k=?', TT_KEY))?.v || '[]'); } catch { }
+  const synced = Number((await one(env, 'SELECT v FROM flight_kv WHERE k=?', TT_SYNC))?.v || 0);
+  if (Date.now() - synced > 3600e3) {
+    await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(TT_SYNC, String(Date.now())).run().catch(() => { });
+    const ids = await ttLatest(fetcher);
+    if (ids.length) {
+      const known = new Map(videos.map(v => [v.id, v]));
+      const next = ids.map(id => known.get(id) || { id, kind: '' });
+      if (next.map(v => v.id).join() !== videos.map(v => v.id).join()) {
+        videos = next;
+        await env.DB.prepare('INSERT INTO flight_kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind(TT_KEY, JSON.stringify(videos)).run().catch(() => { });
+      }
+    }
+  }
   if (videos.some(v => !v.at || Date.now() - v.at > 12 * 3600e3)) {
     const fresh = await Promise.all(videos.map(v => v.at && Date.now() - v.at < 12 * 3600e3 ? v : ttInfo(v.id, fetcher).then(n => n.at ? { ...n, kind: v.kind } : { ...v, at: Date.now() - 11 * 3600e3 })));
     videos = fresh; await env.DB.prepare('UPDATE flight_kv SET v=? WHERE k=?').bind(JSON.stringify(videos), TT_KEY).run().catch(() => { });
