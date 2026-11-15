@@ -109,6 +109,24 @@ export async function ownerStats(env, user, url) {
     all(env, 'SELECT name, email, school, country, students, created_at FROM flight_school_leads ORDER BY created_at DESC LIMIT 5')
   ]);
 
+  // App Store subscriptions live in their own table (made by the iPhone app). Production ones count like website
+  // ones; sandbox (TestFlight/Xcode) purchases only show in the subscriber list, marked as tests.
+  let apple = [], subscribers = [];
+  try { apple = await all(env, `SELECT user_id, status, interval_key, will_renew, environment, updated_at FROM flight_apple WHERE 1=1${notOwner('user_id')}`, ...O); } catch { }
+  const appleLive = s => s === 'active' || s === 'grace';
+  for (const a of apple) if (appleLive(a.status) && a.environment !== 'Sandbox') billing.push({ status: a.status === 'grace' ? 'past_due' : 'active', price_key: a.interval_key, c: a.will_renew ? 0 : 1, updated_at: a.updated_at });
+  const appleBy = {}; for (const a of apple) if (appleLive(a.status) && (!appleBy[a.user_id] || a.updated_at > appleBy[a.user_id].updated_at)) appleBy[a.user_id] = a;
+  for (const r of recent) { const a = appleBy[r.id]; if (a && !['active', 'trialing', 'past_due'].includes(r.status)) { r.status = a.status === 'grace' ? 'past_due' : 'active'; r.price_key = a.interval_key; r.store = a.environment === 'Sandbox' ? 'App Store test' : 'App Store'; } }
+  try {
+    const [ap, web] = await Promise.all([
+      all(env, `SELECT u.id, u.email, u.display_name name, a.status, a.interval_key price, a.expires_at ends, a.will_renew renew, a.environment env, a.updated_at FROM flight_apple a JOIN darts_users u ON u.id=a.user_id WHERE a.status IN ('active','grace') ORDER BY a.updated_at DESC LIMIT 100`),
+      all(env, `SELECT u.id, u.email, u.display_name name, b.status, b.price_key price, b.current_period_end ends, 1-COALESCE(b.cancel_at_period_end,0) renew, 'Production' env, b.updated_at FROM flight_billing b JOIN darts_users u ON u.id=b.user_id WHERE b.status IN ('active','trialing','past_due') ORDER BY b.updated_at DESC LIMIT 100`)
+    ]);
+    subscribers = [...ap.map(r => ({ ...r, store: 'App Store' })), ...web.map(r => ({ ...r, store: 'Website' }))]
+      .map(r => ({ id: r.id, email: r.email, name: r.name, store: r.store, plan: r.price === 'monthly' ? 'monthly' : 'yearly', status: r.status, ends: r.ends || null, renews: !!r.renew, test: r.env === 'Sandbox', owner: isOwner(env, { email: r.email }), since: r.updated_at }))
+      .sort((a, b) => (b.since || 0) - (a.since || 0));
+  } catch { }
+
   // plans: who pays, how, and what it's worth
   const live = s => ['active', 'trialing', 'past_due'].includes(s);
   const subs = { monthly: 0, yearly: 0, pastDue: 0, cancelling: 0, cancelled: 0 };
@@ -140,7 +158,8 @@ export async function ownerStats(env, user, url) {
     schools: schoolRows,
     usage: { active7: active7?.n || 0, active30: active30?.n || 0, flights: flightsN?.n || 0, ask: askN?.n || 0, simFree: simN?.n || 0, simScores: scoresN?.n || 0, posts: postsN?.n || 0 },
     users: { countries: tally(profiles, 'country'), authorities: tally(profiles, 'authority'), licences: tally(profiles, 'licence'), recent },
-    leads: { recent: leadsN?.n || 0, latest: leads }
+    leads: { recent: leadsN?.n || 0, latest: leads },
+    subscribers
   };
 }
 
