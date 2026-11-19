@@ -40,6 +40,9 @@ struct YouView: View {
                     NavigationLink(value: Route.aiFeatures) { MenuRow(icon: "sparkles", title: "AI features", subtitle: "What Ask Boplo sends, and the switch") }
                 }
                 group {
+                    ReminderSettingsRow().padding(.horizontal, 16).padding(.vertical, 12)
+                }
+                group {
                     NavigationLink(value: Route.web(.community)) { MenuRow(icon: WebFeature.community.icon, title: WebFeature.community.title, subtitle: WebFeature.community.subtitle) }
                     divider
                     NavigationLink(value: Route.web(.leaderboards)) { MenuRow(icon: WebFeature.leaderboards.icon, title: WebFeature.leaderboards.title, subtitle: WebFeature.leaderboards.subtitle) }

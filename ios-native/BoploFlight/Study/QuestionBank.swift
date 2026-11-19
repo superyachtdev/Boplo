@@ -45,6 +45,8 @@ struct StudyState {
 
     var records: [String: [Int]] = [:]
     var mocks: [(d: String, s: Int)] = []
+    /// Day numbers (Day.today) with at least one finished study session, for the study streak.
+    var days: [Int] = []
     /// Keys the app doesn't use, kept so saving never drops them.
     private var extra: [String: Any] = [:]
 
@@ -57,6 +59,8 @@ struct StudyState {
                     guard let d = m["d"] as? String, let s = (m["s"] as? NSNumber)?.intValue else { return nil }
                     return (d: d, s: s)
                 }
+            } else if k == "_days", let list = v as? [NSNumber] {
+                days = list.map(\.intValue)
             } else if let arr = v as? [NSNumber], arr.count >= 2 {
                 records[k] = arr.map { $0.intValue }
             } else {
@@ -68,6 +72,7 @@ struct StudyState {
     func json() -> String {
         var obj = extra
         for (k, v) in records { obj[k] = v }
+        if !days.isEmpty { obj["_days"] = Array(Array(Set(days)).sorted().suffix(120)) }
         if !mocks.isEmpty { obj["_mocks"] = mocks.suffix(20).map { m -> [String: Any] in ["d": m.d, "s": m.s] } }
         let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data("{}".utf8)
         return String(data: data, encoding: .utf8) ?? "{}"
@@ -86,6 +91,14 @@ struct StudyState {
         guard let r else { return 0 }
         let b = box(r), late = Day.today - (due(r) ?? 0)
         return boxStrength[min(b, 5)] * (late > boxDays[min(b, 5)] * 2 + 7 ? 0.75 : 1)
+    }
+
+    /// Questions whose most recent answer was wrong (a miss drops a question back to box 1).
+    func mistakes(_ qs: [QuestionBank.Question]) -> [QuestionBank.Question] {
+        qs.filter { q in
+            guard let r = records[q.id], r.count >= 3 else { return false }
+            return r[2] == 1 && r[1] > r[0]
+        }
     }
 
     func seen(_ qs: [QuestionBank.Question]) -> Int { qs.filter { records[$0.id] != nil }.count }
@@ -118,6 +131,19 @@ struct StudyState {
             let nextBox = ok ? min(5, (r[1] > 0 ? Self.box(r) : 1) + 1) : 1
             records[id] = [r[0] + (ok ? 1 : 0), r[1] + 1, nextBox, Day.today + Self.boxDays[nextBox]]
         }
+    }
+
+    mutating func markStudied() {
+        if !days.contains(Day.today) { days.append(Day.today) }
+    }
+
+    /// Days in a row with a study session, counting today or, if not studied yet today, up to yesterday.
+    var streak: Int {
+        let set = Set(days)
+        var d = set.contains(Day.today) ? Day.today : Day.today - 1
+        var n = 0
+        while set.contains(d) { n += 1; d -= 1 }
+        return n
     }
 
     static func readyLabel(_ n: Int) -> String {

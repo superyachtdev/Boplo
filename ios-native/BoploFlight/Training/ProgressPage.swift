@@ -29,6 +29,17 @@ struct LicenceChecklist {
         return open.filter { ["dual", "solo", "soloxc", "nightldg", "total"].contains($0.req.k) }.max { $0.pct < $1.pct } ?? open.first
     }
 
+    private func remaining(_ k: String) -> Double {
+        items.filter { $0.req.k == k && $0.unit == "h" }.map { max(0, $0.need - $0.have) }.max() ?? 0
+    }
+    /// The fewest flying hours still needed to meet every hour minimum. Dual and solo both count toward
+    /// the total, and solo cross-country is part of solo, so they overlap rather than add up.
+    var hoursLeft: Double {
+        max(remaining("total"), remaining("dual") + max(remaining("solo"), remaining("soloxc")))
+    }
+    /// Open items that aren't hour counts: the long cross-country, night landings, tests, medical.
+    var otherLeft: Int { items.filter { !$0.done && $0.unit != "h" }.count }
+
     static func key(_ model: AppModel) -> String { "\(model.regime)|\(model.profile?.licence ?? "")" }
 
     init?(_ model: AppModel) {

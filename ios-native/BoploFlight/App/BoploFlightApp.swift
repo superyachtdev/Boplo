@@ -136,6 +136,7 @@ struct RouteArc: View {
 
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.requestReview) private var requestReview
     @State private var celebrating: Milestone?
     @State private var flightCount: Int?
@@ -191,6 +192,10 @@ struct MainTabs: View {
             flightCount = n
         }
         .task { ReviewAsk.noteOpen() }
+        .task(id: model.profile?.study) { await Reminders.refresh(model) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await Reminders.refresh(model) } }
+        }
     }
 }
 

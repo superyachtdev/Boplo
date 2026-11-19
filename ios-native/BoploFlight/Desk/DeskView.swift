@@ -357,6 +357,15 @@ struct DeskView: View {
                     TileHead(title: "Licence checklist") {
                         Chip(text: "\(rq.doneCount) of \(rq.items.count) done", tone: rq.doneCount == rq.items.count ? .ok : .plain)
                     }
+                    let left = rq.hoursLeft
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(left > 0 ? left.clean + " h" : "0 h").font(Theme.display(44)).tracking(-1.5).foregroundStyle(Theme.ink).monospacedDigit()
+                        Text(left > 0 ? "of flying until you meet your licence’s hour minimums" : "Hour minimums met. \(rq.otherLeft == 0 ? "Everything on the list is done." : "\(rq.otherLeft) other item\(rq.otherLeft == 1 ? "" : "s") to go.")")
+                            .font(.archivo(13.5)).foregroundStyle(Theme.ink3).multilineTextAlignment(.leading)
+                    }
+                    if left > 0 && rq.otherLeft > 0 {
+                        Text("Plus \(rq.otherLeft) other item\(rq.otherLeft == 1 ? "" : "s"), like tests and the long cross-country.").font(.archivo(12.5)).foregroundStyle(Theme.ink3)
+                    }
                     if let next = rq.next {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Next milestone").font(.archivo(12, .semibold)).foregroundStyle(Theme.electric)

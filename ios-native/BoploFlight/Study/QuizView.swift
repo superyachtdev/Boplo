@@ -17,6 +17,14 @@ struct QuizView: View {
     @State private var readinessAfter = 0
     @State private var more: [Int: String] = [:]
     @State private var explaining = false
+    @State private var startedAt = Date()
+    @State private var now = Date()
+
+    /// The full practice test works like the real exam: answers stay hidden until the end, against a clock.
+    private var exam: Bool { session.kind == .fullTest }
+    private static let examSeconds: TimeInterval = 150 * 60
+    private var remaining: TimeInterval { max(0, Self.examSeconds - now.timeIntervalSince(startedAt)) }
+    private var isMock: Bool { session.kind == .mock || exam }
 
     private var q: QuestionBank.Question? { index < session.questions.count ? session.questions[index] : nil }
     private var right: Int { answers.filter(\.ok).count }
@@ -31,10 +39,10 @@ struct QuizView: View {
             }
             .background(Theme.cloud.ignoresSafeArea())
             .sensoryFeedback(trigger: picked) { _, new in
-                guard let new, let q else { return nil }
+                guard !exam, let new, let q else { return nil }
                 return new == q.answer ? .success : .error
             }
-            .navigationTitle(finished ? "" : session.title)
+            .navigationTitle(finished ? "" : exam ? Self.clock(remaining) : session.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -47,6 +55,15 @@ struct QuizView: View {
         .onAppear {
             if orders.isEmpty { orders = session.questions.map { q in Array(q.options.indices).shuffled() } }
         }
+        .task {
+            guard exam else { return }
+            startedAt = Date()
+            while !finished {
+                try? await Task.sleep(for: .seconds(1))
+                now = Date()
+                if remaining <= 0 && !finished { await finish(early: false); break }
+            }
+        }
         .interactiveDismissDisabled(!answers.isEmpty && !finished)
     }
 
@@ -54,7 +71,7 @@ struct QuizView: View {
 
     @ViewBuilder
     private func question(_ q: QuestionBank.Question) -> some View {
-        let answered = picked != nil
+        let answered = picked != nil && !exam
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Question \(index + 1) of \(session.questions.count)").font(.archivo(13, .medium)).foregroundStyle(Theme.ink3)
@@ -90,7 +107,15 @@ struct QuizView: View {
                 .disabled(answered)
             }
         }
-        if let picked {
+        if exam {
+            HStack {
+                Text("\(answers.count) answered").font(.archivo(13.5)).foregroundStyle(Theme.ink3)
+                Spacer()
+                Button { examNext(q) } label: { Text(index + 1 < session.questions.count ? "Next question" : "Finish test") }
+                    .primaryStyle(full: false)
+                    .disabled(picked == nil)
+            }
+        } else if let picked {
             let ok = picked == q.answer
             VStack(alignment: .leading, spacing: 10) {
                 (Text(ok ? "Correct. " : "Not quite. ").font(.archivo(15, .semibold)).foregroundColor(ok ? Theme.ok : Theme.danger)
@@ -129,12 +154,14 @@ struct QuizView: View {
     }
 
     private func optionFill(_ oi: Int, _ q: QuestionBank.Question) -> Color {
+        if exam { return oi == picked ? Theme.electric.opacity(0.08) : Theme.paper }
         guard picked != nil else { return Theme.paper }
         if oi == q.answer { return Theme.ok.opacity(0.08) }
         if oi == picked { return Theme.danger.opacity(0.07) }
         return Theme.paper
     }
     private func optionStroke(_ oi: Int, _ q: QuestionBank.Question) -> Color {
+        if exam { return oi == picked ? Theme.electric : Theme.hair }
         guard picked != nil else { return Theme.hair }
         if oi == q.answer { return Theme.ok }
         if oi == picked { return Theme.danger }
@@ -142,11 +169,27 @@ struct QuizView: View {
     }
 
     private func pick(_ oi: Int, _ q: QuestionBank.Question) {
+        if exam { withAnimation(.snappy) { picked = oi }; UISelectionFeedbackGenerator().selectionChanged(); return }
         guard picked == nil else { return }
         withAnimation(.snappy) { picked = oi }
         let ok = oi == q.answer
         answers.append((q.id, ok))
         UINotificationFeedbackGenerator().notificationOccurred(ok ? .success : .error)
+    }
+
+    private func examNext(_ q: QuestionBank.Question) {
+        guard let picked else { return }
+        answers.append((q.id, picked == q.answer))
+        if index + 1 < session.questions.count {
+            withAnimation(.snappy) { index += 1; self.picked = nil }
+        } else {
+            Task { await finish(early: false) }
+        }
+    }
+
+    static func clock(_ t: TimeInterval) -> String {
+        let s = Int(t.rounded(.up))
+        return String(format: "%d:%02d:%02d left", s / 3600, (s % 3600) / 60, s % 60)
     }
 
     private func explain(_ q: QuestionBank.Question) async {
@@ -184,15 +227,15 @@ struct QuizView: View {
     private var result: some View {
         let pm = model.passMark
         let pass = resultScore >= pm
-        Text(session.kind == .mock ? (resultScore >= model.passMark ? "Exam passed. Readback correct." : "Exam below the mark.") : session.kind == .review ? "Review complete." : "Theory checked.")
+        Text(isMock ? (resultScore >= model.passMark ? "Exam passed. Readback correct." : "Exam below the mark.") : session.kind == .review ? "Review complete." : session.kind == .mistakes ? "Mistakes reviewed." : "Theory checked.")
             .font(Theme.display(34)).tracking(-1)
-        Text("\(right) of \(answers.count) correct · exam readiness now \(readinessAfter)%.")
+        Text("\(right) of \(exam ? session.questions.count : answers.count) correct · exam readiness now \(readinessAfter)%.")
             .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
         Tile {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text("\(resultScore)%").font(Theme.display(64)).tracking(-2)
-                    .foregroundStyle(session.kind == .mock ? (pass ? Theme.ok : Theme.danger) : Theme.ink)
-                Text(session.kind == .mock ? (pass ? "At or above the \(pm)% pass mark" : "Below the \(pm)% pass mark") : "this session")
+                    .foregroundStyle(isMock ? (pass ? Theme.ok : Theme.danger) : Theme.ink)
+                Text(isMock ? (pass ? "At or above the \(pm)% pass mark" : "Below the \(pm)% pass mark") : "this session")
                     .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
             }
         }
@@ -217,11 +260,15 @@ struct QuizView: View {
     private func finish(early: Bool) async {
         var st = StudyState(json: model.profile?.study)
         st.record(answers)
-        resultScore = Int((Double(right) / Double(max(1, answers.count)) * 100).rounded())
-        if session.kind == .mock && !early { st.mocks.append((Day.todayISO, resultScore)) }
+        if !answers.isEmpty { st.markStudied() }
+        // The full test scores unanswered questions as wrong, like the real exam.
+        let out = exam && !early ? session.questions.count : answers.count
+        resultScore = Int((Double(right) / Double(max(1, out)) * 100).rounded())
+        if isMock && !early { st.mocks.append((Day.todayISO, resultScore)) }
         if let bank = QuestionBank.shared?.pack(for: model.regime) { readinessAfter = st.readiness(bank.questions) }
         withAnimation { finished = true }
         try? await model.saveProfile(["study": st.json()])
+        await Reminders.refresh(model)
         // A good score is a good moment to ask for a rating.
         if !early && answers.count >= 5 && resultScore >= 70 { await ReviewAsk.afterWin(requestReview) }
     }

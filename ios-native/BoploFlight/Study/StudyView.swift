@@ -71,6 +71,31 @@ struct StudyView: View {
         Button { start(.mock, bank) } label: { Text("Start a mock exam") }
             .primaryStyle(full: false)
 
+        if model.regime == "faa" {
+            Tile(spacing: 10) {
+                TileHead(title: "Full practice test") { Chip(text: "Pass mark \(pm)%") }
+                Text("60 questions across every subject, 2 hours 30 minutes, no answers shown until the end. The same shape as the FAA Private Pilot knowledge test.")
+                    .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
+                Button { start(.fullTest, bank) } label: { Text("Start the full test") }
+                    .buttonStyle(.pill(.ink, height: 44))
+            }
+        }
+
+        let mistakes = st.mistakes(qs)
+        if !mistakes.isEmpty {
+            Button { start(.mistakes, bank) } label: {
+                Tile(spacing: 6) {
+                    HStack {
+                        Text("Review my mistakes").font(.archivo(17, .semibold)).foregroundStyle(Theme.ink)
+                        Spacer()
+                        Chip(text: "\(mistakes.count)", tone: .bad)
+                    }
+                    Text("Every question you got wrong last time, until you get it right.").font(.archivo(14)).foregroundStyle(Theme.ink3).multilineTextAlignment(.leading)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+
         let reviewer: String? = QuestionBank.shared?.reviewed?.by
         Text(reviewer != nil ? "Reviewed by \(reviewer!). " : "Early-access question bank. Original questions written for Boplo, awaiting review by a flight instructor. ")
             .font(.archivo(13.5, .semibold)) + Text("Use them for practice alongside your official study material, not instead of it.").font(.archivo(13.5)).foregroundColor(Theme.ink2)
@@ -85,6 +110,9 @@ struct StudyView: View {
                     Text(StudyState.readyLabel(ready)).font(.archivo(14.5, .medium)).foregroundStyle(Theme.mist)
                 }
             }
+            if st.streak >= 2 {
+                Text("\(st.streak)-day study streak").font(.archivo(12.5, .semibold)).foregroundStyle(Theme.ice)
+            }
             Text(due > 0 ? "\(plural(due, "question")) due for review" : fresh > 0 ? "Nothing due. Learn something new." : "All caught up.")
                 .font(Theme.display(28)).tracking(-0.8).fixedSize(horizontal: false, vertical: true)
             Text("Questions you get right come back after longer and longer gaps; ones you miss come back tomorrow. A few minutes a day is how it sticks.")
@@ -93,6 +121,8 @@ struct StudyView: View {
                 .buttonStyle(.pill(.light, height: 48, spark: true))
                 .disabled(due == 0 && fresh == 0)
         }
+
+        ReminderOffer()
 
         ForEach(bank.subjects) { s in
             let score = st.score(qs, subject: s.id)
@@ -176,6 +206,19 @@ struct StudyView: View {
             qs = Array(due + fresh).shuffled()
         case .mock:
             qs = Array(bank.questions.shuffled().prefix(16))
+        case .fullTest:
+            // 60 questions spread across subjects in proportion to the bank.
+            let total = Double(bank.questions.count)
+            var picked: [QuestionBank.Question] = []
+            for s in bank.subjects {
+                let pool = bank.questions.filter { $0.subject == s.id }.shuffled()
+                picked += pool.prefix(Int((Double(pool.count) / total * 60).rounded()))
+            }
+            let rest = bank.questions.filter { q in !picked.contains { $0.id == q.id } }.shuffled()
+            picked += rest.prefix(max(0, 60 - picked.count))
+            qs = Array(picked.shuffled().prefix(60))
+        case .mistakes:
+            qs = Array(st.mistakes(bank.questions).shuffled().prefix(20))
         case .subject(let id):
             func weight(_ q: QuestionBank.Question) -> Double {
                 guard let r = st.records[q.id], r[1] > 0 else { return -1 }
@@ -189,6 +232,8 @@ struct StudyView: View {
         let title: String = {
             switch kind {
             case .mock: return "Mock exam"
+            case .fullTest: return "Full practice test"
+            case .mistakes: return "My mistakes"
             case .review: return "Daily review"
             case .subject(let id): return bank.subjects.first { $0.id == id }?.name ?? "Practice"
             }
@@ -198,7 +243,7 @@ struct StudyView: View {
 }
 
 struct QuizSession: Identifiable {
-    enum Kind: Equatable { case review, mock, subject(String) }
+    enum Kind: Equatable { case review, mock, fullTest, mistakes, subject(String) }
     let id = UUID()
     let kind: Kind
     let title: String

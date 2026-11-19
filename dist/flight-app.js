@@ -2649,7 +2649,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=6', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=11', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=82', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=83', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2678,12 +2678,14 @@
           } } catch { }
         if (!weather) toast('Live weather wasn’t available, so it’s clear skies.');
       } else weather = WXP[wxKey] || null;
+      // the crosswind lesson always gets a strong crosswind, from a random side, whatever the conditions picked
+      if (PRc?.scn === 'xwind') weather = { ...(weather || WXP.fair), windRel: { off: (Math.random() < .5 ? -1 : 1) * Math.round(75 + Math.random() * 15), spd: 12 + Math.round(Math.random() * 4) } };
       if (wind) { } // live weather already set the wind
       else if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
       else if (ui.sim.wind === 'live') {
         try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0]; if (s && Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id }; } catch { }
       }
-      const title = PRc ? `${PRACTICE[PRc.kind]} · ${upper(src.departure)}${PRc.end ? ' ' + PRc.end : ''}` : isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
+      const title = PRc ? `${PRACTICE[PRc.scn || PRc.kind]} · ${upper(src.departure)}${PRc.end ? ' ' + PRc.end : ''}` : isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
       const subtitle = PRc ? (dep?.name || '') : isPlan ? '' : [fmtDate(src.date, { day: 'numeric', month: 'short', year: 'numeric' }), src.lesson].filter(Boolean).join(' · ');
       let googleKey = state.mapsKey || '';
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
@@ -2696,7 +2698,7 @@
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
         depEnd: src.depEnd || '', arrEnd: src.arrEnd || '',
         runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), livery: ui.sim.livery || null, radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
-        onResult: PRc && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
+        onResult: PRc && !PRc.scn && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
         onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
         depAirport: dep && !PRfin ? { code: dep.code, lat: dep.lat, lng: dep.lng, cc: dep.cc } : null, arrAirport: arr ? { code: arr.code, lat: arr.lat, lng: arr.lng, cc: arr.cc } : null
       });
@@ -2704,10 +2706,13 @@
   }
   let simFreeLeft = null;
   const paintFree = () => { $$('[data-prk]').forEach(b => { const tag = b.querySelector('.pr-tag'); if (!tag) return; if (isAdv()) { tag.hidden = true; return; } tag.hidden = false; const free = b.dataset.prk === 'short'; tag.textContent = free ? (simFreeLeft == null ? '2 free a day' : simFreeLeft ? `${simFreeLeft} free left today` : 'Free tries used today') : 'Advanced'; tag.classList.toggle('free', free && simFreeLeft !== 0); b.classList.toggle('locked', !free || simFreeLeft === 0); }); };
-  const PRACTICE = { takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final' };
+  const PRACTICE = { takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final', xwind: 'Crosswind landing', efato: 'Engine failure after take-off' };
+  // scenario lessons run on top of a base exercise: a crosswind landing is a short final, an engine failure starts as a take-off
+  const PR_BASE = { xwind: 'short', efato: 'takeoff' };
   // practice at any airfield: build a short route on the chosen runway end, then fly it as a normal sim session
   async function openPractice(code, endId, kind, opts = {}) {
-    if (!isAdv() && kind !== 'short') return upgradeSheet('Take-offs, circuits and long finals are part of Advanced. Free includes two short finals a day.');
+    if (!isAdv() && kind !== 'short') return upgradeSheet('Take-offs, circuits, long finals and scenario lessons are part of Advanced. Free includes two short finals a day.');
+    const scn = PR_BASE[kind] ? kind : null; kind = PR_BASE[kind] || kind;
     const ap = await anyAirfield(code) || (opts.af ? { code: opts.af.code, name: opts.af.name, lat: opts.af.lat, lng: opts.af.lng, cc: opts.af.cc, type: 'M', runways: [] } : null); if (!ap) { toast('Pick an airfield from the list.'); return; }
     let freeTry = false;
     if (!isAdv()) {
@@ -2732,7 +2737,7 @@
     const pts = kind === 'takeoff' ? [T, far, move(far, brg, 9000)] : kind === 'circuit' ? [T, move(T, brg, Math.min(len, 1000))]
       : [move(T, brg + Math.PI, kind === 'long' ? 11112 : 3704), T];
     if (freeTry && simFreeLeft != null) toast(simFreeLeft ? `Free short final: ${simFreeLeft} left today.` : 'That’s your last free short final today.');
-    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, challenge: !!opts.challenge }, 'fly');
+    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id, ...(scn ? { scn } : {}) }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, challenge: !!opts.challenge }, 'fly');
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   // worldwide route planner: pick airports and runways on a map, then fly or replay the route in the simulator
@@ -2776,7 +2781,7 @@
           <label class="pr-f"><span>Airfield</span><input type="text" list="pr-afs" data-prap value="${esc(S.prAp || upper(state.profile.airport).split(/[\s·]/)[0] || '')}" placeholder="Search by code or name" autocomplete="off" spellcheck="false"><datalist id="pr-afs" data-prlist></datalist></label>
           <label class="pr-f"><span>Runway</span><select data-prrw><option value="">Longest runway</option></select></label>
         </div>
-        <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap']].map(([k, l, d]) => `<button type="button" class="pr-kind ${S.prk === k ? 'on' : ''}" data-prk="${k}" aria-pressed="${S.prk === k}"><span class="pr-tag" hidden></span><b>${l}</b><small>${d}</small></button>`).join('')}</div>
+        <div class="pr-kinds">${[['takeoff', 'Take-off', 'Line up, roll, rotate and climb away to 1,000 ft'], ['circuit', 'Circuit', 'A full left-hand circuit and landing'], ['long', 'Long final', 'Established at 6 NM, 1,900 ft'], ['short', 'Short final', 'Established at 2 NM, 650 ft, landing flap'], ['xwind', 'Crosswind landing', 'Scenario: a 12–16 kt crosswind on a 2 NM final'], ['efato', 'Engine failure after take-off', 'Scenario: the engine stops in the climb. Land ahead']].map(([k, l, d]) => `<button type="button" class="pr-kind ${S.prk === k ? 'on' : ''}" data-prk="${k}" aria-pressed="${S.prk === k}"><span class="pr-tag" hidden></span><b>${l}</b><small>${d}</small></button>`).join('')}</div>
         <label class="sim-radio-opt"><input type="checkbox" data-prradio ${S.radio !== false ? 'checked' : ''}> <span><b>Radio calls</b> Make your calls out loud as you fly (or type them) and get each one checked, with the controller’s replies. Advanced.</span></label>
       </div>`;
     else if (S.step === 1 && S.what === 'world') body = `<div class="tile rp-box sw-card">

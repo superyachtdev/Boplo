@@ -1763,9 +1763,14 @@ window.BoploSim = (() => {
       st.ground = fs.ground; st.crashed = fs.crashed; st.crash = fs.crash; st.stall = fs.stallWarn; st.thr = fs.power; st.flaps = FM.notches > 1 ? fc.flaps / (FM.notches - 1) : 0; st.agl = fs.agl ?? 0; st.gnd = fs.alt - (fs.agl ?? 0);
       st.landed = fs.landed; if (fs.landed && fs.touch && !st.touch) { st.touch = { ...fs.touch, at: path.project(st.x, st.z).s }; st.landedOnce = true; }
     };
-    let pscore = null, apprPwr = null;
-    const PRN = PR ? ({ takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final' })[PR.kind] + (arrE?.id || depE?.id ? ' · runway ' + (arrE?.id || depE?.id) : '') : '';
-    const PRT = !PR ? '' : PR.kind === 'takeoff' ? `Line up, release the parking brake, full power, keep straight on the centreline and rotate at about ${PF.vr} kt. Climb at Vy (${Math.round(PF.vy)} kt) on the runway heading. The exercise ends at 1,000 ft above the airfield.`
+    let pscore = null, apprPwr = null, efail = null, failAt = 0;
+    // scenario lessons: best glide is roughly 92% of Vy on light singles; the engine fails somewhere between 400 and 700 ft
+    const VG = Math.round(PF.vy * .92), SCN = PR?.scn || null;
+    const xwSide = SCN === 'xwind' && arrE && wind.spd ? (norm360(wind.dir - arrE.hdg * R2D) < 180 ? 'right' : 'left') : '';
+    const PRN = PR ? ({ takeoff: 'Take-off', circuit: 'Circuit', long: 'Long final', short: 'Short final', xwind: 'Crosswind landing', efato: 'Engine failure after take-off' })[SCN || PR.kind] + (arrE?.id || depE?.id ? ' · runway ' + (arrE?.id || depE?.id) : '') : '';
+    const PRT = !PR ? '' : SCN === 'xwind' ? `You’re on a 2 NM final with landing flap and a ${wind.spd} kt crosswind from the ${xwSide || 'side'}. Crab into the wind on the approach, then in the flare lower the ${xwSide || 'into-wind'} wing and use opposite rudder so you touch down straight, on the centreline, with no drift. Keep the ${xwSide || 'into-wind'} aileron in as you slow down.`
+      : SCN === 'efato' ? `Take off normally and climb at Vy (${Math.round(PF.vy)} kt). Somewhere between 400 and 700 ft the engine will stop. Lower the nose straight away to hold best glide, about ${VG} kt, and land ahead, within about 30° either side of the runway heading. Don’t try to turn back.`
+      : PR.kind === 'takeoff' ? `Line up, release the parking brake, full power, keep straight on the centreline and rotate at about ${PF.vr} kt. Climb at Vy (${Math.round(PF.vy)} kt) on the runway heading. The exercise ends at 1,000 ft above the airfield.`
       : PR.kind === 'circuit' ? 'Take off, fly a left-hand circuit and land back on the same runway. Follow the gates.'
       : `You’re established on a ${PR.kind === 'long' ? '6 NM' : '2 NM'} final${PR.kind === 'long' ? ' with take-off flap' : ' with landing flap'}, trimmed, at about ${PF.appr + (PR.kind === 'long' ? 12 : 3)} kt. Hold the 3° glidepath (the PAPI shows two white and two red), stay on the centreline, cross the threshold at about ${PF.appr} kt and land in the touchdown zone.`;
     function place(s, airborne) {
@@ -1782,6 +1787,7 @@ window.BoploSim = (() => {
         FM.s.power = FM.c.throttle; try { thrTarget = FM.c.throttle; } catch { } // not declared yet on the first placement const tr = $('[data-thrrange]'); if (tr) tr.value = Math.round(FM.c.throttle * 100);
       }
       pscore = { gsN: 0, gsSum: 0, spdSum: 0, clN: 0, clMax: 0, liftAt: null, rot: null, vySum: 0, vyN: 0 };
+      efail = null; failAt = (400 + Math.random() * 300) * FT;
       FM.ap = null; st.touch = null; st.landedOnce = false; st.airT = airborne ? 10 : 0; lastG = gh ?? g0;
       sync(); path.reset(); path.seed(s);
     }
@@ -2466,13 +2472,38 @@ window.BoploSim = (() => {
       const parts = { rate: 40 * c01(1 - Math.max(0, fpm - 150) / 450), point: P0.td < 0 ? 0 : 25 * c01(1 - Math.abs(P0.td - aim) / 350), line: 20 * c01(1 - (P0.tdCl || 0) / 12), speed: 15 * c01(1 - Math.abs((P0.tdKt || 0) - vtd) / 15) };
       return { score: Math.round(parts.rate + parts.point + parts.line + parts.speed), parts, fpm: -Math.round(fpm), td: Math.round(P0.td), cl: +(P0.tdCl || 0).toFixed(1), kt: Math.round(P0.tdKt || 0) };
     }
+    // engine failure after take-off: cut the engine at the chosen height, then score the reaction, the glide and the turn
+    function efatoTick() {
+      if (!efail && !st.ground && !st.landedOnce && st.agl > failAt) {
+        efail = { t: score.t, hdg: st.hdg, agl: st.agl, nose: null, spdSum: 0, n: 0, turn: 0, stall: false };
+        tipNow = `Engine failure. Nose down, best glide ${VG} kt, land ahead`; tipUntil = performance.now() + 6000;
+      }
+      if (!efail) return;
+      fc.throttle = 0; thrTarget = 0;
+      if (st.ground || st.landedOnce) return;
+      const kt = st.v / KT, since = score.t - efail.t;
+      if (efail.nose == null && (st.pitch < 2 || kt < VG + 3 && st.vs < 0)) efail.nose = since;
+      if (since > 4) { efail.n++; efail.spdSum += Math.abs(kt - VG); }
+      efail.turn = Math.max(efail.turn, Math.abs(((st.hdg - efail.hdg) % 360 + 540) % 360 - 180));
+      if (st.stall) efail.stall = true;
+    }
     function practiceFacts(kind) {
-      const P0 = pscore; if (!PR || !P0 || replay || kind === 'crash') return '';
+      const P0 = pscore; if (!PR || !P0 || replay || kind === 'crash' && SCN !== 'efato') return '';
       const g = (v, ok, fine) => v <= ok ? 'great' : v <= fine ? 'ok' : 'firm', row = (l, v, cls) => `<div class="pr-${cls}"><span>${l}</span><b>${v}</b></div>`;
       const out = [];
       if (PRF) {
         if (P0.gsN) { const gs = P0.gsSum / P0.gsN, sp = P0.spdSum / P0.gsN, cl = P0.clSum / P0.gsN; out.push(row('Glidepath, average error', Math.round(gs) + ' ft', g(gs, 50, 120)), row('Speed, average error', sp.toFixed(1) + ' kt', g(sp, 4, 8)), row('Centreline, average error', Math.round(cl) + ' m', g(cl, 15, 40))); }
         if (P0.td != null) { const aim = Math.min(arrE.rw.len >= 1200 ? 300 : 150, rollEnd * .3), off = P0.td - aim; out.push(row('Touchdown', P0.td < 0 ? `${Math.round(-P0.td)} m short of the runway` : `${Math.round(P0.td)} m past the threshold`, P0.td < 0 ? 'firm' : g(Math.abs(off), 120, 280)), row('Touchdown off the centreline', Math.round(P0.tdCl) + ' m', g(P0.tdCl, 4, 9)), row('Touchdown speed', Math.round(P0.tdKt) + ' kt', g(Math.abs(P0.tdKt - (FM.p.vso || PF.vs * .9) * 1.1), 5, 10))); }
+      } else if (SCN === 'efato') {
+        if (!efail) out.push(row('Engine failure', 'Didn’t happen this time', 'ok'));
+        else {
+          out.push(row('Failed at', Math.round(efail.agl / FT / 10) * 10 + ' ft', 'ok'));
+          if (efail.nose != null) out.push(row('Nose down after', efail.nose.toFixed(1) + ' s', g(efail.nose, 2, 4)));
+          if (efail.n) out.push(row(`Glide speed vs ${VG} kt, average error`, (efail.spdSum / efail.n).toFixed(1) + ' kt', g(efail.spdSum / efail.n, 4, 8)));
+          out.push(row('Biggest turn from runway heading', Math.round(efail.turn) + '°', g(efail.turn, 30, 60)));
+          out.push(row('Stall warning', efail.stall ? 'Yes' : 'No', efail.stall ? 'firm' : 'great'));
+          out.push(row('Outcome', kind === 'crash' ? 'Crashed' : 'Landed ahead', kind === 'crash' ? 'firm' : 'great'));
+        }
       } else if (PR.kind === 'takeoff') {
         out.push(row('Centreline on the roll, worst', P0.clMax.toFixed(1) + ' m', g(P0.clMax, 3, 8)));
         if (P0.liftAt != null) out.push(row('Lift-off', `${Math.round(P0.liftKt)} kt after ${Math.round(P0.liftAt)} m`, g(Math.abs(P0.liftKt - PF.vr), 5, 10)));
@@ -2600,7 +2631,8 @@ window.BoploSim = (() => {
           if (!st.ground) { score.n++; score.xteSum += pr.d; const ae = Math.abs(st.alt - prof(pr.s)); if (pr.d < (circuit ? 90 : 140) / 2 + 60 && ae < 250 * FT) score.tube++; }
           if (PR && pscore && !replay) scorePractice(pr);
           radioTick(dt, pr);
-          if (PR?.kind === 'takeoff' && !st.ground && st.agl > 1000 * FT) { finish('climb'); break; }
+          if (SCN === 'efato' && !replay) efatoTick();
+          if (PR?.kind === 'takeoff' && !SCN && !st.ground && st.agl > 1000 * FT) { finish('climb'); break; }
           if (st.crashed) { finish('crash'); break; }
           if (st.ground && st.landedOnce && st.v < 2) { finish('land'); break; }
           if (!landEnd && pr.s > L - 40) { finish('done'); break; }
