@@ -9,6 +9,7 @@ struct DeskView: View {
         NavigationStack {
             Page(title: title) {
                 hero
+                PilotCard()
                 actions
                 upNext
                 checklistLink

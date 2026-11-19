@@ -83,12 +83,13 @@ enum Reminders {
             c.userInfo = ["open": "study"]
             if offset == 0 || (offset == 1 && studiedToday) {
                 // The next reminder knows the most about today.
+                let home = model.homeCode.isEmpty ? "your airport" : model.homeCode
                 if streak >= 2 {
-                    c.title = "Keep your \(streak)-day streak"
-                    c.body = due > 0 ? "\(due) question\(due == 1 ? "" : "s") due for review. Five minutes keeps it going." : "Five minutes of study keeps it going."
+                    c.title = "Today’s sortie is ready. Keep your \(streak)-day streak"
+                    c.body = "Go or no-go at \(home) today? Three minutes trains all three of your stats."
                 } else {
-                    c.title = "Time for a little theory"
-                    c.body = due > 0 ? "\(due) question\(due == 1 ? "" : "s") due for review today." : "Learn 10 new questions in about five minutes."
+                    c.title = "Today’s sortie is ready"
+                    c.body = "Make the go or no-go call at \(home), then a quick preflight and debrief. Three minutes to stay current."
                 }
             } else {
                 let lines = [

@@ -269,6 +269,7 @@ struct QuizView: View {
         withAnimation { finished = true }
         try? await model.saveProfile(["study": st.json()])
         await Reminders.refresh(model)
+        await PilotStatsStore.shared.refresh()
         // A good score is a good moment to ask for a rating.
         if !early && answers.count >= 5 && resultScore >= 70 { await ReviewAsk.afterWin(requestReview) }
     }
