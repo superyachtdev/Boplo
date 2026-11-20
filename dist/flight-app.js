@@ -2682,7 +2682,7 @@
       if (PRc?.scn === 'xwind') weather = { ...(weather || WXP.fair), windRel: { off: (Math.random() < .5 ? -1 : 1) * Math.round(75 + Math.random() * 15), spd: 12 + Math.round(Math.random() * 4) } };
       if (wind) { } // live weather already set the wind
       else if (isPlan && src.inp.wdir !== '' && src.inp.wspd !== '' && ui.sim.wind !== 'calm') wind = { dir: +src.inp.wdir, spd: +src.inp.wspd };
-      else if (ui.sim.wind === 'live') {
+      else if (ui.sim.wind === 'live' || src.windLive) {
         try { const pt = points[0], d = preview ? EX_WX : await api(`weather?${dep ? `ids=${encodeURIComponent(dep.code)}&` : ''}lat=${pt.lat}&lng=${pt.lng}`); const s = d.stations?.[0]; if (s && Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id }; } catch { }
       }
       const title = PRc ? `${PRACTICE[PRc.scn || PRc.kind]} · ${upper(src.departure)}${PRc.end ? ' ' + PRc.end : ''}` : isPlan ? (src.name || 'Nav plan') : `${upper(src.departure) || '—'} → ${upper(src.arrival) || '—'}`;
@@ -2737,7 +2737,7 @@
     const pts = kind === 'takeoff' ? [T, far, move(far, brg, 9000)] : kind === 'circuit' ? [T, move(T, brg, Math.min(len, 1000))]
       : [move(T, brg + Math.PI, kind === 'long' ? 11112 : 3704), T];
     if (freeTry && simFreeLeft != null) toast(simFreeLeft ? `Free short final: ${simFreeLeft} left today.` : 'That’s your last free short final today.');
-    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id, ...(scn ? { scn } : {}) }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, challenge: !!opts.challenge }, 'fly');
+    return openSim({ id: 'practice', departure: ap.code, arrival: ap.code, points: pts.map(x => ({ lat: x.lat, lng: x.lng })), practice: { kind, end: id, ...(scn ? { scn } : {}) }, aircraft: state.profile.aircraft, freeTry, wxOverride: opts.weather, windLive: !!opts.windLive, challenge: !!opts.challenge }, 'fly');
   }
   const simmable = () => sorted().filter(f => f.points?.length || upper(f.departure));
   // worldwide route planner: pick airports and runways on a map, then fly or replay the route in the simulator
@@ -4163,7 +4163,7 @@
     // the native app opens the simulator straight into a practice approach: ?embed=1&practice=CODE&rw=05&kind=short&wx=gusty&challenge=1#sim
     if (embedded && k === 'sim' && !ui.embedPractice) {
       const q = new URLSearchParams(location.search), code = q.get('practice');
-      if (code) { ui.embedPractice = true; const af = { code, name: q.get('name') || code, runway: q.get('rw') || '' }; setTimeout(() => openPractice(code, q.get('rw') || '', q.get('kind') || 'short', { weather: q.get('wx') || undefined, challenge: q.get('challenge') === '1', af }), 300); }
+      if (code) { ui.embedPractice = true; const af = { code, name: q.get('name') || code, runway: q.get('rw') || '' }; setTimeout(() => openPractice(code, q.get('rw') || '', q.get('kind') || 'short', { weather: q.get('wx') || undefined, windLive: q.get('wind') === 'live', challenge: q.get('challenge') === '1', af }), 300); }
     }
   }
   addEventListener('hashchange', () => {

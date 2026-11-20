@@ -28,6 +28,11 @@ struct SortieView: View {
     private var finding: PreflightFinding { PreflightFinding.forToday }
     private var briefOK: Bool? { guard let briefCall, let wx else { return nil }; return briefCall == wx.verdict.go }
     private var preflightOK: Bool? { preflightPick.map { $0 == finding.answer } }
+    /// Fly in the real sky only when it's comfortably VFR: under a low ceiling the approach would start inside cloud.
+    private var flyLiveSky: Bool {
+        guard let wx, wx.live else { return false }
+        return (wx.ceiling ?? 99999) >= 1500 && wx.visSM >= 3
+    }
     private var points: Int { (briefOK == true ? 1 : 0) + (preflightOK == true ? 1 : 0) + qAnswers.filter(\.ok).count }
     private var grade: String { points >= 5 ? "A" : points == 4 ? "B" : points == 3 ? "C" : "D" }
 
@@ -144,11 +149,11 @@ struct SortieView: View {
         stepHead("Fly it", "Handling")
         DarkTile {
             Text("Short final at \(model.homeCode.isEmpty ? "your airport" : model.homeCode)").font(Theme.display(30)).tracking(-0.8)
-            Text("A 2 NM final in today’s real wind\(wx?.live == true ? " (\(wx?.windText ?? ""))" : ""). Hold the glidepath and the centreline, then land in the touchdown zone. Your landing score feeds Handling.")
+            Text("A 2 NM final in today’s real wind\(wx?.live == true ? " (\(wx?.windText ?? ""))" : "")\(flyLiveSky ? "" : wx?.live == true ? ", under a clear sky because the real weather is below VFR right now" : ""). Hold the glidepath and the centreline, then land in the touchdown zone. Your landing score feeds Handling.")
                 .font(.archivo(14.5)).foregroundStyle(Theme.mist)
             Button {
                 var c = URLComponents(string: "https://boplo.app/flight-app.html")!
-                c.queryItems = [.init(name: "embed", value: "1"), .init(name: "practice", value: model.homeCode), .init(name: "kind", value: "short"), .init(name: "wx", value: "live"), .init(name: "name", value: model.homeCode)]
+                c.queryItems = [.init(name: "embed", value: "1"), .init(name: "practice", value: model.homeCode), .init(name: "kind", value: "short"), .init(name: "wx", value: flyLiveSky ? "live" : "fair"), .init(name: "wind", value: "live"), .init(name: "name", value: model.homeCode)]
                 c.fragment = "sim"
                 simURL = c.url
             } label: { Text("Fly the approach") }
