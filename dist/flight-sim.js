@@ -1186,7 +1186,14 @@ window.BoploSim = (() => {
     // collection, so each one is tagged with UI and the tag is excluded too.
     const UI = 'boplo-sim-ui', exclude = [UI];
     const tagged = col => { const a = col.add.bind(col); col.add = (o = {}) => a({ id: UI, ...o }); return col; };
-    const cloudLayers = (WX.clouds || []).filter(c => /FEW|SCT|BKN|OVC|VV/.test(c.cover) && Number.isFinite(+c.base)).slice(0, 3);
+    const cloudLayers = (WX.clouds || []).filter(c => /FEW|SCT|BKN|OVC|VV/.test(c.cover) && Number.isFinite(+c.base)).slice(0, 3).map(c => ({ ...c }));
+    // a practice approach starts in the air on the glidepath (about 650 ft on short final, 1,900 ft on long final).
+    // Under a real low ceiling it would start inside the cloud deck and show nothing but cloud, so lift the layers
+    // clear of the approach. This is visual-flying practice; the real ceiling is still shown in the weather line.
+    const apprTopFt = PR && PR.kind !== 'takeoff' && PR.kind !== 'circuit' ? (PR.kind === 'long' ? 1900 : 650) : 0;
+    let cloudsRaised = false;
+    if (apprTopFt) for (const c of cloudLayers) if (+c.base < apprTopFt + 700) { c.real = +c.base; c.base = apprTopFt + 700; cloudsRaised = true; }
+    if (cloudsRaised) setTimeout(() => { try { tipNow = 'Real clouds are below the approach, so they’re raised to let you fly it visually'; tipUntil = performance.now() + 6000; } catch { } }, 3500);
     let cloudCol = null; const cloudCells = [];
     try {
       if (cloudLayers.length && C.CloudCollection) {
@@ -2432,7 +2439,7 @@ window.BoploSim = (() => {
     const rateBtns = () => $$('[data-rate]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rate === rate)));
     $$('[data-rate]').forEach(b => b.onclick = () => { rate = +b.dataset.rate; store.set('rate', rate); rateBtns(); }); rateBtns();
     H.scrub.oninput = () => { const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flownPts.length = 0; flownLine.positions = []; };
-    $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd}${gustKt ? 'G' + gustKt : ''} kt` : 'Calm', ...cloudLayers.map(c => `${c.cover}${String(Math.round(c.base / 100)).padStart(3, '0')}`), visM < 9999 ? `Vis ${(visM / 1000).toFixed(visM < 5000 ? 1 : 0)} km` : ''].filter(Boolean).join(' · ');
+    $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd}${gustKt ? 'G' + gustKt : ''} kt` : 'Calm', ...cloudLayers.map(c => `${c.cover}${String(Math.round((c.real ?? c.base) / 100)).padStart(3, '0')}`), visM < 9999 ? `Vis ${(visM / 1000).toFixed(visM < 5000 ? 1 : 0)} km` : ''].filter(Boolean).join(' · ');
 
     /* ---- ready card ---- */
     const ctrlHelp = coarse
