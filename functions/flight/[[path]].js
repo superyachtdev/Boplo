@@ -36,7 +36,19 @@ export function validateFlight(input) {
  f.points=[];
  if(input.points!=null&&!Array.isArray(input.points))fail(400,'Route coordinates must be a list.');
  if(input.points?.length>2000)fail(400,'Use at most 2,000 track points.');
- for(const p of input.points||[])f.points.push({lat:number(p.lat,-90,90,'latitude'),lng:number(p.lng,-180,180,'longitude')});
+ for(const p of input.points||[]){const q={lat:number(p.lat,-90,90,'latitude'),lng:number(p.lng,-180,180,'longitude')};
+  // recorded tracks also carry GPS altitude (ft MSL), seconds since the recording started and groundspeed (kt)
+  if(p.alt!=null&&p.alt!=='')q.alt=Math.round(number(p.alt,-2000,60000,'track altitude'));if(p.t!=null&&p.t!=='')q.t=Math.round(number(p.t,0,172800,'track time'));if(p.kt!=null&&p.kt!=='')q.kt=Math.round(number(p.kt,0,700,'track speed'));
+  f.points.push(q);}
+ // worked out from a recorded track on the phone: night time, furthest distance from the departure, when each landing happened, and a score per landing
+ f.nightMinutes=input.nightMinutes==null||input.nightMinutes===''?null:Math.round(number(input.nightMinutes,0,1440,'night minutes'));
+ f.xcNM=input.xcNM==null||input.xcNM===''?null:Math.round(number(input.xcNM,0,5000,'cross-country distance')*10)/10;
+ if(input.landingsAt!=null&&!Array.isArray(input.landingsAt))fail(400,'Landing times must be a list.');
+ f.landingsAt=(input.landingsAt||[]).slice(0,100).map(v=>Math.round(number(v,0,172800,'landing time')));
+ if(input.landingScores!=null&&!Array.isArray(input.landingScores))fail(400,'Landing scores must be a list.');
+ f.landingScores=(input.landingScores||[]).slice(0,100).map(l=>{const o={s:Math.round(number(l?.s,0,100,'landing score')),t:Math.round(number(l?.t??0,0,172800,'landing time'))};
+  for(const k of ['spd','gp','cl','tz'])if(l?.[k]!=null&&l[k]!=='')o[k]=Math.round(number(l[k],-100000,100000,'landing detail')*10)/10;
+  o.rw=text(l?.rw||'',8);o.ap=text(l?.ap||'',8);return o;});
  f.routeKind=['track','route'].includes(input.routeKind)?input.routeKind:'endpoints';
  return f;
 }
@@ -65,7 +77,7 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(!user)fail(401,'Your session has expired. Please sign in again.');
  const smem=await schoolMembership(env,user.id).catch(()=>null);let brow=withOwner(env,user,await billingRow(env,user.id).catch(()=>null));if(smem&&schoolActive(smem.school))brow={...(brow||{}),school:{name:smem.school.name,role:smem.role}};const apple=await appleForUser(env,user.id).catch(()=>null);const plan=publicBilling(env,brow,apple).plan;
  const needAdvanced=what=>{if(plan!=='advanced')fail(402,`${what} is part of Advanced. Upgrade from Plan & billing.`);};
- const body=async()=>{const raw=await request.text();if(raw.length>160000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
+ const body=async()=>{const raw=await request.text();if(raw.length>400000)fail(413,'This record is too large.');try{return JSON.parse(raw);}catch{fail(400,'Invalid request.');}};
  if(path==='runways/osm'&&request.method==='POST')return json(await contributeOSM(env,await body(),async cc=>{try{const r=await (env.ASSETS?env.ASSETS.fetch(new Request(url.origin+'/runways/'+cc+'.json')):fetch(url.origin+'/runways/'+cc+'.json'));return r.ok?(await r.json()).rows:{};}catch{return {};}}));
  if(path==='stats'&&request.method==='GET')return json(await pilotStats(env,user.id));
  if(path==='workspace'&&request.method==='GET'){

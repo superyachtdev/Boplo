@@ -9,6 +9,10 @@ struct FlightFormView: View {
     var track: [TrackPoint] = []
     /// Duration of a recorded flight, in minutes.
     var recordedMinutes: Int? = nil
+    /// What Boplo worked out from a recorded flight: airfields, landings, night, landing scores.
+    var recorded: RecordedFlight? = nil
+    /// Called once the flight is safely in the logbook.
+    var onSaved: (() -> Void)? = nil
 
     @State private var date = Date()
     @State private var departure = ""
@@ -32,6 +36,7 @@ struct FlightFormView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let r = recorded { recordedSummary(r) }
                     Tile {
                         TileHead("Flight")
                         DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
@@ -85,8 +90,8 @@ struct FlightFormView: View {
                                 .boploField()
                         }
                     }
-                    if !track.isEmpty || !(editing?.track.isEmpty ?? true) {
-                        let pts = track.isEmpty ? (editing?.track ?? []) : track
+                    if !recordedTrack.isEmpty || !(editing?.track.isEmpty ?? true) {
+                        let pts = recordedTrack.isEmpty ? (editing?.track ?? []) : recordedTrack
                         Tile(spacing: 10) {
                             TileHead(title: "Track") { Text("\(pts.count) GPS points").font(.archivo(13)).foregroundStyle(Theme.ink3) }
                             if pts.count >= 2 {
@@ -115,6 +120,27 @@ struct FlightFormView: View {
             }
         }
         .onAppear(perform: load)
+    }
+
+    private var recordedTrack: [TrackPoint] { recorded?.points ?? track }
+
+    @ViewBuilder
+    private func recordedSummary(_ r: RecordedFlight) -> some View {
+        Tile(spacing: 10) {
+            TileHead("From your recording")
+            let tg = max(0, r.landingTimes.count - 1)
+            Text([
+                r.landingTimes.isEmpty ? "No landings detected" : "\(r.landingTimes.count) landing\(r.landingTimes.count == 1 ? "" : "s")\(tg > 0 ? " (including touch-and-goes)" : "")",
+                r.nightMinutes > 0 ? "\(hoursText(r.nightMinutes)) at night" : nil,
+                r.xcNM >= 1 ? String(format: "furthest %.0f NM from the departure", r.xcNM) : nil
+            ].compactMap { $0 }.joined(separator: " · "))
+                .font(.archivo(15, .medium))
+            Text("Worked out from your phone’s GPS. Check the airfields, time and landings below before you save.")
+                .font(.archivo(13)).foregroundStyle(Theme.ink3)
+            if !r.scores.isEmpty {
+                ForEach(Array(r.scores.enumerated()), id: \.offset) { i, sc in LandingScoreRow(index: i + 1, score: sc) }
+            }
+        }
     }
 
     private func codeField(_ prompt: String, text: Binding<String>) -> some View {
@@ -169,6 +195,14 @@ struct FlightFormView: View {
             registration = model.profile?.registration ?? ""
             lesson = model.profile?.nextLesson ?? ""
             if let m = recordedMinutes, m > 0 { hours = m / 60; minutes = m % 60 }
+            if let r = recorded {
+                date = r.date
+                hours = r.minutes / 60; minutes = r.minutes % 60
+                if let d = r.departure { departure = d }
+                if let a = r.arrival { arrival = a }
+                if !r.landingTimes.isEmpty { landings = r.landingTimes.count }
+                nightLandings = min(r.nightLandings, landings)
+            }
         }
     }
 
@@ -194,10 +228,32 @@ struct FlightFormView: View {
             "aircraft": aircraft, "registration": registration.uppercased(),
             "instructor": instructor, "lesson": lesson, "win": win, "notes": notes
         ]
-        let points = editing?.points ?? track
+        let points = editing?.points ?? recordedTrack
         if !points.isEmpty {
-            payload["points"] = points.prefix(2000).map { ["lat": $0.lat, "lng": $0.lng] }
+            payload["points"] = points.prefix(2000).map { p -> [String: Any] in
+                var o: [String: Any] = ["lat": (p.lat * 1e5).rounded() / 1e5, "lng": (p.lng * 1e5).rounded() / 1e5]
+                if let a = p.alt { o["alt"] = Int(a.rounded()) }
+                if let t = p.t { o["t"] = Int(t.rounded()) }
+                if let k = p.kt { o["kt"] = Int(k.rounded()) }
+                return o
+            }
             payload["routeKind"] = editing?.routeKind ?? "track"
+        }
+        // what the recording worked out, kept when the entry is edited later
+        let nightMins = recorded.map { Double($0.nightMinutes) } ?? editing?.nightMinutes
+        let xc = recorded?.xcNM ?? editing?.xcNM
+        let times = recorded?.landingTimes ?? editing?.landingsAt ?? []
+        let scores = recorded?.scores ?? editing?.landingScores ?? []
+        if let nightMins { payload["nightMinutes"] = Int(nightMins) }
+        if let xc { payload["xcNM"] = xc }
+        if !times.isEmpty { payload["landingsAt"] = times.map { Int($0.rounded()) } }
+        if !scores.isEmpty {
+            payload["landingScores"] = scores.map { sc -> [String: Any] in
+                var o: [String: Any] = ["s": Int(sc.s), "t": Int(sc.t.rounded())]
+                if let v = sc.spd { o["spd"] = v }; if let v = sc.gp { o["gp"] = v }; if let v = sc.cl { o["cl"] = v }; if let v = sc.tz { o["tz"] = v }
+                if let v = sc.rw { o["rw"] = v }; if let v = sc.ap { o["ap"] = v }
+                return o
+            }
         }
         if let cost = editing?.cost { payload["cost"] = cost }
         do {
@@ -215,9 +271,44 @@ struct FlightFormView: View {
             } else {
                 model.show(.init(title: "Entry amended"))
             }
+            onSaved?()
             dismiss()
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+
+/// One landing's score from a recorded flight, with what went into it.
+struct LandingScoreRow: View {
+    let index: Int
+    let score: LandingScore
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(Int(score.s))")
+                .font(Theme.display(28)).monospacedDigit()
+                .foregroundStyle(score.s >= 75 ? Theme.ok : score.s >= 50 ? Theme.ink : Theme.danger)
+                .frame(width: 52, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.archivo(14.5, .semibold))
+                Text(details).font(.archivo(13)).foregroundStyle(Theme.ink3).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+    private var title: String {
+        let place = [score.ap, score.rw.map { "runway " + $0 }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+        return place.isEmpty ? "Landing \(index)" : "Landing \(index) · \(place)"
+    }
+    private var details: String {
+        [
+            score.spd.map { String(format: "speed held within ±%.0f kt", $0) },
+            score.gp.map { String(format: "%.0f ft off a 3° glidepath on average", $0) },
+            score.cl.map { String(format: "%.0f m from the centreline", $0) },
+            score.tz.map { $0 < 0 ? "touched down before the threshold" : String(format: "touched down %.0f ft past the threshold", $0) }
+        ].compactMap { $0 }.joined(separator: " · ")
     }
 }

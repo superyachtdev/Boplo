@@ -53,8 +53,21 @@ struct FlightDetailView: View {
                     if let a = f.aircraft, !a.isEmpty { row("Aircraft", [a, f.registration ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")) }
                     if let i = f.instructor, !i.isEmpty { row("Instructor", i) }
                     if (f.nightLandings ?? 0) > 0 { row("Night landings", "\(Int(f.nightLandings ?? 0))") }
+                    if let n = f.nightMinutes, n > 0 { row("Night time", hoursText(Int(n))) }
+                    if let x = f.xcNM, x >= 1 { row("Furthest from departure", String(format: "%.0f NM", x)) }
                     if let c = f.cost, c > 0 { row("Cost", c.formatted(.number.precision(.fractionLength(0...2)))) }
                     row("Route", f.routeKind == "track" ? "Recorded track" : f.track.count >= 2 ? "Planned route" : "Airfields only", last: true)
+                }
+
+                if let scores = f.landingScores, !scores.isEmpty {
+                    Tile(spacing: 10) {
+                        TileHead(title: "Landing scores") {
+                            Text("Avg \(Int((scores.map(\.s).reduce(0, +) / Double(scores.count)).rounded()))").font(.archivo(13, .semibold)).foregroundStyle(Theme.ink3)
+                        }
+                        ForEach(Array(scores.enumerated()), id: \.offset) { i, sc in LandingScoreRow(index: i + 1, score: sc) }
+                        Text("From your phone’s GPS, so treat it as training feedback, not a measurement. Each score feeds your Handling stat.")
+                            .font(.archivo(12.5)).foregroundStyle(Theme.ink3)
+                    }
                 }
 
                 if let win = f.win, !win.isEmpty {
@@ -71,8 +84,13 @@ struct FlightDetailView: View {
                 }
 
                 if f.track.count >= 2 {
-                    Button { showSim = true } label: { Text("Fly it again in the simulator") }
+                    // a recorded flight replays exactly as flown (real heights and timing), with a clip of any landing to share
+                    let recorded = f.routeKind == "track" && f.track.contains { $0.t != nil }
+                    Button { showSim = true } label: { Text(recorded ? "Watch it in 3D" : "Fly it again in the simulator") }
                         .buttonStyle(.pill(.ink, height: 48, full: true, spark: true))
+                    if recorded {
+                        Text("Jump to each landing and save a 15-second clip to share.").font(.archivo(12.5)).foregroundStyle(Theme.ink3)
+                    }
                 }
                 ErrorText(text: error)
                 Button("Delete flight", role: .destructive) { confirmDelete = true }
@@ -88,7 +106,15 @@ struct FlightDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("Edit") { editing = true }.fontWeight(.semibold) }
         .sheet(isPresented: $editing) { FlightFormView(editing: f) }
-        .fullScreenCover(isPresented: $showSim) { SimulatorView() }
+        .fullScreenCover(isPresented: $showSim) { SimulatorView(url: replayURL) }
+    }
+
+    /// Opens the simulator straight into this flight's replay.
+    private var replayURL: URL {
+        var c = URLComponents(string: "https://boplo.app/flight-app.html")!
+        c.queryItems = [.init(name: "embed", value: "1"), .init(name: "replay", value: f.id)]
+        c.fragment = "sim"
+        return c.url ?? WebFeature.sim.url
     }
 
     private func big(_ label: String, _ value: String) -> some View {

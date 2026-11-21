@@ -2649,7 +2649,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=6', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=11', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=84', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=9', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=85', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2697,6 +2697,9 @@
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,
         fromElevFt: !PRfin && near(dep, points[0]) && Number.isFinite(dep.elev) ? dep.elev : null, toElevFt: near(arr, points[points.length - 1]) && Number.isFinite(arr.elev) ? arr.elev : null,
         depEnd: src.depEnd || '', arrEnd: src.arrEnd || '',
+        // a GPS-recorded flight with heights and times replays exactly as flown
+        track: mode === 'replay' && src.routeKind === 'track' && (src.points || []).filter(x => Number.isFinite(+x.t)).length >= 10 ? src.points : null,
+        trackLandings: Array.isArray(src.landingsAt) ? src.landingsAt : [],
         runwayHdg: rwyHdg(dep), land: PRc?.kind !== 'takeoff', aircraftId: simAircraft(src), livery: ui.sim.livery || null, radio: PRc && ui.sim.radio !== false && isAdv() ? simRadio(PRc.kind, dep, PRc.end, wind) : null, noRetry: !!src.freeTry,
         onResult: PRc && !PRc.scn && !preview && !p.boardsOff ? r => api('community/scores', 'POST', { ...r, ap: upper(src.departure), aircraft: (window.BoploAircraft?.byId(simAircraft(src))?.name) || '', challenge: !!src.challenge }).then(x => `#${x.me?.rank} of ${x.total} at ${upper(src.departure)} this week${x.daily ? ` · #${x.daily.rank} in today’s challenge` : ''}`) : null,
         onUpgrade: () => upgradeSheet('Unlimited practice: take-offs, circuits, long and short finals at any airfield, and flying your own routes.'),
@@ -3785,6 +3788,9 @@
         }
         const data = { cost: v.cost === '' ? null : Number(v.cost), date: v.date, minutes, departure: v.departure.trim(), arrival: v.arrival.trim(), aircraft: v.aircraft, registration: v.registration, role: v.role || 'dual', landings: Number(v.landings || 0), nightLandings: Math.min(Number(v.nightLandings || 0), Number(v.landings || 0)), instructor: v.instructor, lesson: v.lesson, notes: v.notes, points, routeKind: kind };
         data.win = String(v.win || '').trim().slice(0, 200);
+        // a track recorded on the phone keeps its heights, times and landing scores when the entry is edited here
+        if (editing && f.routeKind === 'track' && f.points?.length === points.length && f.points.some(x => x.t != null)) data.points = f.points;
+        if (editing) for (const k of ['nightMinutes', 'xcNM', 'landingsAt', 'landingScores']) if (f[k] != null) data[k] = f[k];
         btn.disabled = true; const msBefore = new Set(milestones().map(m => m.title));
         let saved, queued = false;
         try { saved = preview ? { flight: { ...data, id: f.id || 'demo-' + Math.random().toString(36).slice(2) } } : await api(editing ? 'flights/' + f.id : 'flights', editing ? 'PUT' : 'POST', data); }
@@ -4163,6 +4169,9 @@
     // the native app opens the simulator straight into a practice approach: ?embed=1&practice=CODE&rw=05&kind=short&wx=gusty&challenge=1#sim
     if (embedded && k === 'sim' && !ui.embedPractice) {
       const q = new URLSearchParams(location.search), code = q.get('practice');
+      // ?replay=FLIGHT_ID opens a logged flight straight into its replay (the app's "Watch it in 3D")
+      const rid = q.get('replay'), rf = rid && state.flights.find(x => x.id === rid);
+      if (rf) { ui.embedPractice = true; setTimeout(() => openSim(rf, 'replay'), 300); }
       if (code) { ui.embedPractice = true; const af = { code, name: q.get('name') || code, runway: q.get('rw') || '' }; setTimeout(() => openPractice(code, q.get('rw') || '', q.get('kind') || 'short', { weather: q.get('wx') || undefined, windLive: q.get('wind') === 'live', challenge: q.get('challenge') === '1', af }), 300); }
     }
   }

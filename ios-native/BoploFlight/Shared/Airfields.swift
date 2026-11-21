@@ -104,6 +104,19 @@ actor AirfieldStore {
         }.filter { $0.id.first?.isNumber == true }
     }
 
+    /// Each runway end with the position of its threshold, for scoring landings from a recorded track.
+    func runwayThresholds(_ af: Airfield) async -> [(id: String, thr: TrackPoint, hdg: Double)] {
+        if runwayRows[af.country] == nil, let obj = await fetch("runways/\(af.country).json") as? [String: Any], let rows = obj["rows"] as? [String: [[Any]]] {
+            runwayRows[af.country] = rows
+        }
+        func d(_ r: [Any], _ i: Int) -> Double? { r.count > i ? (r[i] as? NSNumber)?.doubleValue : nil }
+        return (runwayRows[af.country]?[af.code] ?? []).flatMap { r -> [(id: String, thr: TrackPoint, hdg: Double)] in
+            guard let a1 = d(r, 2), let o1 = d(r, 3), let a2 = d(r, 4), let o2 = d(r, 5) else { return [] }
+            let p1 = TrackPoint(lat: a1, lng: o1), p2 = TrackPoint(lat: a2, lng: o2)
+            return [(r[0] as? String ?? "", p1, Geo.bearing(p1, p2)), (r[1] as? String ?? "", p2, Geo.bearing(p2, p1))]
+        }.filter { !$0.id.isEmpty }
+    }
+
     /// "EGHP · Popham" → "EGHP"
     static func code(_ raw: String?) -> String {
         let a = (raw ?? "").trimmingCharacters(in: .whitespaces).uppercased()

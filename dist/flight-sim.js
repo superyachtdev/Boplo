@@ -118,7 +118,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=24'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=25'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -633,6 +633,8 @@ window.BoploSim = (() => {
         <div class="sim-speeds" role="group" aria-label="Replay speed">${[1, 2, 4, 8, 16, 32].map(x => `<button type="button" data-rate="${x}">${x}×</button>`).join('')}</div>
         <input type="range" min="0" max="1000" value="0" data-scrub aria-label="Position along the route">
         <span class="sim-time" data-time>0:00</span>
+        <div class="sim-ldgs" data-ldgs hidden></div>
+        <button type="button" class="sim-b sim-clip" data-clip hidden aria-label="Save a clip of this landing">Save clip</button>
       </div>
       <div class="sim-touch" data-touch hidden>
         <div class="sim-stick" data-stick><i data-knob></i><span>Pull back to climb</span></div>
@@ -1799,8 +1801,53 @@ window.BoploSim = (() => {
       sync(); path.reset(); path.seed(s);
     }
     const replay = O.mode === 'replay';
+    // ---- true replay of a recorded flight: the aircraft follows the phone's GPS track (position, height and
+    // time) instead of being flown along the route by the autopilot. Heights are pinned to the scenery while
+    // taxiing, which also corrects the GPS altitude bias for the rest of the flight.
+    const TRK = (() => {
+      if (!replay || !Array.isArray(O.track) || O.track.length < 10) return null;
+      const pts = O.track.filter(p => Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Number.isFinite(+p.t)).sort((a, b) => a.t - b.t);
+      if (pts.length < 10) return null;
+      const t0 = +pts[0].t, xy = pts.map(p => F.to(+p.lat, +p.lng));
+      const T = { n: pts.length, x: xy.map(q => q[0]), z: xy.map(q => q[1]), t: pts.map(p => +p.t - t0), kt: pts.map(p => Number.isFinite(+p.kt) ? +p.kt : NaN), alt: pts.map(p => Number.isFinite(+p.alt) ? +p.alt * FT : NaN) };
+      // fill speeds missing from the recording from the distance between points
+      for (let i = 0; i < T.n; i++) if (!Number.isFinite(T.kt[i])) { const a = Math.max(0, i - 1), b = Math.min(T.n - 1, i + 1), dt = T.t[b] - T.t[a]; T.kt[i] = dt > 0 ? Math.hypot(T.x[b] - T.x[a], T.z[b] - T.z[a]) / dt / KT : 0; }
+      T.end = T.t[T.n - 1];
+      T.ldg = (O.trackLandings || []).map(v => +v - t0).filter(v => v > 0 && v < T.end);
+      return T;
+    })();
+    let trT = 0, trI = 0, trBias = null;
+    const trAt = (arr, t) => { let i = trI; while (i < TRK.n - 2 && TRK.t[i + 1] <= t) i++; while (i > 0 && TRK.t[i] > t) i--; const a = i, b = Math.min(TRK.n - 1, i + 1), f = TRK.t[b] > TRK.t[a] ? clamp((t - TRK.t[a]) / (TRK.t[b] - TRK.t[a]), 0, 1) : 0; return arr[a] + (arr[b] - arr[a]) * f; };
+    function trackStep(dt) {
+      st.t += dt; trT = clamp(trT + dt, 0, TRK.end);
+      while (trI < TRK.n - 2 && TRK.t[trI + 1] <= trT) trI++; while (trI > 0 && TRK.t[trI] > trT) trI--;
+      const x = trAt(TRK.x, trT), z = trAt(TRK.z, trT), kt = trAt(TRK.kt, trT);
+      // direction and turn rate over a few seconds either side, so heading and bank stay smooth
+      const xa = trAt(TRK.x, trT - 2), za = trAt(TRK.z, trT - 2), xb = trAt(TRK.x, trT + 2), zb = trAt(TRK.z, trT + 2);
+      const moving = Math.hypot(xb - xa, zb - za) > 3;
+      const hdg = moving ? norm360(Math.atan2(xb - xa, zb - za) * R2D) : (fs.hdg ?? 0);
+      const h1 = norm360(Math.atan2(xa - trAt(TRK.x, trT - 6), za - trAt(TRK.z, trT - 6)) * R2D), h2 = norm360(Math.atan2(trAt(TRK.x, trT + 6) - xb, trAt(TRK.z, trT + 6) - zb) * R2D);
+      const turn = moving ? (((h2 - h1) % 360 + 540) % 360 - 180) / 8 : 0;
+      const gnd = rwHeight(x, z) ?? elevAt(x, z) ?? g0;
+      let alt = trAt(TRK.alt, trT);
+      const onGround = kt < 38 || !Number.isFinite(alt);
+      if (Number.isFinite(alt)) {
+        alt += geoN;
+        if (onGround) { const b = alt - gnd; trBias = trBias == null ? b : trBias + (b - trBias) * Math.min(1, dt * .5); }
+        alt -= trBias ?? 0;
+      }
+      if (onGround || !Number.isFinite(alt) || alt < gnd) alt = gnd;
+      const vs = dt > 0 ? (alt - (fs.alt ?? alt)) / dt : 0;
+      Object.assign(fs, { x, z, alt, hdg, trk: hdg, gs: kt * KT, ias: kt * KT, vs: clamp(vs, -15, 15), ground: alt - gnd < .6, agl: alt - gnd,
+        pitch: alt - gnd < .6 ? 0 : clamp(Math.atan2(vs, Math.max(20, kt * KT)) * R2D + 2, -12, 15), bank: clamp(Math.atan(kt * KT * turn * D2R / G) * R2D, -50, 50),
+        turn, power: vs > 1 ? .9 : kt < 15 ? .1 : .55, rpm: vs > 1 ? 2400 : kt < 15 ? 900 : 2100, stallWarn: false, crashed: false, landed: false });
+      sync();
+    }
+    const trTimeAt = frac => { const s = frac * L; let best = 0, bd = Infinity; for (let i = 0; i < TRK.n; i += Math.max(1, Math.floor(TRK.n / 600))) { const d = Math.abs(path.project(TRK.x[i], TRK.z[i]).s - s); if (d < bd) { bd = d; best = TRK.t[i]; } } return best; };
+    const trJump = t => { trT = clamp(t, 0, TRK.end); trI = 0; trackStep(0); flownPts.length = 0; flownLine.positions = []; };
     const INHG = /^(US|CA)$/.test(O.country || '');
     place(0, !groundStart);
+    if (TRK) trackStep(0);
 
     /* ---- input ---- */
     const keys = new Set(), ctl = { roll: 0, pitch: 0, yaw: 0 };
@@ -2108,6 +2155,7 @@ window.BoploSim = (() => {
 
     /* ---- flight model ---- */
     function step(dt) {
+      if (TRK) { trackStep(dt); return; }
       st.t += dt;
       FM.step(dt, windAt(dt));
       if (!datumFixed && groundStart) { const gr = elevAt(st.x, st.z); if (gr != null && Math.hypot(st.x - P[0][0], st.z - P[0][1]) < 600) fixDatum(gr + (rwSt.length && depE ? .35 : 0)); }
@@ -2301,7 +2349,8 @@ window.BoploSim = (() => {
         else if (!st.ground && landEnd && L - pr.s < 2500 && L - pr.s > 300) tip = 'Line up with the route, reduce power and descend gently to land';
       }
       if (tip !== tipText) { tipText = tip; tipEl.textContent = tip; tipEl.classList.toggle('on', !!tip); }
-      if (replay) { H.time.textContent = `${mmss(st.t)} · ${(pr.s / NM).toFixed(1)}/${(L / NM).toFixed(1)} NM`; if (document.activeElement !== H.scrub) H.scrub.value = Math.round(pr.s / L * 1000); }
+      if (replay && TRK) { H.time.textContent = `${mmss(trT)} / ${mmss(TRK.end)}`; if (document.activeElement !== H.scrub) H.scrub.value = Math.round(trT / TRK.end * 1000); }
+      else if (replay) { H.time.textContent = `${mmss(st.t)} · ${(pr.s / NM).toFixed(1)}/${(L / NM).toFixed(1)} NM`; if (document.activeElement !== H.scrub) H.scrub.value = Math.round(pr.s / L * 1000); }
       return pr;
     }
 
@@ -2436,9 +2485,45 @@ window.BoploSim = (() => {
     $('[data-mute]').classList.toggle('off', store.get('mute', false));
     $('[data-gates]').setAttribute('aria-pressed', String(showGates)); $('[data-gates]').onclick = () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]').setAttribute('aria-pressed', String(showGates)); };
     if (replay) { $('[data-ap]').hidden = true; $('[data-replaybar]').hidden = false; }
+    // a recorded flight: jump straight to each landing, and save a short clip of one to share
+    let clipFrom = null;
+    if (TRK && TRK.ldg.length) {
+      const box = $('[data-ldgs]'); box.hidden = false;
+      box.innerHTML = TRK.ldg.map((t, i) => `<button type="button" data-ldg="${i}">Landing ${i + 1}</button>`).join('');
+      box.querySelectorAll('[data-ldg]').forEach(b => b.onclick = () => { const t = TRK.ldg[+b.dataset.ldg]; clipFrom = t; trJump(Math.max(0, t - 25)); rate = 1; store.set('rate', rate); rateBtns?.(); if (paused) togglePause(false); });
+    }
+    const clipBtn = $('[data-clip]');
+    if (TRK && window.MediaRecorder && scene.canvas.captureStream) { clipBtn.hidden = false; clipBtn.onclick = () => saveClip(); }
+    async function saveClip() {
+      if (clipBtn.disabled) return; clipBtn.disabled = true;
+      const at = clipFrom ?? (TRK.ldg.find(t => t > trT - 5) ?? trT + 15);
+      trJump(Math.max(0, at - 16)); rate = 1; rateBtns?.(); if (paused) togglePause(false);
+      try {
+        const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+        const rec = new MediaRecorder(scene.canvas.captureStream(30), type ? { mimeType: type, videoBitsPerSecond: 6e6 } : undefined), chunks = [];
+        rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        const done = new Promise(r => { rec.onstop = r; });
+        rec.start(500);
+        for (let n = 15; n > 0; n--) { clipBtn.textContent = `Recording ${n} s`; await new Promise(r => setTimeout(r, 1000)); }
+        rec.stop(); await done;
+        const blob = new Blob(chunks, { type: rec.mimeType || type || 'video/mp4' }), ext = /mp4/.test(blob.type) ? 'mp4' : 'webm';
+        clipBtn.textContent = 'Preparing…';
+        if (window.webkit?.messageHandlers?.boplo) {
+          // the iPhone app saves it and opens the share sheet
+          const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(',')[1] || ''); fr.readAsDataURL(blob); });
+          window.webkit.messageHandlers.boplo.postMessage({ type: 'shareVideo', data: b64, ext });
+        } else {
+          const file = new File([blob], `boplo-landing.${ext}`, { type: blob.type });
+          if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'My landing' }).catch(() => { });
+          else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+        }
+        tipNow = 'Clip saved'; tipUntil = performance.now() + 2500;
+      } catch (e) { tipNow = 'This device couldn’t record a clip'; tipUntil = performance.now() + 3000; }
+      clipBtn.textContent = 'Save clip'; clipBtn.disabled = false;
+    }
     const rateBtns = () => $$('[data-rate]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.rate === rate)));
     $$('[data-rate]').forEach(b => b.onclick = () => { rate = +b.dataset.rate; store.set('rate', rate); rateBtns(); }); rateBtns();
-    H.scrub.oninput = () => { const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flownPts.length = 0; flownLine.positions = []; };
+    H.scrub.oninput = () => { if (TRK) { trJump(H.scrub.value / 1000 * TRK.end); return; } const s = H.scrub.value / 1000 * L; const air = prof(s) - (elevAt(...path.at(s).slice(0, 2)) ?? g0) > 30; place(s, air); flownPts.length = 0; flownLine.positions = []; };
     $('[data-sub]').textContent = [O.subtitle, replay ? 'Replay' : 'Fly it', wind.spd ? `Wind ${pad3(wind.dir)}°/${wind.spd}${gustKt ? 'G' + gustKt : ''} kt` : 'Calm', ...cloudLayers.map(c => `${c.cover}${String(Math.round((c.real ?? c.base) / 100)).padStart(3, '0')}`), visM < 9999 ? `Vis ${(visM / 1000).toFixed(visM < 5000 ? 1 : 0)} km` : ''].filter(Boolean).join(' · ');
 
     /* ---- ready card ---- */
@@ -2633,6 +2718,7 @@ window.BoploSim = (() => {
           const dt = Math.min(.04, simT); simT -= dt;
           if (apOn) autopilot(dt);
           step(dt);
+          if (TRK) { score.t += dt; if (trT >= TRK.end) { finish('done'); break; } continue; }
           // score
           score.t += dt; const pr = path.project(st.x, st.z); score.dist += Math.hypot(st.x - lastX, st.z - lastZ); lastX = st.x; lastZ = st.z; score.maxAlt = Math.max(score.maxAlt, st.alt);
           if (!st.ground) { score.n++; score.xteSum += pr.d; const ae = Math.abs(st.alt - prof(pr.s)); if (pr.d < (circuit ? 90 : 140) / 2 + 60 && ae < 250 * FT) score.tube++; }

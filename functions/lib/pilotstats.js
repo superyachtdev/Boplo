@@ -50,7 +50,11 @@ export function computeStats(profile, flights, sims, today = Math.floor(Date.now
   const fl = Array.isArray(flights) ? flights : [];
   const totalH = fl.reduce((a, f) => a + (+f.minutes || 0), 0) / 60 + (+p.openingMinutes || 0) / 60;
   const h30 = fl.filter(f => today - dayOf(f.date) <= 30).reduce((a, f) => a + (+f.minutes || 0), 0) / 60;
-  const realH = 100 * (.6 * Math.min(1, totalH / 45) + .4 * Math.min(1, h30 / 5));
+  // landing scores from flights recorded on the phone in the last 30 days: how well the student actually flies
+  const real = fl.filter(f => today - dayOf(f.date) <= 30).flatMap(f => Array.isArray(f.landingScores) ? f.landingScores.map(l => +l.s).filter(Number.isFinite) : []).slice(-12);
+  const realLdg = real.length ? real.reduce((a, b) => a + b, 0) / real.length : null;
+  const realH = realLdg == null ? 100 * (.6 * Math.min(1, totalH / 45) + .4 * Math.min(1, h30 / 5))
+    : 100 * (.45 * Math.min(1, totalH / 45) + .25 * Math.min(1, h30 / 5)) + .3 * realLdg * Math.min(1, .5 + real.length * .1);
   const best = (Array.isArray(sims) ? sims : []).map(s => +s.score || 0).sort((a, b) => b - a).slice(0, 5);
   const simH = best.length ? best.reduce((a, b) => a + b, 0) / best.length * Math.min(1, .6 + best.length * .08) : 0;
   const H = clamp(Math.round(realH * .55 + simH * .45));
@@ -73,7 +77,7 @@ export function computeStats(profile, flights, sims, today = Math.floor(Date.now
   return {
     knowledge: K, handling: H, airmanship: A, rating, tier: tierOf(rating),
     current: { days: currentDays, sortieToday: lastSortie === today, sorties30: sorties.length },
-    parts: { readiness: Math.round(readiness), mockAvg: mockAvg == null ? null : Math.round(mockAvg), totalHours: +totalH.toFixed(1), hours30: +h30.toFixed(1), simBest: best.length ? Math.round(best[0]) : null, sortieCalls: calls ? Math.round(good / calls * 100) : null, radio: radio.length ? Math.round(radio.reduce((a, b) => a + b, 0) / radio.length) : null, medicalCurrent: !!docsA }
+    parts: { readiness: Math.round(readiness), mockAvg: mockAvg == null ? null : Math.round(mockAvg), totalHours: +totalH.toFixed(1), hours30: +h30.toFixed(1), simBest: best.length ? Math.round(best[0]) : null, realLandings: real.length, realLandingAvg: realLdg == null ? null : Math.round(realLdg), sortieCalls: calls ? Math.round(good / calls * 100) : null, radio: radio.length ? Math.round(radio.reduce((a, b) => a + b, 0) / radio.length) : null, medicalCurrent: !!docsA }
   };
 }
 

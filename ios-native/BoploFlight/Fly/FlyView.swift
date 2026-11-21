@@ -5,9 +5,12 @@ import MapKit
 struct FlyView: View {
     @State private var recorder = FlightRecorder()
     @State private var saving = false
+    @State private var recorded: RecordedFlight?
+    @State private var analysing = false
     @State private var showSim = false
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var traffic = LiveTraffic()
+    @State private var confirmDiscard = false
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -19,8 +22,11 @@ struct FlyView: View {
             }
             .logFlightButton(model)
             .boploDestinations()
-            .sheet(isPresented: $saving, onDismiss: { recorder.reset() }) {
-                FlightFormView(track: recorder.points, recordedMinutes: recorder.elapsedMinutes)
+            // closing the form without saving keeps the recording, so it can be saved later
+            .sheet(isPresented: $saving) {
+                FlightFormView(track: recorder.points, recordedMinutes: recorder.elapsedMinutes, recorded: recorded) {
+                    recorder.saved(); recorded = nil
+                }
             }
             .fullScreenCover(isPresented: $showSim) { SimulatorView() }
         }
@@ -130,7 +136,7 @@ struct FlyView: View {
                     }
                 }
             } else {
-                Text("Start before you taxi and stop after you shut down. The track keeps recording with the screen locked, then saves to your logbook.")
+                Text("Start before you taxi and stop after you shut down. It records with the screen locked and no signal, spots your takeoffs and landings, scores each landing, and fills in the logbook for you.")
                     .font(.archivo(14.5)).foregroundStyle(Theme.ink3)
             }
 
@@ -140,11 +146,31 @@ struct FlyView: View {
                 Button {
                     recorder.stop()
                     Haptic.tap(.heavy)
-                    saving = true
+                    Task { await review() }
                 } label: {
                     Label("Stop and save", systemImage: "stop.fill")
                 }
                 .primaryStyle(tint: Theme.danger)
+            } else if recorder.unsaved {
+                // a recording that isn't in the logbook yet: no signal at the airfield, the form was closed, or the app was closed
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Recorded flight not in your logbook yet")
+                        .font(.archivo(15.5, .semibold))
+                    Text("\(recorder.startedAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "") · \(hoursText(recorder.elapsedMinutes)) · kept on this phone until you save it.")
+                        .font(.archivo(13.5)).foregroundStyle(Theme.ink3)
+                    HStack(spacing: 10) {
+                        Button { Task { await review() } } label: {
+                            HStack { if analysing { ProgressView().tint(.white) }; Text(analysing ? "Working it out…" : "Save to logbook") }
+                        }
+                        .primaryStyle(full: false)
+                        .disabled(analysing)
+                        Button("Discard", role: .destructive) { confirmDiscard = true }
+                            .buttonStyle(.pill(.line, height: 46))
+                    }
+                }
+                .confirmationDialog("Discard this recording?", isPresented: $confirmDiscard, titleVisibility: .visible) {
+                    Button("Discard recording", role: .destructive) { recorder.discard(); recorded = nil }
+                } message: { Text("The track is deleted from this phone. This can’t be undone.") }
             } else {
                 Button {
                     recorder.start()
@@ -170,6 +196,15 @@ struct FlyView: View {
                 .buttonStyle(.pill(.light, height: 48, spark: true))
                 .padding(.top, 4)
         }
+    }
+
+    /// Works out takeoffs, landings, airfields, night and landing scores, then opens the logbook form.
+    private func review() async {
+        guard let start = recorder.startedAt else { return }
+        analysing = true
+        recorded = await FlightAnalysis.analyse(recorder.points, startedAt: start, endedAt: recorder.endedAt ?? Date(), country: model.countryCode)
+        analysing = false
+        saving = true
     }
 
     private func readout(_ label: String, _ value: String) -> some View {

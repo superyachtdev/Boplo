@@ -22,6 +22,14 @@ struct SimulatorView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.upgrade(message["message"] as? String) }
                 case "close": dismiss()
                 case "sim": withAnimation(.easeInOut(duration: 0.2)) { flying = (message["active"] as? Bool) ?? false }
+                case "shareVideo":
+                    // a landing clip recorded in the replay: save it and open the share sheet
+                    if let b64 = message["data"] as? String, let data = Data(base64Encoded: b64) {
+                        let ext = (message["ext"] as? String) == "webm" ? "webm" : "mp4"
+                        let url = FileManager.default.temporaryDirectory.appendingPathComponent("boplo-landing.\(ext)")
+                        try? data.write(to: url, options: .atomic)
+                        Task { @MainActor in ShareSheet.present([url]) }
+                    }
                 default: break
                 }
             }
@@ -57,5 +65,20 @@ struct SimulatorView: View {
         // The simulator is landscape only; the rest of the app stays portrait.
         .onAppear { Orientation.allow(.landscape) }
         .onDisappear { Orientation.allow(.portrait); Task { await model.refresh() } }
+    }
+}
+
+
+/// Presents the system share sheet over whatever is on screen (used from inside the full-screen simulator).
+enum ShareSheet {
+    @MainActor
+    static func present(_ items: [Any]) {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+              var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController else { return }
+        while let next = top.presentedViewController { top = next }
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        vc.popoverPresentationController?.sourceView = top.view
+        vc.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 1, height: 1)
+        top.present(vc, animated: true)
     }
 }

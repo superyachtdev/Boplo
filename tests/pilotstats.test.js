@@ -14,3 +14,11 @@ test('pilot stats stay in range and reward real training', () => {
   assert.equal(busy.current.days, 3);
   assert.equal(tierOf(76).name, 'Checkride Ready');
 });
+
+test('recorded landing scores lift Handling', () => {
+  const today = 20400, iso = new Date(today * 864e5).toISOString().slice(0, 10);
+  const plain = computeStats({}, [{ date: iso, minutes: 600 }], [], today);
+  const scored = computeStats({}, [{ date: iso, minutes: 600, landingScores: [{ s: 90 }, { s: 85 }, { s: 88 }] }], [], today);
+  assert.ok(scored.handling > plain.handling);
+  assert.equal(scored.parts.realLandings, 3);
+});

@@ -75,6 +75,10 @@ struct Profile: Decodable {
 struct TrackPoint: Codable, Hashable {
     let lat: Double
     let lng: Double
+    /// Recorded tracks only: GPS altitude in feet MSL, seconds since the recording started, groundspeed in knots.
+    var alt: Double? = nil
+    var t: Double? = nil
+    var kt: Double? = nil
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lng) }
 }
 
@@ -96,6 +100,11 @@ struct Flight: Decodable, Identifiable, Hashable {
     @Lenient var cost: Double?
     @Lenient var points: [TrackPoint]?
     @Lenient var routeKind: String?
+    /// Worked out from a recorded track: night minutes, furthest distance from the departure, landing times and scores.
+    @Lenient var nightMinutes: Double?
+    @Lenient var xcNM: Double?
+    @Lenient var landingsAt: [Double]?
+    @Lenient var landingScores: [LandingScore]?
 
     static func == (a: Flight, b: Flight) -> Bool { a.id == b.id }
     func hash(into h: inout Hasher) { h.combine(id) }
@@ -166,4 +175,18 @@ struct CheckItem: Identifiable, Hashable {
             .map { "[\($0.done ? "x" : " ")] \($0.text.trimmingCharacters(in: .whitespaces))" }
             .joined(separator: "\n").prefix(3000))
     }
+}
+
+
+/// One landing from a recorded flight, scored from the phone's GPS. Training feedback, not a measurement.
+struct LandingScore: Codable, Hashable {
+    var s: Double
+    var t: Double
+    /// Approach speed variation over the last minute (kt), glidepath error (ft RMS), centreline offset (m), touchdown distance past the threshold (ft).
+    var spd: Double?
+    var gp: Double?
+    var cl: Double?
+    var tz: Double?
+    var rw: String?
+    var ap: String?
 }
