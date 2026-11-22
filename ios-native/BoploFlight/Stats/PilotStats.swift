@@ -74,6 +74,7 @@ struct PilotCard: View {
     @State private var store = PilotStatsStore.shared
     @State private var sortie = false
     @State private var shareImage: Image?
+    @State private var router = NotificationRouter.shared
 
     var body: some View {
         DarkTile(spacing: 16, seed: 5.1) {
@@ -111,6 +112,10 @@ struct PilotCard: View {
         }
         .task(id: model.flights.count) { await store.refresh() }
         .fullScreenCover(isPresented: $sortie, onDismiss: { Task { await store.refresh() } }) { SortieView() }
+        // a tapped morning or evening reminder opens today's sortie
+        .onChange(of: router.route, initial: true) { _, route in
+            if route == "sortie" { router.route = nil; sortie = true }
+        }
     }
 
     @ViewBuilder

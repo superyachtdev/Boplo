@@ -137,6 +137,7 @@ struct RouteArc: View {
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    @State private var router = NotificationRouter.shared
     @Environment(\.requestReview) private var requestReview
     @State private var celebrating: Milestone?
     @State private var flightCount: Int?
@@ -195,6 +196,15 @@ struct MainTabs: View {
         .task(id: model.profile?.study) { await Reminders.refresh(model) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await Reminders.refresh(model) } }
+        }
+        // a tapped reminder: the question of the day and review nudges open Study; sortie nudges go to the
+        // Desk, where the pilot card opens today's sortie
+        .onChange(of: router.route, initial: true) { _, route in
+            switch route {
+            case "study": model.tab = .study; router.route = nil
+            case "sortie": model.tab = .desk
+            default: break
+            }
         }
     }
 }
