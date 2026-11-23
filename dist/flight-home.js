@@ -160,7 +160,8 @@
   // low-memory or few-core phones get the still version of the hero instead of the 3D flight
   // (iPhones report few cores and no memory figure, so only a phone that reports very little memory gets the still)
   const lowEnd = matchMedia('(max-width: 820px)').matches && navigator.deviceMemory != null && navigator.deviceMemory <= 2;
-  const gl = !reduce && !lowEnd && canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
+  const phone = matchMedia('(max-width: 820px)').matches;
+  const gl = !reduce && !lowEnd && canvas.getContext('webgl2', { antialias: !phone, alpha: false, powerPreference: 'high-performance', desynchronized: true });
 
   if (!gl) {
     doc.classList.add('static');
@@ -478,7 +479,7 @@
   });
 
   /* ---------------- sizing ---------------- */
-  let W = 1, H = 1, DPR = 1, dprCap = mobile ? 1.5 : 1.75;
+  let W = 1, H = 1, DPR = 1, dprCap = mobile ? 1.3 : 1.75;
   function resize() {
     const r = frame.getBoundingClientRect();
     W = Math.max(1, r.width); H = Math.max(1, r.height);
@@ -490,7 +491,9 @@
 
   /* ---------------- scroll ---------------- */
   let target = 0, prog = 0;
+  let lastInput = 0;
   const readScroll = () => {
+    lastInput = performance.now();
     const r = section.getBoundingClientRect();
     target = clamp(-r.top / Math.max(1, r.height - innerHeight));
     navTone();
@@ -530,14 +533,19 @@
   let lastStage = -1, lastStop = -1, logged = false, settle = false;
   window.__boploSettle = () => { settle = true; reveal = 1; };
 
-  let slowT = 0;
+  let slowT = 0, frameNo = 0;
+  // text in the HUD only changes when its value does (rewriting it every frame forces the page to re-measure)
+  const setText = (el, v) => { v = String(v); if (el && el._t !== v) { el._t = v; el.textContent = v; } };
   function frameLoop(now) {
     requestAnimationFrame(frameLoop);
     lenis && lenis.raf(now);
+    if (!visible && started) { last = now; return; }
+    // on a phone, once the scene has settled and nobody is scrolling, draw every other frame:
+    // the slow drift still looks smooth and the phone has headroom the moment scrolling starts
+    if (mobile && started && reveal >= 1 && Math.abs(target - prog) < 1e-3 && now - lastInput > 400 && (frameNo++ & 1)) return;
     const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now;
-    if (!visible && started) return;
     // struggling device: drop the render resolution step by step (keeps the motion smooth)
-    if (started && raw < .5) { slowT = raw > .034 ? slowT + raw : Math.max(0, slowT - raw * .5); if (slowT > 1.5 && dprCap > 1) { dprCap = Math.max(1, dprCap - .25); slowT = 0; resize(); } }
+    if (started && raw < .5 && now - lastInput < 400) { slowT = raw > .034 ? slowT + raw : Math.max(0, slowT - raw * .5); if (slowT > 1.5 && dprCap > 1) { dprCap = Math.max(1, dprCap - .25); slowT = 0; resize(); } }
     started = true;
     const time = (now - t0) / 1000;
     reveal = Math.min(1, reveal + dt / 2.6);
@@ -663,14 +671,15 @@
       return [(cx / cw * .5 + .5) * W, (1 - (cy / cw * .5 + .5)) * H];
     };
     const sp = proj(ac.x, ac.y, ac.z), gp = proj(ac.x, ac.g, ac.z);
-    if (sp) { craft.style.transform = `translate3d(${sp[0]}px,${sp[1]}px,0)`; craft.classList.toggle('show', rv > .6); }
+    const moveTo = (el, x, y) => { const v = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`; if (el._t !== v) { el._t = v; el.style.transform = v; } };
+    if (sp) { moveTo(craft, sp[0], sp[1]); craft.classList.toggle('show', rv > .6); }
     if (sp && gp && ac.air > .05) { drop.setAttribute('x1', sp[0]); drop.setAttribute('y1', sp[1]); drop.setAttribute('x2', gp[0]); drop.setAttribute('y2', gp[1]); drop.style.opacity = ac.air; }
     else drop.style.opacity = 0;
     const showLabels = rv > .8 && prog > .045;
     labels.forEach((l, i) => {
       const s = proj(l.x, l.y, l.z);
       const on = showLabels && s && s[0] > 70 && s[0] < W - 70 && s[1] > 110 && s[1] < H - 110;
-      if (s) l.el.style.transform = `translate3d(${s[0]}px,${s[1]}px,0)`;
+      if (s) moveTo(l.el, s[0], s[1]);
       l.el.classList.toggle('show', !!on);
       l.el.classList.toggle('passed', planeT >= STOP_T[i] - .002);
     });
@@ -684,17 +693,17 @@
     let cur = 0; STOP_T.forEach((t, i) => { if (planeT >= t - .002) cur = i; });
     if (cur !== lastStop) {
       stops.forEach((s, i) => { s.classList.toggle('passed', i <= cur); s.classList.toggle('current', i === cur); });
-      nextEl.textContent = STOP_NAMES[Math.min(STOP_NAMES.length - 1, cur + 1)];
+      setText(nextEl, STOP_NAMES[Math.min(STOP_NAMES.length - 1, cur + 1)]);
       lastStop = cur;
     }
-    stopsFill.style.transform = `scaleX(${planeT})`;
+    { const v = `scaleX(${planeT.toFixed(4)})`; if (stopsFill._t !== v) { stopsFill._t = v; stopsFill.style.transform = v; } }
     const ahead = sampleRoute(Math.min(1, planeT + .004)), behind = sampleRoute(Math.max(0, planeT - .004));
     const hdg = (Math.atan2(ahead.x - behind.x, -(ahead.z - behind.z)) * 180 / Math.PI + 360) % 360;
     const field = height(-17, RUNWAY.z);
-    altEl.textContent = ac.air < .02 ? 0 : Math.round(Math.max(0, (ac.y - field) * 190 + 250 * ac.air) / 10) * 10;
-    hdgEl.textContent = String(Math.round(hdg / 1) % 360).padStart(3, '0');
+    setText(altEl, ac.air < .02 ? 0 : Math.round(Math.max(0, (ac.y - field) * 190 + 250 * ac.air) / 10) * 10);
+    setText(hdgEl, String(Math.round(hdg / 1) % 360).padStart(3, '0'));
     const groundRoll = planeT < STOP_T[1] - .01 ? smooth(0, STOP_T[1] * .6, planeT) : 1 - smooth(.985, 1, planeT);
-    gsEl.textContent = Math.round(lerp(groundRoll * 55, 95, ac.air));
+    setText(gsEl, Math.round(lerp(groundRoll * 55, 95, ac.air)));
     const isLogged = prog > .93;
     if (isLogged !== logged) { hud.classList.toggle('logged', isLogged); $('[data-hud-title]', hud).textContent = isLogged ? 'Lesson 12 · Logged' : 'Lesson 12 · Navigation'; logged = isLogged; }
   }
