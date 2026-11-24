@@ -2633,6 +2633,14 @@ window.BoploSim = (() => {
         <div class="sim-actions"><button type="button" class="sim-btn ghost" data-x>Done</button>${O.noRetry ? '<button type="button" class="sim-btn" data-more>Unlimited practice</button>' : `<button type="button" class="sim-btn" data-again>${replay ? 'Watch again' : 'Fly again'}</button>`}</div>`);
       wireX();
       { const L = kind === 'land' && !replay ? landingScore() : null; if (L && O.onResult) Promise.resolve(O.onResult({ ...L, kind: PR.kind, rw: arrE?.id || '' })).then(t => { const el = $('[data-rank]'); if (el) el.textContent = t || ''; }).catch(() => { const el = $('[data-rank]'); if (el) el.textContent = ''; }); }
+      // a sortie from the iPhone app: report how it went, then hand straight back to the sortie (no "fly again")
+      if (O.sortie) {
+        const L = kind === 'land' && !replay ? landingScore() : null, ac = $('.sim-actions:last-of-type') || $('.sim-actions');
+        try { O.onFinish && O.onFinish({ kind, crash: kind === 'crash' ? String(st.crash || '') : '', landing: L, fpm: st.touch ? Math.round(st.touch.fpm) : null, bank: st.touch ? Math.round(Math.abs(st.touch.bank)) : null }); } catch { }
+        if (ac) ac.innerHTML = '<button type="button" class="sim-btn" data-x>Back to your sortie</button><small class="sim-note" data-sback></small>';
+        wireX(); let n = 5; const tick = () => { if (!alive) return; const el = $('[data-sback]'); if (el) el.textContent = `Returning in ${n} s`; if (n-- <= 0) return destroy(); setTimeout(tick, 1000); }; tick();
+        return;
+      }
       if (O.noRetry) { $('[data-more]').onclick = () => { destroy(); O.onUpgrade && O.onUpgrade(); }; return; }
       $('[data-again]').onclick = () => { ended = false; if (RAD) { rPend.length = 0; RAD.calls.forEach(c => rPend.push({ ...c })); radioLog.length = 0; rStartT = 0; rBusy = false; radioHide(); } Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
     }

@@ -194,6 +194,14 @@ struct MainTabs: View {
         }
         .task { ReviewAsk.noteOpen() }
         .task(id: model.profile?.study) { await Reminders.refresh(model) }
+        // reminders are on by default: the first time someone reaches the app proper (after onboarding and the trial),
+        // ask iOS for permission once, a moment after the desk appears; if they allow it, the 3-a-day schedule starts
+        .task {
+            guard !Reminders.decided else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Reminders.decided else { return }
+            _ = await Reminders.enable(hour: 19, minute: 0, model: model)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await Reminders.refresh(model) } }
         }

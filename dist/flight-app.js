@@ -2649,7 +2649,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=6', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=11', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=10', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=87', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=10', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=88', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2691,7 +2691,10 @@
       if (!googleKey) { try { googleKey = (await fetch('/flight/simkey').then(r => r.ok ? r.json() : {})).key || ''; } catch { } }
       // tell the iPhone app a flight is running, so it hides its own close button (the simulator has one)
       bridge({ type: 'sim', active: true });
-      Sim.open({ onClose: () => bridge({ type: 'sim', active: false }),
+      // a sortie (the app's daily task): the native app opened ?practice=…&wind=live without a challenge, or with sortie=1
+      const sortieQ = (() => { const q = new URLSearchParams(location.search); return embedded && !!src.practice && (q.get('sortie') === '1' || (q.get('wind') === 'live' && q.get('challenge') !== '1' && !!q.get('practice'))); })();
+      Sim.open({ onClose: () => { bridge({ type: 'sim', active: false }); if (sortieQ) bridge({ type: 'close' }); },
+        sortie: sortieQ, onFinish: sortieQ ? r => bridge({ type: 'simResult', result: JSON.stringify(r) }) : null,
         googleKey,
         id: PRc ? `practice-${upper(src.departure)}-${PRc.end || ''}-${PRc.kind}` : isPlan ? 'plan-' + (src.name || '') : src.id, mode, start: PRc ? (PRfin ? 'air' : 'ground') : ui.sim.start, practice: PRc, title, subtitle, points, waypoints: wps, wind, weather, time: ui.sim.time || 'day', gfx: ui.sim.gfx || simGfx(),
         country: dep?.cc || arr?.cc || countryCodeOf(p), aircraft: src.aircraft || p.aircraft, cruiseFt: isPlan && +src.inp.alt ? +src.inp.alt : 0,

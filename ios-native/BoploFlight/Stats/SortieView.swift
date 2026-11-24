@@ -22,6 +22,7 @@ struct SortieView: View {
     @State private var qAnswers: [(id: String, ok: Bool)] = []
     @State private var simURL: URL?
     @State private var flew = false
+    @State private var flight: SortieFlight?
     @State private var saving = false
     @State private var before: PilotStats?
 
@@ -63,7 +64,7 @@ struct SortieView: View {
             wx = await SortieWeather.load(model)
             wxLoading = false
         }
-        .fullScreenCover(item: $simURL, onDismiss: { flew = true; step = .debrief }) { url in SimulatorView(url: url) }
+        .fullScreenCover(item: $simURL, onDismiss: { flew = true; step = .debrief }) { url in SimulatorView(url: url, onResult: { flight = $0 }) }
         .interactiveDismissDisabled(step != .brief && step != .done)
     }
 
@@ -153,7 +154,7 @@ struct SortieView: View {
                 .font(.archivo(14.5)).foregroundStyle(Theme.mist)
             Button {
                 var c = URLComponents(string: "https://boplo.app/flight-app.html")!
-                c.queryItems = [.init(name: "embed", value: "1"), .init(name: "practice", value: model.homeCode), .init(name: "kind", value: "short"), .init(name: "wx", value: flyLiveSky ? "live" : "fair"), .init(name: "wind", value: "live"), .init(name: "name", value: model.homeCode)]
+                c.queryItems = [.init(name: "embed", value: "1"), .init(name: "practice", value: model.homeCode), .init(name: "kind", value: "short"), .init(name: "wx", value: flyLiveSky ? "live" : "fair"), .init(name: "wind", value: "live"), .init(name: "sortie", value: "1"), .init(name: "name", value: model.homeCode)]
                 c.fragment = "sim"
                 simURL = c.url
             } label: { Text("Fly the approach") }
@@ -169,6 +170,7 @@ struct SortieView: View {
     @ViewBuilder
     private var debriefStep: some View {
         stepHead("Debrief", "Knowledge")
+        if let flight { SortieFlightTile(flight: flight) }
         if questions.isEmpty {
             Tile { Text("Questions didn’t load. Restart the app to try again.").font(.archivo(15)) }
             next { Task { await save() } }
@@ -219,7 +221,8 @@ struct SortieView: View {
                 Text(s.current.days > 0 ? "You’re current for \(s.current.days) days. #\(s.rank) of \(s.total) Boplo pilots." : "#\(s.rank) of \(s.total) Boplo pilots.").font(.archivo(13.5)).foregroundStyle(Theme.mist)
             }
         }
-        if flew { Text("Your landing score is added to Handling once it posts. It can take a minute.").font(.archivo(13)).foregroundStyle(Theme.ink3) }
+        if let flight { SortieFlightTile(flight: flight) }
+        if flew && flight?.landing != nil { Text("Your landing score is added to Handling once it posts. It can take a minute.").font(.archivo(13)).foregroundStyle(Theme.ink3) }
         Button { dismiss() } label: { Text("Done") }.primaryStyle()
     }
 
@@ -277,7 +280,8 @@ struct SortieView: View {
         st.record(qAnswers)
         if !qAnswers.isEmpty { st.markStudied() }
         var list = model.jsonList("sorties")
-        let entry: [String: Any] = ["d": Day.todayISO, "b": briefOK.map { $0 ? 1 : 0 } ?? -1, "p": preflightOK == true ? 1 : 0, "q": [qAnswers.filter(\.ok).count, qAnswers.count], "g": grade, "f": flew ? 1 : 0]
+        var entry: [String: Any] = ["d": Day.todayISO, "b": briefOK.map { $0 ? 1 : 0 } ?? -1, "p": preflightOK == true ? 1 : 0, "q": [qAnswers.filter(\.ok).count, qAnswers.count], "g": grade, "f": flew ? 1 : 0]
+        if let l = flight?.landing { entry["l"] = l.score }
         list.append(entry)
         let json = (try? JSONSerialization.data(withJSONObject: Array(list.suffix(60)))).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         try? await model.saveProfile(["study": st.json(), "sorties": json])
@@ -407,4 +411,68 @@ struct PreflightFinding {
         .init(finding: "The left aileron moves up, but the right one doesn’t move down when you work the yoke.", options: ["Normal differential ailerons", "Don’t fly: a control may be disconnected", "Fly with extra rudder"], answer: 1, explain: "Ailerons must move freely and in the correct sense. A control that doesn’t respond is a no-go until a mechanic finds out why."),
         .init(finding: "The ELT switch is set to OFF.", options: ["Leave it, it saves battery", "Set it to ARMED (or AUTO) before flight", "Turn it ON"], answer: 1, explain: "Armed, the ELT activates in a crash. ON transmits a distress signal now, and OFF won’t help anyone find you."),
     ]
+}
+
+
+// MARK: - The approach result, reported by the web simulator
+
+struct SortieFlight: Decodable, Equatable {
+    struct Landing: Decodable, Equatable {
+        struct Parts: Decodable, Equatable { let rate: Double; let point: Double; let line: Double; let speed: Double }
+        let score: Int
+        let parts: Parts
+        let fpm: Int
+        let td: Int
+        let cl: Double
+        let kt: Int
+    }
+    let kind: String
+    let crash: String?
+    let landing: Landing?
+    let fpm: Int?
+    let bank: Int?
+}
+
+/// How the sortie's approach went: the landing score and what made it up, or what went wrong.
+struct SortieFlightTile: View {
+    let flight: SortieFlight
+    var body: some View {
+        DarkTile(spacing: 12) {
+            if let l = flight.landing {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("\(l.score)").font(Theme.display(56)).tracking(-1.5).monospacedDigit()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Landing score").font(.archivo(15, .semibold))
+                        Text(verdict(l.score)).font(.archivo(13)).foregroundStyle(Theme.mist)
+                    }
+                }
+                part("Touchdown rate", "\(abs(l.fpm)) fpm", l.parts.rate, 40)
+                part("Touchdown point", l.td < 0 ? "Short of the runway" : "\(l.td) m past the threshold", l.parts.point, 25)
+                part("Centreline", String(format: "%.1f m off", l.cl), l.parts.line, 20)
+                part("Speed", "\(l.kt) kt", l.parts.speed, 15)
+            } else if flight.kind == "crash" {
+                Text("The approach ended early").font(.archivo(20, .semibold))
+                Text(flight.crash?.isEmpty == false ? flight.crash! : "The aircraft was damaged before it stopped.").font(.archivo(14)).foregroundStyle(Theme.mist)
+                Text("Try it again tomorrow, or fly it any time from the Simulator.").font(.archivo(13)).foregroundStyle(Theme.mist)
+            } else {
+                Text("Approach flown").font(.archivo(20, .semibold))
+                Text("No landing was scored this time. Land in the touchdown zone to get a score.").font(.archivo(14)).foregroundStyle(Theme.mist)
+            }
+        }
+    }
+
+    private func verdict(_ s: Int) -> String {
+        s >= 85 ? "Checkride standard" : s >= 70 ? "A good landing" : s >= 50 ? "Safe, with room to tidy up" : "Worth another go"
+    }
+
+    private func part(_ title: String, _ value: String, _ got: Double, _ of: Double) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(title).font(.archivo(13.5, .semibold))
+                Spacer()
+                Text(value).font(.archivo(13)).foregroundStyle(Theme.mist)
+            }
+            Bar(value: max(0, min(1, got / of)), height: 6, track: .white.opacity(0.12), fill: Theme.ice)
+        }
+    }
 }

@@ -4,6 +4,8 @@ import SwiftUI
 struct SimulatorView: View {
     /// Defaults to the simulator page; a practice URL opens straight into an approach (leaderboard challenge).
     var url: URL = WebFeature.sim.url
+    /// A sortie's approach reports how it went (JSON from the web simulator) before handing back.
+    var onResult: ((SortieFlight) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var model
     @State private var loading = true
@@ -21,6 +23,8 @@ struct SimulatorView: View {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { model.upgrade(message["message"] as? String) }
                 case "close": dismiss()
+                case "simResult":
+                    if let json = message["result"] as? String, let data = json.data(using: .utf8), let r = try? JSONDecoder().decode(SortieFlight.self, from: data) { onResult?(r) }
                 case "sim": withAnimation(.easeInOut(duration: 0.2)) { flying = (message["active"] as? Bool) ?? false }
                 case "shareVideo":
                     // a landing clip recorded in the replay: save it and open the share sheet
