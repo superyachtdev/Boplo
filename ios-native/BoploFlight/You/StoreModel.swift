@@ -23,6 +23,25 @@ final class StoreModel {
     var yearly: Product? { products.first { Self.yearlyIDs.contains($0.id) } }
     var monthly: Product? { products.first { Self.monthlyIDs.contains($0.id) } }
 
+    /// A win-back offer (set up in App Store Connect) this Apple ID can redeem after letting Advanced lapse. iOS 18+.
+    private(set) var winBack: WinBack?
+    struct WinBack {
+        let product: Product
+        let offer: Product.SubscriptionOffer
+        /// "€49.99 for your first year", "50% off for 3 months" style line for the offer card.
+        var line: String {
+            let unit: String
+            switch offer.period.unit { case .day: unit = "day"; case .week: unit = "week"; case .month: unit = "month"; case .year: unit = "year"; @unknown default: unit = "period" }
+            let n = offer.period.value * max(1, offer.periodCount)
+            let span = n == 1 ? "your first \(unit)" : "your first \(n) \(unit)s"
+            switch offer.paymentMode {
+            case .freeTrial: return "\(n == 1 ? "1 \(unit)" : "\(n) \(unit)s") free, then \(product.displayPrice)"
+            case .payUpFront: return "\(offer.displayPrice) for \(span)"
+            default: return "\(offer.displayPrice) a \(offer.period.unit == .year ? "year" : "month") for \(span)"
+            }
+        }
+    }
+
     func start(model: AppModel) async {
         self.model = model
         updates?.cancel()
@@ -33,6 +52,59 @@ final class StoreModel {
             }
         }
         await loadProducts()
+        await loadWinBack()
+        await loadMonthlyPayments()
+    }
+
+    /// Paid monthly renewals on the current monthly subscription (the free trial doesn't count); 0 when on yearly or none.
+    private(set) var monthlyPayments = 0
+
+    func loadMonthlyPayments() async {
+        var current: Transaction?
+        for await r in Transaction.currentEntitlements {
+            if case .verified(let t) = r, Self.monthlyIDs.contains(t.productID), t.revocationDate == nil { current = t }
+        }
+        guard let current else { monthlyPayments = 0; return }
+        var n = 0
+        for await r in Transaction.all {
+            if case .verified(let t) = r, t.originalID == current.originalID, Self.monthlyIDs.contains(t.productID),
+               t.revocationDate == nil, t.offerType != .introductory { n += 1 }
+        }
+        monthlyPayments = n
+    }
+
+    /// Looks for a win-back offer Apple says this Apple ID is eligible for (only after a subscription has lapsed).
+    func loadWinBack() async {
+        winBack = nil
+        guard #available(iOS 18.0, *) else { return }
+        for product in products {
+            guard let sub = product.subscription, let statuses = try? await sub.status else { continue }
+            let eligible = Set(statuses.flatMap { st -> [String] in
+                if case .verified(let renewal) = st.renewalInfo { return renewal.eligibleWinBackOfferIDs }
+                return []
+            })
+            if let offer = sub.winBackOffers.first(where: { eligible.contains($0.id ?? "") }) {
+                winBack = WinBack(product: product, offer: offer)
+                return
+            }
+        }
+    }
+
+    /// Redeems the win-back offer: the same purchase flow, with the offer applied by the App Store.
+    func buyWinBack() async {
+        guard let wb = winBack else { return }
+        guard #available(iOS 18.0, *) else { await buy(wb.product); return }
+        busy = true; message = nil
+        defer { busy = false }
+        do {
+            switch try await wb.product.purchase(options: [.winBackOffer(wb.offer)]) {
+            case .success(let verification): await handle(verification); winBack = nil
+            case .pending: message = "Your purchase is waiting for approval."
+            default: break
+            }
+        } catch {
+            message = "The App Store couldn’t complete that purchase. Try again."
+        }
     }
 
     func loadProducts() async {
@@ -88,6 +160,7 @@ final class StoreModel {
         }
         await claim([result.jwsRepresentation])
         await transaction.finish()
+        await loadMonthlyPayments()
     }
 
     private func claim(_ signedTransactions: [String]) async {

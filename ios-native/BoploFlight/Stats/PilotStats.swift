@@ -110,8 +110,8 @@ struct PilotCard: View {
                 ProgressView().tint(.white)
             }
         }
-        .task(id: model.flights.count) { await store.refresh() }
-        .fullScreenCover(isPresented: $sortie, onDismiss: { Task { await store.refresh() } }) { SortieView() }
+        .task(id: model.flights.count) { await store.refresh(); model.publishWidgets() }
+        .fullScreenCover(isPresented: $sortie, onDismiss: { Task { await store.refresh(); model.publishWidgets() } }) { SortieView() }
         // a tapped morning or evening reminder opens today's sortie
         .onChange(of: router.route, initial: true) { _, route in
             if route == "sortie" { router.route = nil; sortie = true }

@@ -462,6 +462,7 @@ struct TrialGateView: View {
                             feature("graduationcap.fill", "Study by subject and timed mock exams")
                             feature("book.closed.fill", "Unlimited logbook, progress and cost forecast")
                         }
+                        if let wb = store.winBack { winBackCard(wb) }
                         plans
                         if trial, let p = selected { timeline(p) }
                     }
@@ -553,6 +554,24 @@ struct TrialGateView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.electricHi.opacity(0.12))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.ice.opacity(0.2))))
+    }
+
+    /// Someone whose Advanced lapsed: Apple's win-back offer, shown above the normal plans.
+    private func winBackCard(_ wb: StoreModel.WinBack) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Welcome back").font(.archivo(13, .semibold)).foregroundStyle(Color(hex: 0x4DD49A))
+            Text(wb.line).font(Theme.display(24)).tracking(-0.6).foregroundStyle(.white)
+            Text("A returning-pilot offer on Advanced \(StoreModel.yearlyIDs.contains(wb.product.id) ? "yearly" : "monthly"). It renews at \(wb.product.displayPrice) afterwards; cancel any time in Settings.")
+                .font(.archivo(13)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.75)).fixedSize(horizontal: false, vertical: true)
+            Button { Task { await store.buyWinBack() } } label: {
+                Text("Claim the offer").font(.archivo(17, .semibold)).foregroundStyle(Theme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 50).background(Capsule().fill(.white))
+            }
+            .buttonStyle(.plain).disabled(store.busy)
+        }
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(hex: 0x4DD49A).opacity(0.5), lineWidth: 1))
     }
 
     private func feature(_ symbol: String, _ text: String) -> some View {

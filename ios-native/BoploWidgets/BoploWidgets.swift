@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct BoploWidgetsBundle: WidgetBundle {
     var body: some Widget {
+        PilotWidget()
         HoursWidget()
         NextLessonWidget()
         RecordingLiveActivity()
@@ -216,5 +217,120 @@ struct NextLessonView: View {
             }
         }
         .containerBackground(for: .widget) { W.sky }
+    }
+}
+
+// MARK: - Pilot widget: rating, today's sortie and the streak
+
+struct PilotWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "BoploPilot", provider: SnapshotProvider()) { entry in
+            PilotWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Pilot Rating")
+        .description("Your rating, today's sortie and your study streak. Tap to fly today's sortie.")
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
+    }
+}
+
+struct PilotWidgetView: View {
+    let entry: SnapshotEntry
+    @Environment(\.widgetFamily) private var family
+
+    private var sortieURL: URL { URL(string: "boploflight://sortie")! }
+
+    var body: some View {
+        Group {
+            if let s = entry.snap, s.hasStats {
+                switch family {
+                case .accessoryCircular:
+                    Gauge(value: Double(s.rating), in: 0...99) {
+                        Image(systemName: "airplane")
+                    } currentValueLabel: {
+                        Text("\(s.rating)")
+                    }
+                    .gaugeStyle(.accessoryCircular)
+                case .accessoryRectangular:
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Pilot Rating \(s.rating)").font(.headline)
+                        Text(sortieLine(s)).font(.caption)
+                        if s.liveStreak > 0 { Text("\(s.liveStreak)-day streak\(s.streakAtRisk ? ", study today" : "")").font(.caption2) }
+                    }
+                case .accessoryInline:
+                    Text(s.sortieDoneToday ? "Rating \(s.rating) · sortie done" : "Rating \(s.rating) · sortie due")
+                case .systemMedium:
+                    HStack(spacing: 16) {
+                        ratingBlock(s)
+                        VStack(alignment: .leading, spacing: 7) {
+                            statRow("Knowledge", s.knowledge)
+                            statRow("Handling", s.handling)
+                            statRow("Airmanship", s.airmanship)
+                            Spacer(minLength: 0)
+                            sortiePill(s)
+                        }
+                    }
+                default:
+                    VStack(alignment: .leading, spacing: 6) {
+                        ratingBlock(s)
+                        Spacer(minLength: 0)
+                        sortiePill(s)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Image(systemName: "airplane").foregroundStyle(W.ice)
+                    Text("Fly your first sortie to get your Pilot Rating.").font(W.text(13, true)).foregroundStyle(.white)
+                }
+            }
+        }
+        .widgetURL(sortieURL)
+        .containerBackground(for: .widget) { W.sky }
+    }
+
+    private func sortieLine(_ s: WidgetSnapshot) -> String {
+        if s.sortieDoneToday { return "Sortie done · current \(s.currentDays) days" }
+        return s.currentDays > 0 ? "Sortie due · current \(s.currentDays) more day\(s.currentDays == 1 ? "" : "s")" : "Sortie due · not current"
+    }
+
+    private func ratingBlock(_ s: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Pilot Rating").font(W.text(11.5, true)).foregroundStyle(W.ice)
+            Text("\(s.rating)").font(W.display(46, bold: true)).foregroundStyle(.white).monospacedDigit()
+            Text(s.tier).font(W.text(12.5, true)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+            if s.liveStreak > 0 {
+                Text("\(Image(systemName: "flame.fill")) \(s.liveStreak) day\(s.liveStreak == 1 ? "" : "s")")
+                    .font(W.text(11.5, true)).foregroundStyle(s.streakAtRisk ? Color.orange : W.mist).padding(.top, 3)
+            } else if s.rank > 0 {
+                Text("#\(s.rank) of \(s.total)").font(W.text(11.5)).foregroundStyle(W.mist).padding(.top, 3)
+            }
+        }
+    }
+
+    private func statRow(_ title: String, _ v: Int) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(title).font(W.text(11.5, true)).foregroundStyle(.white)
+                Spacer()
+                Text("\(v)").font(W.text(11.5, true)).foregroundStyle(W.mist).monospacedDigit()
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.12))
+                    Capsule().fill(W.ice).frame(width: max(4, g.size.width * CGFloat(min(99, max(0, v))) / 99))
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    private func sortiePill(_ s: WidgetSnapshot) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: s.sortieDoneToday ? "checkmark.circle.fill" : "airplane.departure")
+            Text(s.sortieDoneToday ? "Sortie done" : "Today's sortie")
+        }
+        .font(W.text(12, true))
+        .foregroundStyle(s.sortieDoneToday ? W.ice : W.night)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Capsule().fill(s.sortieDoneToday ? Color.white.opacity(0.12) : Color.white))
     }
 }

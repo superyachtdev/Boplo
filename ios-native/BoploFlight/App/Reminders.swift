@@ -70,6 +70,8 @@ enum Reminders {
     @MainActor
     static func refresh(_ model: AppModel) async {
         await flushLockScreenAnswers(model)
+        // the widgets show the same things the reminders are built from (streak, today's sortie, stats)
+        model.publishWidgets()
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         center.removePendingNotificationRequests(withIdentifiers: allIds)

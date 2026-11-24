@@ -19,6 +19,14 @@ extension AppModel {
         s.nextLesson = p.nextLesson ?? ""
         s.lessonDate = p.lessonDate ?? ""
         s.lessonTime = p.lessonTime ?? ""
+        if let st = PilotStatsStore.shared.stats {
+            s.rating = st.rating; s.tier = st.tier.name; s.rank = st.rank; s.total = st.total
+            s.knowledge = st.knowledge; s.handling = st.handling; s.airmanship = st.airmanship
+        }
+        s.sortieDay = jsonList("sorties").compactMap { $0["d"] as? String }.max() ?? ""
+        let study = StudyState(json: p.study)
+        s.streak = study.streak
+        s.streakDay = study.days.contains(Day.today) ? Day.todayISO : (s.streak > 0 ? Day.adding(-1, to: Day.todayISO) : "")
         var old = WidgetSnapshot.load()
         old?.updated = .distantPast
         guard old != s else { return }

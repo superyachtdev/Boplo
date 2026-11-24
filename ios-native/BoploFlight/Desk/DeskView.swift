@@ -10,6 +10,7 @@ struct DeskView: View {
             Page(title: title) {
                 hero
                 PilotCard()
+                YearlyUpgradeCard()
                 actions
                 upNext
                 checklistLink

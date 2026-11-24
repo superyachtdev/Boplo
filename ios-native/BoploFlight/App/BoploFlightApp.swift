@@ -207,6 +207,11 @@ struct MainTabs: View {
         }
         // a tapped reminder: the question of the day and review nudges open Study; sortie nudges go to the
         // Desk, where the pilot card opens today's sortie
+        // widget taps: boploflight://sortie opens today's sortie, boploflight://study the Study tab
+        .onOpenURL { url in
+            guard url.scheme == "boploflight", let host = url.host, ["sortie", "study"].contains(host) else { return }
+            router.route = host
+        }
         .onChange(of: router.route, initial: true) { _, route in
             switch route {
             case "study": model.tab = .study; router.route = nil
