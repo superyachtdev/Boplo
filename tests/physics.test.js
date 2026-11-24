@@ -39,3 +39,13 @@ test('a trainer still matches its book numbers', () => {
   let t = 0; while (fm.s.ias / KT < 55 && t < 60) { fm.step(dt); t += dt; }
   const d = Math.hypot(fm.s.x, fm.s.z); assert.ok(d > 150 && d < 320, `take-off roll ${d} m`);
 });
+
+test('ground steering: full stick gives a firm turn while taxiing and only a gentle one at take-off speed', () => {
+  const turn = kt => { const fm = make('c172'); fm.reset({ alt: 0, airborne: false, speed: 0 }); const s = fm.s, c = fm.c; c.parking = false; c.brake = 0;
+    for (let i = 0; i < 6000 && Math.hypot(s.v[0], s.v[2]) < kt * KT; i++) { c.throttle = 1; fm.step(dt, [0, 0, 0]); }
+    c.throttle = kt < 15 ? .25 : .6; c.rudder = 1; const h0 = s.hdg; for (let i = 0; i < 60; i++) fm.step(dt, [0, 0, 0]);
+    return Math.abs((s.hdg - h0 + 540) % 360 - 180); };
+  const taxi = turn(8), fast = turn(45);
+  assert.ok(taxi > 10 && taxi < 40, `taxi turn ${taxi}`);
+  assert.ok(fast < 15, `take-off-speed turn ${fast}`);
+});

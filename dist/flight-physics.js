@@ -155,9 +155,11 @@
         Fw = add(Fw, sideH, clamp(side, -sideMax, sideMax));
         // steering: nosewheel (or tailwheel while the tail is down), stronger at low speed
         const tailDown = p.tail && pitchDeg() > (opts.groundAtt || 11) * .6;
-        const steer = (p.tail && !tailDown ? 0 : rudder * (p.tail ? 18 : 28) * D2R * (1 - clamp(Math.abs(vf) / 35, 0, .75)));
-        const rSteer = vf * Math.tan(steer) / p.wb;
-        s.w[2] += (rSteer - s.w[2]) * Math.min(1, dt * 10) * (Math.abs(vf) > .3 ? 1 : 0) + rd * dt * (p.tail && !tailDown ? 1 : .15);
+        const steer = p.tail && !tailDown ? 0 : rudder * steerMax(vf, p.tail) * D2R;
+        // the yaw rate the wheel asks for, held back by what the tyres can grip sideways (about 0.45 g) and by the
+        // aircraft's yaw inertia, so a full stick deflection gives a firm turn rather than a spin on the spot
+        const rGrip = (surf === 'paved' ? .45 : .32) * G / Math.max(1.5, Math.abs(vf)), rSteer = clamp(vf * Math.tan(steer) / p.wb, -Math.min(.55, rGrip), Math.min(.55, rGrip));
+        s.w[2] += (rSteer - s.w[2]) * Math.min(1, dt * 4) * (Math.abs(vf) > .3 ? 1 : 0) + rd * dt * (p.tail && !tailDown ? 1 : .15);
         if (Math.abs(vf) < .3 && Math.abs(c.rudder) < .01) s.w[2] *= .5;
         rd = 0;
         // wings stay level on the gear
@@ -275,6 +277,9 @@
     return (lo + hi) / 2;
   }
 
-  const api = { create, params, DATA, KT, pilot, wrap180, approachPower, rho, sound };
+  // nosewheel/tailwheel angle the rudder pedals give (degrees) at forward speed v (m/s): a tiller-like 28° while taxiing
+  // slowly, about 10° by 20 kt, and only a few degrees at take-off speed, where the rudder itself does the steering
+  function steerMax(v, tail) { const a = Math.abs(v), d = a <= 2 ? 28 : a <= 10 ? 28 - 18 * (a - 2) / 8 : 10 - 6 * Math.min(1, (a - 10) / 25); return tail ? d * 18 / 28 : d; }
+  const api = { create, steerMax, params, DATA, KT, pilot, wrap180, approachPower, rho, sound };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BoploPhysics = api;
 })(typeof window !== 'undefined' ? window : globalThis);

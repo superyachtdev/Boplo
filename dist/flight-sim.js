@@ -1999,7 +1999,7 @@ window.BoploSim = (() => {
       const hold = (cur, tgt, rr) => !CS.centre && tgt === 0 ? cur : ramp(cur, tgt, rr);
       const analog = stickV || pad || tilt || (CS.mouse && mouseV);
       const expo = v => { const a = Math.abs(v), e = CS.expo; return Math.sign(v) * ((1 - e) * a + e * a * a * a); };
-      ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad || (stickV && fs.ground) ? expo(y) : ramp(ctl.yaw, y, 3);
+      ctl.roll = analog ? expo(r) : hold(ctl.roll, r, 4); ctl.pitch = analog ? expo(p) : hold(ctl.pitch, p, 2.5); ctl.yaw = rudV != null || pad ? expo(y) : stickV && fs.ground ? Math.sign(y) * (.35 * Math.abs(y) + .65 * Math.abs(y) ** 3) : ramp(ctl.yaw, y, 3);
       ctl.brake = brake;
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       // auto-rudder on the runway: steer for a point on the centreline ahead (like a pilot looking down the runway),
@@ -2012,7 +2012,7 @@ window.BoploSim = (() => {
           const want = Math.atan2(dir[0] * look + r.l[0] * off, dir[1] * look + r.l[1] * off) * R2D, err = wrap180(want - fs.hdg);
           // ask for a gentle yaw rate towards that heading, then work out the nosewheel angle that gives it
           // (the steering gets weaker with speed, as in the flight model), so it settles instead of swinging
-          const tail = !!FM.p.tail, wr = clamp(err * D2R * 1.1, -.18, .18), vf = Math.max(2, fs.gs), maxS = (tail ? 18 : 28) * D2R * (1 - clamp(vf / 35, 0, .75));
+          const tail = !!FM.p.tail, wr = clamp(err * D2R * 1.1, -.18, .18), vf = Math.max(2, fs.gs), maxS = BoploPhysics.steerMax(vf, tail) * D2R;
           fc.rudder = clamp(Math.atan(wr * (FM.p.wb || 1.7) / vf) / maxS, -1, 1);
         }
       }
