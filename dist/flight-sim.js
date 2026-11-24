@@ -1150,6 +1150,21 @@ window.BoploSim = (() => {
     if (scene.shadowMap) { scene.shadowMap.size = GFX === 'detailed' ? 2048 : 1024; scene.shadowMap.maximumDistance = 350; scene.shadowMap.softShadows = GFX === 'detailed'; scene.shadowMap.darkness = .4; }
     // keep the scene rendering while things load
     function dropFx() { fxOff = true; try { if (tileset) tileset.customShader = undefined; tintShader = null; if (grade) { scene.postProcessStages.remove(grade); grade = null; } } catch { } try { if (atmo) { scene.postProcessStages.remove(atmo); atmo = null; if (heat) { scene.postProcessStages.remove(heat); heat = null; } if (scene.skyAtmosphere) scene.skyAtmosphere.show = true; if (scene.sun) scene.sun.show = true; if (scene.globe) scene.globe.showGroundAtmosphere = true; if ('renderable' in scene.fog) scene.fog.renderable = true; scene.backgroundColor = C.Color.fromCssColorString('#5E93D8'); } } catch { } try { if (model) model.customShader = undefined; acShader = null; } catch { } }
+    // a frame that fails to draw (some phone GPUs reject an effect) strips one more optional layer each time it keeps failing,
+    // so the scene always comes back instead of showing only the sky colour: effects, then clouds, then shadows, then 3D tiles
+    let rFails = 0, rStage = 0, rOkT = 0;
+    function renderFailed(err) {
+      console.warn('render', err); rFails++;
+      if (rFails < 3 && rStage > 0) return; rFails = 0; rStage++;
+      try {
+        if (rStage === 1) dropFx();
+        else if (rStage === 2) { if (cloudCol) { cloudCol.show = false; try { scene.primitives.remove(cloudCol); } catch { } cloudCol = null; } }
+        else if (rStage === 3) { scene.shadowMap.enabled = false; if (model) model.shadows = C.ShadowMode.DISABLED; try { scene.postProcessStages.removeAll(); } catch { } viewer.resolutionScale = Math.min(viewer.resolutionScale || 1, .8); }
+        else if (rStage === 4 && tileset) { tileset.show = false; scene.globe.show = true; }
+      } catch (e) { console.warn('render fallback', e); }
+    }
+    const drawFrame = () => { try { viewer.resize(); viewer.render(); rOkT++; } catch (err) { rOkT = 0; renderFailed(err); } };
+    // while loading, only the effects can be dropped (the scene isn't built yet); the flying loop below uses drawFrame
     let pumping = true; (function pump() { if (!alive || !pumping) return; try { viewer.resize(); viewer.render(); } catch (err) { console.warn('render', err); dropFx(); } requestAnimationFrame(pump); })();
     const LLH = (x, z, h) => { const [lng, lat] = F.ll(x, z); return C.Cartesian3.fromDegrees(lng, lat, h); };
     const carto = (x, z) => { const [lng, lat] = F.ll(x, z); return C.Cartographic.fromDegrees(lng, lat); };
@@ -1709,8 +1724,7 @@ window.BoploSim = (() => {
       if (papi.length) { const ey = st.alt + AC.wheelDrop + 1.2; for (const u of papi) { const d = Math.hypot(st.x - u.p.c[0], st.z - u.p.c[1]), ang = Math.atan2(ey - u.p.h, Math.max(1, d)) * R2D; u.prim.color = ang > u.ang ? PW : RED; } }
       if (rabbit.length) { const k = Math.floor((performance.now() / 1000 * 2 % 1) * rabbit.length * 1.6); rabbit.forEach((b, i) => { b.show = i === k; }); }
       // if one of our visual effects fails on this device's GPU, drop the effects and keep flying rather than stopping the render
-      try { viewer.resize(); viewer.render(); }
-      catch (err) { console.warn('render', err); dropFx(); }
+      drawFrame();
     }
     const flownPts = [];
     let cruise = 0; const planCruise = () => { cruise = O.cruiseFt ? O.cruiseFt * FT + geoN : (circuit ? g0 + 1000 * FT : Math.max(g0, g1) + 2200 * FT); }; planCruise();
