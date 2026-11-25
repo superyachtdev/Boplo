@@ -2,6 +2,7 @@
 // Visits store no IP or cookie. A visitor is a hash of (daily random salt + IP + browser), so the same person counts
 // once a day, and once a day's salt is deleted the hashes can't be linked to anyone.
 import { isOwner, PLANS } from './billing.js';
+import { appleGrants } from './apple.js';
 import { SCHOOL_PLANS } from './schools.js';
 
 const DAY = 864e5;
@@ -96,7 +97,7 @@ export async function ownerStats(env, user, url) {
     all(env, 'SELECT school_id, role, COUNT(*) n FROM flight_school_members GROUP BY school_id, role'),
     all(env, `SELECT a.src k, COUNT(*) n FROM flight_attrib a JOIN darts_users u ON u.id=a.user_id WHERE u.created_at>=?${notOwner('a.user_id')} GROUP BY a.src ORDER BY n DESC LIMIT 10`, since, ...O),
     all(env, `SELECT a.src k, COUNT(*) n, SUM(CASE WHEN b.status IN ('active','trialing','past_due') THEN 1 ELSE 0 END) paid FROM flight_attrib a LEFT JOIN flight_billing b ON b.user_id=a.user_id WHERE 1=1${notOwner('a.user_id')} GROUP BY a.src ORDER BY n DESC LIMIT 10`, ...O),
-    all(env, `SELECT u.id, u.email, u.display_name name, u.created_at, json_extract(p.data,'$.country') country, json_extract(p.data,'$.licence') licence, json_extract(p.data,'$.complete') complete, b.status, b.price_key, a.src, (SELECT COUNT(*) FROM flight_records r WHERE r.user_id=p.user_id) flights ${U.replace('WHERE 1=1', 'LEFT JOIN flight_billing b ON b.user_id=p.user_id LEFT JOIN flight_attrib a ON a.user_id=p.user_id WHERE 1=1')} ORDER BY u.created_at DESC LIMIT 25`, ...O),
+    all(env, `SELECT u.id, u.email, u.display_name name, u.created_at, json_extract(p.data,'$.country') country, json_extract(p.data,'$.licence') licence, json_extract(p.data,'$.complete') complete, b.status, b.price_key, b.cancel_at_period_end c, b.current_period_end ends, a.src, (SELECT COUNT(*) FROM flight_records r WHERE r.user_id=p.user_id) flights ${U.replace('WHERE 1=1', 'LEFT JOIN flight_billing b ON b.user_id=p.user_id LEFT JOIN flight_attrib a ON a.user_id=p.user_id WHERE 1=1')} ORDER BY u.created_at DESC LIMIT 25`, ...O),
     all(env, `SELECT json_extract(p.data,'$.country') country, json_extract(p.data,'$.authority') authority, json_extract(p.data,'$.licence') licence ${U}`, ...O),
     one(env, `SELECT COUNT(DISTINCT user_id) n FROM (SELECT user_id FROM flight_profiles WHERE updated_at>=?1 UNION SELECT user_id FROM flight_records WHERE updated_at>=?1 UNION SELECT user_id FROM darts_sessions WHERE created_at>=?1)${ownerIds.length ? ` WHERE user_id NOT IN (${O.map((_, i) => '?' + (i + 2)).join(',')})` : ''}`, now - 7 * DAY, ...O),
     one(env, `SELECT COUNT(DISTINCT user_id) n FROM (SELECT user_id FROM flight_profiles WHERE updated_at>=?1 UNION SELECT user_id FROM flight_records WHERE updated_at>=?1 UNION SELECT user_id FROM darts_sessions WHERE created_at>=?1)${ownerIds.length ? ` WHERE user_id NOT IN (${O.map((_, i) => '?' + (i + 2)).join(',')})` : ''}`, now - 30 * DAY, ...O),
@@ -111,20 +112,35 @@ export async function ownerStats(env, user, url) {
 
   // App Store subscriptions live in their own table (made by the iPhone app). Production ones count like website
   // ones; sandbox (TestFlight/Xcode) purchases only show in the subscriber list, marked as tests.
+  // Every subscription gets a plain state, judged by its real end date (a status can stay "active" after it lapsed if
+  // Apple's notification never arrived): active, trial, cancelling (won't renew, still has access), failing, lapsed.
+  const ms = t => (t && t < 1e12 ? t * 1000 : t) || null;
+  const appleState = a => !appleGrants(a, now) ? 'lapsed' : a.status === 'grace' ? 'failing' : a.will_renew ? 'active' : 'cancelling';
+  const webState = (st, c, end) => st === 'trialing' ? (c ? 'cancelling' : 'trial') : st === 'past_due' ? 'failing' : st === 'active' ? (end && ms(end) <= now ? 'lapsed' : c ? 'cancelling' : 'active') : ['canceled', 'unpaid', 'incomplete_expired'].includes(st) ? 'lapsed' : null;
   let apple = [], subscribers = [];
-  try { apple = await all(env, `SELECT user_id, status, interval_key, will_renew, environment, updated_at FROM flight_apple WHERE 1=1${notOwner('user_id')}`, ...O); } catch { }
-  const appleLive = s => s === 'active' || s === 'grace';
-  for (const a of apple) if (appleLive(a.status) && a.environment !== 'Sandbox') billing.push({ status: a.status === 'grace' ? 'past_due' : 'active', price_key: a.interval_key, c: a.will_renew ? 0 : 1, updated_at: a.updated_at });
-  const appleBy = {}; for (const a of apple) if (appleLive(a.status) && (!appleBy[a.user_id] || a.updated_at > appleBy[a.user_id].updated_at)) appleBy[a.user_id] = a;
-  for (const r of recent) { const a = appleBy[r.id]; if (a && !['active', 'trialing', 'past_due'].includes(r.status)) { r.status = a.status === 'grace' ? 'past_due' : 'active'; r.price_key = a.interval_key; r.store = a.environment === 'Sandbox' ? 'App Store test' : 'App Store'; } }
+  try { apple = await all(env, `SELECT user_id, status, interval_key, expires_at, will_renew, environment, updated_at FROM flight_apple WHERE 1=1${notOwner('user_id')}`, ...O); } catch { }
+  for (const a of apple) if (appleGrants(a, now) && a.environment !== 'Sandbox') billing.push({ status: a.status === 'grace' ? 'past_due' : 'active', price_key: a.interval_key, c: a.will_renew ? 0 : 1, updated_at: a.updated_at });
+  // each person's most relevant App Store subscription: one with access first, then the most recent
+  const appleBy = {}; for (const a of apple) { const b = appleBy[a.user_id], ok = appleGrants(a, now); if (!b || (ok && !appleGrants(b, now)) || (ok === appleGrants(b, now) && (a.expires_at || 0) > (b.expires_at || 0))) appleBy[a.user_id] = a; }
+  for (const r of recent) {
+    const w = webState(r.status, r.c, r.ends), a = appleBy[r.id], aw = a ? appleState(a) : null;
+    // whichever gives access wins; otherwise show the lapsed one so old subscribers stay visible
+    if (a && (aw !== 'lapsed' || !w || w === 'lapsed')) { r.sub = aw; r.price_key = a.interval_key; r.store = a.environment === 'Sandbox' ? 'App Store test' : 'App Store'; r.ends = a.expires_at || null; }
+    else if (w) { r.sub = w; r.store = 'Website'; r.ends = ms(r.ends); }
+    else r.sub = null;
+  }
   try {
     const [ap, web] = await Promise.all([
-      all(env, `SELECT u.id, u.email, u.display_name name, a.status, a.interval_key price, a.expires_at ends, a.will_renew renew, a.environment env, a.updated_at FROM flight_apple a JOIN darts_users u ON u.id=a.user_id WHERE a.status IN ('active','grace') ORDER BY a.updated_at DESC LIMIT 100`),
-      all(env, `SELECT u.id, u.email, u.display_name name, b.status, b.price_key price, b.current_period_end ends, 1-COALESCE(b.cancel_at_period_end,0) renew, 'Production' env, b.updated_at FROM flight_billing b JOIN darts_users u ON u.id=b.user_id WHERE b.status IN ('active','trialing','past_due') ORDER BY b.updated_at DESC LIMIT 100`)
+      all(env, `SELECT u.id, u.email, u.display_name name, a.status, a.interval_key price, a.expires_at ends, a.will_renew renew, a.environment env, a.updated_at FROM flight_apple a JOIN darts_users u ON u.id=a.user_id ORDER BY a.updated_at DESC LIMIT 200`),
+      all(env, `SELECT u.id, u.email, u.display_name name, b.status, b.price_key price, b.current_period_end ends, COALESCE(b.cancel_at_period_end,0) c, 'Production' env, b.updated_at FROM flight_billing b JOIN darts_users u ON u.id=b.user_id WHERE b.status IN ('active','trialing','past_due','canceled','unpaid','incomplete_expired') ORDER BY b.updated_at DESC LIMIT 200`)
     ]);
-    subscribers = [...ap.map(r => ({ ...r, store: 'App Store' })), ...web.map(r => ({ ...r, store: 'Website' }))]
-      .map(r => ({ id: r.id, email: r.email, name: r.name, store: r.store, plan: r.price === 'monthly' ? 'monthly' : 'yearly', status: r.status, ends: r.ends || null, renews: !!r.renew, test: r.env === 'Sandbox', owner: isOwner(env, { email: r.email }), since: r.updated_at }))
-      .sort((a, b) => (b.since || 0) - (a.since || 0));
+    const order = { failing: 0, active: 1, trial: 1, cancelling: 2, lapsed: 3 };
+    subscribers = [
+      ...ap.map(r => ({ ...r, store: 'App Store', sub: appleState({ status: r.status, expires_at: r.ends, will_renew: r.renew }), ends: r.ends || null })),
+      ...web.map(r => ({ ...r, store: 'Website', sub: webState(r.status, r.c, r.ends), ends: ms(r.ends) }))
+    ].filter(r => r.sub)
+      .map(r => ({ id: r.id, email: r.email, name: r.name, store: r.store, plan: r.price === 'monthly' ? 'monthly' : 'yearly', status: r.status, sub: r.sub, ends: r.ends, test: r.env === 'Sandbox', owner: isOwner(env, { email: r.email }), since: r.updated_at }))
+      .sort((a, b) => (order[a.sub] - order[b.sub]) || ((b.ends || 0) - (a.ends || 0)));
   } catch { }
 
   // plans: who pays, how, and what it's worth
