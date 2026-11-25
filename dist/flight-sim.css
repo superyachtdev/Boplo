@@ -517,3 +517,8 @@
 .pfd-dk.warn{background:#E8B923;color:#0B1020;animation:ckpulse 1s ease-in-out infinite alternate}
 @keyframes ckpulse{to{background:#ffd75e}}
 @media (prefers-reduced-motion:reduce){.pfd-dk.warn{animation:none}}
+.sim-ck.min{width:auto;padding:6px 10px;gap:0}
+.sim-ck.min .sim-ck-i{display:none}
+.sim-ck.min .sim-ck-h{padding:0;gap:10px;cursor:pointer}
+.sim-ck.min .sim-ck-h:after{content:"▸";color:rgba(158,216,255,.8)}
+.sim-ck-h:focus-visible{outline:2px solid #9ED8FF;outline-offset:2px;border-radius:8px}

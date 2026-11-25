@@ -118,7 +118,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=26'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=27'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -1911,13 +1911,14 @@ window.BoploSim = (() => {
       ...(CARB ? [['carb', 'Carb heat', 'As required (on)', () => fc.carbHeat]] : []),
       ['hatch', 'Hatches and harnesses', 'Secure']
     ];
-    const CK = { shown: false, tick: {}, doneAt: null, doneBeforeLanding: false };
+    const CK = { shown: false, tick: {}, doneAt: null, doneBeforeLanding: false, min: false, open: false };
     const ckDone = () => CKI.every(([k]) => CK.tick[k]);
     function ckRender() {
       const el = $('[data-ck]'); if (!el) return;
-      el.hidden = !CK.shown;
-      el.innerHTML = `<div class="sim-ck-h"><b>${INHG ? 'Before landing (GUMPS)' : 'Pre-landing checks (BUMFICH)'}</b><span>${CKI.filter(([k]) => CK.tick[k]).length}/${CKI.length}</span></div>` +
+      el.hidden = !CK.shown; el.classList.toggle('min', CK.min && !CK.open);
+      el.innerHTML = `<div class="sim-ck-h" data-ckh role="button" tabindex="0" aria-expanded="${!(CK.min && !CK.open)}"><b>${INHG ? 'Before landing (GUMPS)' : 'Pre-landing checks (BUMFICH)'}</b><span>${CKI.filter(([k]) => CK.tick[k]).length}/${CKI.length}</span></div>` +
         CKI.map(([k, n, v, auto]) => `<button type="button" class="sim-ck-i${CK.tick[k] ? ' on' : ''}" data-cki="${k}" ${auto ? 'data-auto' : ''}><i></i><span><b>${n}</b> ${v}</span></button>`).join('');
+      { const h = $('[data-ckh]'); if (h) { h.onclick = () => { if (CK.min) { CK.open = !CK.open; ckRender(); } }; h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.onclick(); } }; } }
       $$('[data-cki]').forEach(b => b.onclick = () => { const k = b.dataset.cki, it = CKI.find(x => x[0] === k); if (it?.[3]) { tipNow = it[0] === 'carb' ? 'Turn carb heat on with the Carb heat button (or H)' : it[0] === 'seat' ? 'Turn the landing light on (Lights)' : 'Release the parking brake (Park)'; tipUntil = performance.now() + 2200; return; } CK.tick[k] = !CK.tick[k]; ckRender(); });
     }
     function ckReset() { CK.shown = false; CK.tick = {}; CK.doneAt = null; CK.doneBeforeLanding = false; Object.assign(AIRM, { iceMax: 0, iceWarned: 0, jamWarned: false, heatFixed: false }); ckRender(); }
@@ -1936,6 +1937,8 @@ window.BoploSim = (() => {
       if (!CK.shown && !st.ground && (PR.kind !== 'circuit' || st.agl > 600 * FT)) { CK.shown = true; ckRender(); }
       if (CK.shown && (ckT += dt) > .4) {
         ckT = 0; let ch = false;
+        // fold to a small tab while a radio call card is on screen, so the two never overlap on a phone
+        { const r = $('[data-radio]'), m = !!r && !r.hidden && innerWidth < 1100; if (m !== CK.min) { CK.min = m; if (!m) CK.open = false; ch = true; } }
         for (const [k, , , auto] of CKI) if (auto) { const v = !!auto(); if (!!CK.tick[k] !== v) { CK.tick[k] = v; ch = true; } }
         if (ch) ckRender();
         if (CK.doneAt == null && ckDone()) { CK.doneAt = st.agl / FT; CK.doneBeforeLanding = !st.landedOnce; setTimeout(() => { if (ckDone()) { CK.shown = false; ckRender(); } }, 1500); }
