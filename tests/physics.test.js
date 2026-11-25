@@ -49,3 +49,28 @@ test('ground steering: full stick gives a firm turn while taxiing and only a gen
   assert.ok(taxi > 10 && taxi < 40, `taxi turn ${taxi}`);
   assert.ok(fast < 15, `take-off-speed turn ${fast}`);
 });
+
+test('carb ice: builds at low power in moist air, costs power, and carb heat clears it', () => {
+  const fm = make('c172'); fm.reset({ alt: 900, airborne: true, speed: 38 }); const s = fm.s, c = fm.c;
+  c.throttle = .4; c.icing = 1; c.carbHeat = false;
+  for (let i = 0; i < 60 * 90; i++) fm.step(dt, [0, 0, 0]);
+  assert.ok(s.ice > .5, `ice ${s.ice}`);
+  const iced = s.power;
+  c.carbHeat = true; for (let i = 0; i < 60 * 30; i++) fm.step(dt, [0, 0, 0]);
+  assert.ok(s.ice === 0, `ice after heat ${s.ice}`);
+  assert.ok(s.power > iced, `power back ${s.power} > ${iced}`);
+  const da = make('da40'); da.reset({ alt: 900, airborne: true, speed: 45 }); da.c.throttle = .4; da.c.icing = 1;
+  for (let i = 0; i < 60 * 60; i++) da.step(dt, [0, 0, 0]);
+  assert.equal(da.s.ice, 0, 'a fuel-injected DA40 never ices');
+});
+
+test('flaps flown well past VFE jam where they are; within the limit they move freely', () => {
+  const fm = make('c172'); fm.reset({ alt: 2500, airborne: true, speed: 125 * KT, pitch: -8 }); const s = fm.s, c = fm.c;
+  c.flaps = 2; c.throttle = 1; c.elevator = -.25;
+  for (let i = 0; i < 60 * 4; i++) { fm.step(dt, [0, 0, 0]); }
+  assert.equal(s.flapJam, 2, `jammed at ${s.flapJam}, ias ${s.ias / KT}`);
+  c.flaps = 0; fm.step(dt, [0, 0, 0]); assert.equal(c.flaps, 2, 'damaged flaps do not retract');
+  const ok = make('c172'); ok.reset({ alt: 1500, airborne: true, speed: 70 * KT }); ok.c.flaps = 2; ok.c.throttle = .5;
+  for (let i = 0; i < 60 * 4; i++) ok.step(dt, [0, 0, 0]);
+  assert.equal(ok.s.flapJam, null);
+});

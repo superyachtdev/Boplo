@@ -118,7 +118,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=25'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=26'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -487,7 +487,7 @@ window.BoploSim = (() => {
   }
 
   /* ---------------- glass flight display: tapes, compass, side controls and info bar (in the style of mobile flight sims) ---------------- */
-  function pfdHTML(jet) {
+  function pfdHTML(jet, carb) {
     const sp = [], al = [], rose = [], lad = [], htp = [];
     for (let v = 0; v <= 450; v += 5) { const y = -v * 4; sp.push(`<line x1="${v % 10 ? 50 : 42}" x2="58" y1="${y}" y2="${y}"/>${v % 20 === 0 ? `<text x="36" y="${y + 4}">${v}</text>` : ''}`); }
     for (let a = -1000; a <= 45000; a += 100) { const y = -a * .4; al.push(`<line x1="0" x2="${a % 500 ? 7 : 14}" y1="${y}" y2="${y}"/>${a % 500 === 0 ? `<text x="20" y="${y + 4}">${a.toLocaleString('en-GB')}</text>` : ''}`); }
@@ -527,7 +527,7 @@ window.BoploSim = (() => {
         <button type="button" class="pfd-dk" data-pf="park"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M10 16V8h3a2.5 2.5 0 0 1 0 5h-3"/></svg><b data-pfpark>Off</b><span>Park</span></button>
         <button type="button" class="pfd-dk" data-pf="lights"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg><b data-pflt>Off</b><span>Lights</span></button>
         <button type="button" class="pfd-dk pfd-ap" data-pf="appanel" aria-expanded="false"><b class="ap-t">A/P</b><span data-pfap>Off</span></button>
-        <button type="button" class="pfd-dk" data-pf="gates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="6" height="12" rx="1"/><rect x="14" y="6" width="6" height="12" rx="1"/></svg><b data-pfgt>Off</b><span>Gates</span></button>
+        ${carb ? '<button type="button" class="pfd-dk" data-pf="carb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c2.5 3 4.5 5.4 4.5 8.5a4.5 4.5 0 0 1-9 0C7.5 8.4 9.5 6 12 3z"/><path d="M10 14.5a2 2 0 0 0 2 2"/></svg><b data-pfcarb>Off</b><span>Carb heat</span></button>' : '<button type="button" class="pfd-dk" data-pf="gates"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="6" height="12" rx="1"/><rect x="14" y="6" width="6" height="12" rx="1"/></svg><b data-pfgt>Off</b><span>Gates</span></button>'}
         ${jet ? '' : '<button type="button" class="pfd-dk" data-pf="panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/></svg><b>Gauges</b><span>Panel</span></button>'}
       </div>
       <div class="pfd-thr" data-pfthr><span data-pfthrl>${jet ? 'THR' : 'PWR'}</span><div class="pfd-thr-track" title="Throttle: drag, or R and F"><i data-pfthrf></i><em data-pfthrn></em><b data-pfthrk></b></div><small data-pfthrv>0%</small></div>
@@ -591,7 +591,7 @@ window.BoploSim = (() => {
         <label class="sim-set-r"><span>Sensitivity curve <small>more curve = finer control near centre</small></span><input type="range" min="0" max="85" data-cs="expo"></label>
         <label class="sim-set-r"><span>Pitch and roll rate <small>how fast the keys move the controls</small></span><input type="range" min="30" max="200" data-cs="keyRate"></label>
         <label class="sim-check"><input type="checkbox" data-cs="invert"> Invert pitch (push to climb)</label>
-        <label class="sim-check"><input type="checkbox" data-cs="autoRudder"> Auto-rudder (coordinates turns and keeps you straight on the runway)</label>
+        <label class="sim-check"><input type="checkbox" data-cs="autoRudder"> Full auto-rudder (coordinates every turn for you; off, it only damps yaw and you use the rudder like in the real aircraft)</label>
         <label class="sim-check"><input type="checkbox" data-cs="centre"> Keys spring back to centre when released</label>
         <label class="sim-check"><input type="checkbox" data-cs="mouse"> Mouse yoke (move the mouse to fly; Shift-drag or right-drag to look around) <small>Y</small></label>
         <div class="sim-set-pad" data-padset>
@@ -616,7 +616,7 @@ window.BoploSim = (() => {
           <span class="sim-rpm"><b data-rpm>0</b> rpm</span>
         </div>
       </div>
-      ${pfdHTML(!!o.jet)}
+      ${pfdHTML(!!o.jet, !o.jet && /^(c152|c172|pa28|p2008|dr400|cub)$/.test(o.aircraftId || 'c172'))}
       <canvas class="sim-six" data-six aria-hidden="true"></canvas>
       <div class="ap-panel" data-apbar hidden role="dialog" aria-label="Autopilot">
         <div class="ap-head"><b>Autopilot</b><button type="button" class="ap-master" data-apmaster aria-pressed="false"><i></i><span data-apms>Off</span></button><button type="button" class="ap-x" data-apclose aria-label="Close autopilot panel">×</button></div>
@@ -1871,7 +1871,9 @@ window.BoploSim = (() => {
     const saveCS = () => store.set('ctl', CS);
     let mouseV = null;
     let invert = store.get('invert', false), apOn = replay, paused = true, rate = replay ? store.get('rate', 4) : 1, camI = 0, tilt = null, stickV = null, thrTarget = fc.throttle, rudV = null;
-    fc.autoRudder = store.get('autorudder', true);
+    // 'damp' (default): a yaw damper that still lets adverse yaw and the take-off swing show; true: full coordination; false: your feet
+    { const ar = store.get('autorudder3', 'damp'); fc.autoRudder = ar === true || ar === false ? ar : 'damp'; }
+    const arLabel = () => fc.autoRudder === true ? 'Auto-rudder: full (turns coordinated for you)' : fc.autoRudder ? 'Auto-rudder: assist (yaw damper only, use rudder to coordinate)' : 'Auto-rudder off: use Q and E for the rudder';
     let showSix = store.get('six2', false); // the glass display is the default; the round gauges are one tap away
     // autopilot modes: NAV follows the route (lateral and vertical) with auto-throttle; HDG / ALT / SPD hold selected values
     // autopilot modes work on separate axes, as in Infinite Flight: lateral (LNAV follows the route, or HDG), vertical
@@ -1879,9 +1881,76 @@ window.BoploSim = (() => {
     const AP = { lnav: false, vnav: false, hdg: null, alt: null, spd: null, vs: null }; let apPanel = false;
     const apLat = () => replay || (apOn && (AP.lnav || AP.hdg != null)), apVert = () => replay || (apOn && (AP.vnav || AP.alt != null || AP.vs != null)), apSpd = () => replay || (apOn && AP.spd != null);
     const CAMS = [['Chase', 1, 1, 8.5], ['Cockpit', 0, 0, 0], ['Wing', 0, 0, 0], ['Flyby', 0, 0, 0], ['Tower', 0, 0, 0], ['Orbit', 1.25, 1.3, 9], ['Wide', 4.2, 4.5, 11], ['High', 26, 34, 32]];
+
+    /* ---- airmanship: carb ice from the day's temperature and dew point, flap limits, and the pre-landing checklist ---- */
+    const CARB = !O.jet && !!FM.p.carb;
+    // carb icing risk: worst with a small temperature/dew point spread between about -10 and +30 °C (the usual icing chart)
+    const ICING = (() => {
+      const t = +WX.temp, d = +WX.dewp;
+      if (Number.isFinite(t) && Number.isFinite(d)) return t < -10 || t > 30 ? .08 : Math.max(.08, Math.min(1, 1 - (t - d) / 12));
+      return (WX.visM && WX.visM < 10000) || (WX.clouds || []).some(c => /BKN|OVC/.test(c.cover)) ? .55 : .3;
+    })();
+    fc.icing = CARB && !replay ? ICING : 0;
+    function toggleCarb() { if (replay || O.jet) return; fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; }
+    const AIRM = { iceMax: 0, iceWarned: 0, jamWarned: false, heatFixed: false };
+    // the pre-landing checklist: FAA students learn GUMPS, UK and EASA students BUMFICH. Items the aircraft can see tick themselves.
+    const CK_ON = !!PR && !replay && ['short', 'long', 'circuit'].includes(PR.kind) && SCN !== 'efato';
+    const CKI = !CK_ON ? [] : INHG ? [
+      ['gas', 'Gas', 'Fuel selector BOTH, pump as required'],
+      ['under', 'Undercarriage', 'Down (fixed gear)'],
+      ['mix', 'Mixture', 'Rich'],
+      ['prop', 'Propeller', 'Set (fixed pitch)'],
+      ['seat', 'Seatbelts and switches', 'Fastened, landing light on', () => landingLights],
+      ...(CARB ? [['carb', 'Carb heat', 'On', () => fc.carbHeat]] : [])
+    ] : [
+      ['brakes', 'Brakes', 'Off, pressure checked', () => !fc.parking],
+      ['under', 'Undercarriage', 'Down and welded'],
+      ['mix', 'Mixture', 'Rich'],
+      ['fuel', 'Fuel', 'On, contents sufficient, pump on'],
+      ['instr', 'Instruments', 'Temperatures and pressures normal'],
+      ...(CARB ? [['carb', 'Carb heat', 'As required (on)', () => fc.carbHeat]] : []),
+      ['hatch', 'Hatches and harnesses', 'Secure']
+    ];
+    const CK = { shown: false, tick: {}, doneAt: null, doneBeforeLanding: false };
+    const ckDone = () => CKI.every(([k]) => CK.tick[k]);
+    function ckRender() {
+      const el = $('[data-ck]'); if (!el) return;
+      el.hidden = !CK.shown;
+      el.innerHTML = `<div class="sim-ck-h"><b>${INHG ? 'Before landing (GUMPS)' : 'Pre-landing checks (BUMFICH)'}</b><span>${CKI.filter(([k]) => CK.tick[k]).length}/${CKI.length}</span></div>` +
+        CKI.map(([k, n, v, auto]) => `<button type="button" class="sim-ck-i${CK.tick[k] ? ' on' : ''}" data-cki="${k}" ${auto ? 'data-auto' : ''}><i></i><span><b>${n}</b> ${v}</span></button>`).join('');
+      $$('[data-cki]').forEach(b => b.onclick = () => { const k = b.dataset.cki, it = CKI.find(x => x[0] === k); if (it?.[3]) { tipNow = it[0] === 'carb' ? 'Turn carb heat on with the Carb heat button (or H)' : it[0] === 'seat' ? 'Turn the landing light on (Lights)' : 'Release the parking brake (Park)'; tipUntil = performance.now() + 2200; return; } CK.tick[k] = !CK.tick[k]; ckRender(); });
+    }
+    function ckReset() { CK.shown = false; CK.tick = {}; CK.doneAt = null; CK.doneBeforeLanding = false; Object.assign(AIRM, { iceMax: 0, iceWarned: 0, jamWarned: false, heatFixed: false }); ckRender(); }
+    if (CK_ON) root.insertAdjacentHTML('beforeend', '<div class="sim-ck" data-ck hidden role="group" aria-label="Pre-landing checklist"></div>');
+    let ckT = 0;
+    function airmanshipTick(dt) {
+      if (replay) return;
+      // carb ice: rough running and falling RPM is the cue; carb heat clears it
+      const ice = fs.ice || 0; AIRM.iceMax = Math.max(AIRM.iceMax, ice);
+      if (CARB && !fc.carbHeat && ice > .12 && AIRM.iceWarned < 1) { AIRM.iceWarned = 1; tipNow = 'Engine running rough and the RPM is dropping: carb ice. Carb heat on.'; tipUntil = performance.now() + 6000; }
+      else if (CARB && !fc.carbHeat && ice > .45 && AIRM.iceWarned < 2) { AIRM.iceWarned = 2; tipNow = 'Serious carb ice: power is falling away. Carb heat on now.'; tipUntil = performance.now() + 6000; }
+      if (AIRM.iceWarned && fc.carbHeat && ice < .02) AIRM.heatFixed = true;
+      if (fs.flapJam != null && !AIRM.jamWarned) { AIRM.jamWarned = true; tipNow = `Flaps damaged: flown past their limit speed (VFE ${FM.p.vfe} kt). They're stuck at ${FM.flapLabel()}.`; tipUntil = performance.now() + 6500; }
+      if (!CK_ON) return;
+      // show the checks on final (or once established downwind in the circuit), tick the automatic items, note when they're done
+      if (!CK.shown && !st.ground && (PR.kind !== 'circuit' || st.agl > 600 * FT)) { CK.shown = true; ckRender(); }
+      if (CK.shown && (ckT += dt) > .4) {
+        ckT = 0; let ch = false;
+        for (const [k, , , auto] of CKI) if (auto) { const v = !!auto(); if (!!CK.tick[k] !== v) { CK.tick[k] = v; ch = true; } }
+        if (ch) ckRender();
+        if (CK.doneAt == null && ckDone()) { CK.doneAt = st.agl / FT; CK.doneBeforeLanding = !st.landedOnce; setTimeout(() => { if (ckDone()) { CK.shown = false; ckRender(); } }, 1500); }
+      }
+    }
+    function airmanshipRows(row) {
+      const out = [];
+      if (CK_ON) out.push(row('Pre-landing checks', CK.doneAt != null && CK.doneBeforeLanding ? `Complete${CK.doneAt > 50 ? ` by ${Math.round(CK.doneAt / 50) * 50} ft` : ''}` : `${CKI.filter(([k]) => CK.tick[k]).length} of ${CKI.length} done before touchdown`, CK.doneAt != null && CK.doneBeforeLanding ? (CK.doneAt >= 300 ? 'great' : 'ok') : 'firm'));
+      if (CARB && AIRM.iceMax > .12) out.push(row('Carb ice', AIRM.heatFixed ? 'Spotted and cleared with carb heat' : 'Not cleared: power was lost', AIRM.heatFixed ? 'ok' : 'firm'));
+      if (fs.flapJam != null) out.push(row('Flap limit', `Flaps damaged above VFE ${FM.p.vfe} kt`, 'firm'));
+      return out;
+    }
     let flyAt = null;
     const orb = { yaw: 0, pitch: 0, zoom: 1 }; let towerAt = null;
-    const flapStep = d => { if (replay) return; fc.flaps = clamp(fc.flaps + d, 0, FM.notches - 1); tipNow = `Flaps ${FM.flapLabel()}`; tipUntil = performance.now() + 1400; };
+    const flapStep = d => { if (replay) return; if (fs.flapJam != null) { tipNow = `The flaps are damaged and won't move (stuck at ${FM.flapLabel()})`; tipUntil = performance.now() + 2200; return; } fc.flaps = clamp(fc.flaps + d, 0, FM.notches - 1); tipNow = `Flaps ${FM.flapLabel()}`; tipUntil = performance.now() + 1400; };
     const trimStep = d => { if (replay) return; fc.trim = clamp(fc.trim + d, -1, 1); };
     const gearToggle = () => { if (replay) return; if (fs.ground && fc.gear) { tipNow = 'The gear stays down on the ground'; tipUntil = performance.now() + 1600; return; } fc.gear = fc.gear ? 0 : 1; tipNow = fc.gear ? 'Gear down' : 'Gear up'; tipUntil = performance.now() + 1400; };
     const spoilerToggle = () => { if (replay) return; fc.spoiler = fc.spoiler ? 0 : 1; tipNow = fc.spoiler ? 'Spoilers out' : 'Spoilers in'; tipUntil = performance.now() + 1400; };
@@ -1904,8 +1973,8 @@ window.BoploSim = (() => {
       if (k === 'g' && e.shiftKey && AC.jet && !replay) { gearToggle(); return; }
       if (k === '/' && AC.jet && !replay) { spoilerToggle(); return; }
       if (k === 'l') { landingLights = !landingLights; tipNow = landingLights ? 'Landing lights on' : 'Landing lights off'; tipUntil = performance.now() + 1200; return; }
-      if (k === 'h' && !replay && !O.jet) { fc.carbHeat = !fc.carbHeat; tipNow = fc.carbHeat ? 'Carb heat on' : 'Carb heat off'; tipUntil = performance.now() + 1400; return; }
-      if (k === 'u' && !replay) { fc.autoRudder = !fc.autoRudder; store.set('autorudder', fc.autoRudder); tipNow = fc.autoRudder ? 'Auto-rudder on' : 'Auto-rudder off: use Q and E for the rudder'; tipUntil = performance.now() + 2200; return; }
+      if (k === 'h' && !replay && !O.jet) { toggleCarb(); return; }
+      if (k === 'u' && !replay) { fc.autoRudder = fc.autoRudder === 'damp' ? false : fc.autoRudder === false ? true : 'damp'; store.set('autorudder3', fc.autoRudder); tipNow = arLabel(); tipUntil = performance.now() + 2600; return; }
       if (k === 'k') { openSet(); return; }
       if (k === 'o' && !e.repeat) { setMini(!miniOn); return; }
       if (k === 'f2' && AC.jet && !replay && !e.repeat) { e.preventDefault(); fc.reverse = !fc.reverse; tipNow = fc.reverse ? 'Reversers armed' : 'Reversers stowed'; tipUntil = performance.now() + 1600; return; }
@@ -1937,7 +2006,7 @@ window.BoploSim = (() => {
       if (a === 'brake') { on(b, 'pointerdown', () => { touchBrake = true; }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) on(b, ev, () => { touchBrake = false; }); return; }
       b.onclick = () => ({ gear: gearToggle, spoiler: spoilerToggle, trimup: () => trimStep(.04), trimdn: () => trimStep(-.04), flapup: () => flapStep(-1), flapdn: () => flapStep(1),
         park: () => { if (!replay) fc.parking = !fc.parking; }, ap: () => { if (!replay) setAP(!apOn); }, appanel: () => { apPanel = !apPanel; apUI(); }, rev: () => { if (!replay) { fc.reverse = !fc.reverse; tipNow = fc.reverse ? 'Reversers armed: they deploy on the ground with the thrust levers at idle, then add power' : 'Reversers stowed'; tipUntil = performance.now() + 2600; } }, lights: () => { landingLights = !landingLights; },
-        gates: () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); }, cam: cycleCam, panel: () => setSix(true) })[a]?.();
+        gates: () => { showGates = !showGates; store.set(gateKey, showGates); $('[data-gates]')?.setAttribute('aria-pressed', String(showGates)); }, carb: toggleCarb, cam: cycleCam, panel: () => setSix(true) })[a]?.();
     });
     { const tr = $('[data-pfthr] .pfd-thr-track'); if (tr) { let drag = false; const set = e => { const r = tr.getBoundingClientRect(); thrTarget = clamp(1 - (e.clientY - r.top) / r.height, 0, 1); };
       on(tr, 'pointerdown', e => { if (replay) return; drag = true; tr.setPointerCapture(e.pointerId); set(e); }); on(tr, 'pointermove', e => { if (drag) set(e); }); on(tr, 'pointerup', () => { drag = false; }); on(tr, 'pointercancel', () => { drag = false; }); } }
@@ -2004,7 +2073,7 @@ window.BoploSim = (() => {
       if (!apOn && !replay) { fc.aileron = ctl.roll; fc.elevator = ctl.pitch; fc.rudder = ctl.yaw; fc.throttle = thrTarget; fc.brake = brake; }
       // auto-rudder on the runway: steer for a point on the centreline ahead (like a pilot looking down the runway),
       // so the take-off and landing rolls stay straight; your own rudder input always takes priority
-      if ((!apOn || !apLat()) && !replay && fc.autoRudder && fs.ground && Math.abs(ctl.yaw) < .05 && fs.gs > 1.5) {
+      if ((!apOn || !apLat()) && !replay && (fc.autoRudder === true || (fc.autoRudder && coarse)) && fs.ground && Math.abs(ctl.yaw) < .05 && fs.gs > 1.5) {
         const r = rwSt.find(q => { const dx = fs.x - q.rw.A[0], dz = fs.z - q.rw.A[1], u = dx * q.f[0] + dz * q.f[1], w = dx * q.l[0] + dz * q.l[1]; return u > -10 && u < q.rw.len + 10 && Math.abs(w) < q.rw.wid / 2 + 8; });
         if (r) {
           const sgn = Math.cos((fs.hdg - Math.atan2(r.f[0], r.f[1]) * R2D) * D2R) >= 0 ? 1 : -1, dir = [r.f[0] * sgn, r.f[1] * sgn];
@@ -2022,7 +2091,7 @@ window.BoploSim = (() => {
     function fillAxes(n) { $$('[data-axis]').forEach(sel => { const k = sel.dataset.axis; sel.innerHTML = `<option value="-1">None</option>` + Array.from({ length: Math.max(n, 4) }, (_, i) => `<option value="${i}">Axis ${i + 1}</option>`).join(''); sel.value = String(CS.axes[k] ?? -1); }); }
     function syncSet() {
       const el = $('[data-set]'); if (!el) return;
-      $$('[data-cs]').forEach(i => { const k = i.dataset.cs; if (i.type === 'checkbox') i.checked = k === 'invert' ? invert : k === 'autoRudder' ? fc.autoRudder : !!CS[k]; else i.value = k === 'expo' ? Math.round(CS.expo * 100) : Math.round(CS.keyRate * 100); });
+      $$('[data-cs]').forEach(i => { const k = i.dataset.cs; if (i.type === 'checkbox') i.checked = k === 'invert' ? invert : k === 'autoRudder' ? fc.autoRudder === true : !!CS[k]; else i.value = k === 'expo' ? Math.round(CS.expo * 100) : Math.round(CS.keyRate * 100); });
       $$('[data-axinv]').forEach(i => { i.checked = !!CS.axInv[i.dataset.axinv]; });
       if (!$('[data-axis] option')) fillAxes(padAxes.length || 4);
     }
@@ -2030,7 +2099,7 @@ window.BoploSim = (() => {
     $('[data-setb]').onclick = openSet; $('[data-setx]').onclick = () => { $('[data-set]').hidden = true; };
     $$('[data-cs]').forEach(i => i.oninput = () => { const k = i.dataset.cs;
       if (k === 'invert') { invert = i.checked; store.set('invert', invert); }
-      else if (k === 'autoRudder') { fc.autoRudder = i.checked; store.set('autorudder', fc.autoRudder); }
+      else if (k === 'autoRudder') { fc.autoRudder = i.checked ? true : 'damp'; store.set('autorudder3', fc.autoRudder); }
       else if (i.type === 'checkbox') CS[k] = i.checked;
       else CS[k] = k === 'expo' ? i.value / 100 : i.value / 100;
       saveCS(); });
@@ -2199,7 +2268,7 @@ window.BoploSim = (() => {
     let warnText = '', tipText = '', tipNow = '', tipUntil = 0;
     const tipEl = document.createElement('div'); tipEl.className = 'sim-tip'; tipEl.setAttribute('role', 'status'); $('[data-warn]').after(tipEl);
     const PE = { spdt: $('[data-spdt]'), altt: $('[data-altt]'), gnd: $('[data-gndb]'), spd: $('[data-pspd]'), alt: $('[data-palt]'), gs: $('[data-pgs]'), agl: $('[data-pagl]'), vsi: $('[data-pvsi]'), vs: $('[data-pvs]'), rose: $('[data-rose]'), rbug: $('[data-rbug]'), rcrs: $('[data-rcrs]'), hdg: $('[data-phdg]'),
-      gear: $('[data-pfgear]'), sp: $('[data-pfsp]'), rev: $('[data-pfrev]'), trim: $('[data-pftrim]'), trimi: $('[data-pftrimi]'), flaps: $('[data-pfflaps]'), park: $('[data-pfpark]'), ap: $('[data-pfap]'), lt: $('[data-pflt]'), gt: $('[data-pfgt]'), thf: $('[data-pfthrf]'), thn: $('[data-pfthrn]'), thk: $('[data-pfthrk]'), thv: $('[data-pfthrv]'),
+      gear: $('[data-pfgear]'), sp: $('[data-pfsp]'), rev: $('[data-pfrev]'), trim: $('[data-pftrim]'), trimi: $('[data-pftrimi]'), flaps: $('[data-pfflaps]'), park: $('[data-pfpark]'), carb: $('[data-pfcarb]'), ap: $('[data-pfap]'), lt: $('[data-pflt]'), gt: $('[data-pfgt]'), thf: $('[data-pfthrf]'), thn: $('[data-pfthrn]'), thk: $('[data-pfthrk]'), thv: $('[data-pfthrv]'),
       roll: $('[data-hroll]'), pitch: $('[data-hpitch]'), bank: $('[data-hbank]'), fpv: $('[data-fpv]'), htape: $('[data-htape]'), hbug: $('[data-hbug]'), htrk: $('[data-htrk]'), hwarn: $('[data-hwarn]'),
       sband: $('[data-sband]'), aband: $('[data-aband]'), oband: $('[data-oband]'), sbug: $('[data-sbug]'), strend: $('[data-strend]'), abug: $('[data-abug]'), ibar: $('[data-ibar]'), flv: $('[data-flvtrack]') };
     let pfdN = 0, iasPrev = null, trendKt = 0;
@@ -2307,6 +2376,7 @@ window.BoploSim = (() => {
       PE.trim.textContent = Math.abs(fc.trim) < .04 ? '0' : `${fc.trim > 0 ? '+' : '−'}${Math.round(Math.abs(fc.trim) * 100)}`; if (PE.trimi) PE.trimi.style.bottom = `${50 + fc.trim * 46}%`;
       PE.flaps.textContent = FM.notches > 1 ? FM.flapLabel() : '—';
       PE.park.textContent = fc.parking ? 'Set' : 'Off'; PE.park.parentElement.classList.toggle('on', fc.parking);
+      if (PE.carb) { PE.carb.textContent = fc.carbHeat ? 'On' : 'Off'; PE.carb.parentElement.classList.toggle('on', fc.carbHeat); PE.carb.parentElement.classList.toggle('warn', !fc.carbHeat && (fs.ice || 0) > .12); }
       PE.ap.textContent = apOn ? 'On' : 'Off'; PE.ap.parentElement.classList.toggle('on', apOn);
       PE.lt.textContent = landingLights ? 'On' : 'Off'; PE.lt.parentElement.classList.toggle('on', landingLights);
       PE.gt.textContent = showGates ? 'On' : 'Off'; PE.gt.parentElement.classList.toggle('on', showGates);
@@ -2465,7 +2535,7 @@ window.BoploSim = (() => {
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
     function applyView() { const six = (showSix || (cockpit() && !AC.cockpit)) && !AC.jet; hudLive = !six; root.classList.toggle('hud-always', hudMode === 'always'); root.classList.toggle('hud-hide', hudMode === 'off'); $$('[data-hudm]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.hudm === hudMode))); /* a 3D cockpit has its own panel; the 2D one stays on request */ root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
     let hudLive = false, hudMode = ['cockpit', 'always', 'off'].includes(store.get('hudmode', 'cockpit')) ? store.get('hudmode', 'cockpit') : 'cockpit';
-    function cycleCam() { camI = (camI + 1) % CAMS.length; $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; orb.px = orb.py = 0; towerAt = null; flyAt = null; applyView(); }
+    function cycleCam() { camI = (camI + 1) % CAMS.length; if (!replay) store.set('cam1', camI); $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; orb.px = orb.py = 0; towerAt = null; flyAt = null; applyView(); }
     // drag the view to orbit (chase cameras) or look around (cockpit and wing); wheel or pinch to zoom; double-click to reset
     { const mapEl = $('[data-map]'); let drag = null; const pts = new Map();
       on(mapEl, 'contextmenu', e => e.preventDefault());
@@ -2494,6 +2564,7 @@ window.BoploSim = (() => {
     $('[data-sixb]').onclick = () => setSix(!showSix);
     function toggleMute() { const m = !store.get('mute', false); store.set('mute', m); audio.mute(m); $('[data-mute]').classList.toggle('off', m); }
     function togglePause(force) { paused = force ?? !paused; audio.pause(paused); const d = paused ? 'M8 5l11 7-11 7z' : 'M8 5v14M16 5v14'; $$('[data-pp],[data-pp2]').forEach(p => p.setAttribute('d', d)); root.classList.toggle('is-paused', paused); }
+    if (!replay) { const c0 = store.get('cam1', O.jet ? 0 : 1); camI = Number.isInteger(c0) && c0 >= 0 && c0 < CAMS.length ? c0 : 0; const cl = $('[data-caml]'); if (cl) cl.textContent = CAMS[camI][0]; }
     applyView();
     $('[data-ap]').onclick = () => setAP(!apOn); $('[data-cam]').onclick = cycleCam; $('[data-mute]').onclick = toggleMute; $('[data-pause]').onclick = () => togglePause(); $('[data-play]').onclick = () => togglePause();
     $('[data-mute]').classList.toggle('off', store.get('mute', false));
@@ -2615,6 +2686,7 @@ window.BoploSim = (() => {
         if (P0.liftAt != null) out.push(row('Lift-off', `${Math.round(P0.liftKt)} kt after ${Math.round(P0.liftAt)} m`, g(Math.abs(P0.liftKt - PF.vr), 5, 10)));
         if (P0.vyN) out.push(row(`Climb speed vs Vy ${Math.round(PF.vy)} kt, average error`, (P0.vySum / P0.vyN).toFixed(1) + ' kt', g(P0.vySum / P0.vyN, 4, 8)), row('Track on the climb-out, average error', Math.round(P0.clSum / P0.vyN) + ' m', g(P0.clSum / P0.vyN, 30, 80)));
       }
+      out.push(...airmanshipRows(row));
       return out.length ? `<div class="sim-facts sim-pr">${out.join('')}</div><p class="sim-note">Green is within normal checkride standards, amber is acceptable, red needs work.</p>` : '';
     }
     function finish(kind) {
@@ -2642,7 +2714,7 @@ window.BoploSim = (() => {
         return;
       }
       if (O.noRetry) { $('[data-more]').onclick = () => { destroy(); O.onUpgrade && O.onUpgrade(); }; return; }
-      $('[data-again]').onclick = () => { ended = false; if (RAD) { rPend.length = 0; RAD.calls.forEach(c => rPend.push({ ...c })); radioLog.length = 0; rStartT = 0; rBusy = false; radioHide(); } Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
+      $('[data-again]').onclick = () => { ended = false; if (RAD) { rPend.length = 0; RAD.calls.forEach(c => rPend.push({ ...c })); radioLog.length = 0; rStartT = 0; rBusy = false; radioHide(); } Object.assign(score, { t: 0, tube: 0, xteSum: 0, altSum: 0, maxAlt: 0, dist: 0, n: 0 }); st.t = 0; ckReset(); st.touch = null; st.landedOnce = false; flownPts.length = 0; flownLine.positions = []; place(0, !groundStart); camH = st.hdg; card(''); togglePause(false); };
     }
 
     /* ---- radio calls during practice: prompt, listen (or type), check the elements, then the controller replies ---- */
@@ -2746,6 +2818,7 @@ window.BoploSim = (() => {
           if (!st.ground) { score.n++; score.xteSum += pr.d; const ae = Math.abs(st.alt - prof(pr.s)); if (pr.d < (circuit ? 90 : 140) / 2 + 60 && ae < 250 * FT) score.tube++; }
           if (PR && pscore && !replay) scorePractice(pr);
           radioTick(dt, pr);
+          airmanshipTick(dt);
           if (SCN === 'efato' && !replay) efatoTick();
           if (PR?.kind === 'takeoff' && !SCN && !st.ground && st.agl > 1000 * FT) { finish('climb'); break; }
           if (st.crashed) { finish('crash'); break; }

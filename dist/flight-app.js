@@ -2649,7 +2649,7 @@
   // graphics level: Fast is terrain and satellite imagery (no 3D city); Balanced and Detailed use the photo-real 3D scenery
   const simGfx = () => { try { const v = localStorage.getItem('boplo-sim-gfx'); if (v) return v; } catch { } return 'fast'; };
   const loadAircraftLib = () => window.__acLib = window.__acLib || loadScript('/flight-aircraft.js?v=6', () => !!window.BoploAircraft).then(() => loadScript('/flight-jets.js?v=11', () => !!window.BoploJets)).catch(e => { window.__acLib = null; throw e; });
-  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=10', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=88', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
+  const loadSimLib = () => window.BoploSim ? Promise.resolve(window.BoploSim) : (window.__simLib = window.__simLib || Promise.all([loadAircraftLib(), loadScript('/flight-physics.js?v=11', () => !!window.BoploPhysics)]).then(() => { window.BoploJets?.install(); return loadScript('/flight-sim.js?v=89', () => !!window.BoploSim); }).then(() => window.BoploSim).catch(e => { window.__simLib = null; throw e; }));
   const simAircraft = src => { const A = window.BoploAircraft; if (!A) return null; const pick = ui.sim.ac || 'auto'; return pick !== 'auto' && A.byId(pick).id === pick ? pick : A.match(src?.aircraft) || A.match(state.profile?.aircraft) || 'c172'; };
   const rwyHdg = a => { const r = (a?.runways || []).filter(x => /^\d{2}/.test(x[0] || '')).sort((x, y) => (y[1] || 0) - (x[1] || 0))[0]; return r ? parseInt(r[0], 10) * 10 : 0; };
   async function openSim(src, mode) {
@@ -2673,7 +2673,7 @@
             if (!clouds.length && s.raw) clouds = [...s.raw.matchAll(/\b(FEW|SCT|BKN|OVC|VV)(\d{3})/g)].map(m => ({ cover: m[1], base: +m[2] * 100 }));
             const vs = String(s.visib ?? ''), sm = vs.includes('+') ? 10 : parseFloat(vs), raw4 = s.raw?.match(/\s(\d{4})\s/);
             const visM = Number.isFinite(sm) ? (sm >= 10 ? 16000 : sm * 1609) : raw4 ? (+raw4[1] >= 9999 ? 16000 : +raw4[1]) : 16000;
-            weather = { clouds, visM, gust: +s.wgst || 0, from: s.id };
+            weather = { clouds, visM, gust: +s.wgst || 0, from: s.id, temp: Number.isFinite(+s.temp) ? +s.temp : undefined, dewp: Number.isFinite(+s.dewp) ? +s.dewp : undefined };
             if (Number.isFinite(+s.wdir) && s.wspd) wind = { dir: +s.wdir, spd: +s.wspd, from: s.id };
           } } catch { }
         if (!weather) toast('Live weather wasn’t available, so it’s clear skies.');

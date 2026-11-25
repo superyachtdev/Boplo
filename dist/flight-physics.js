@@ -26,15 +26,15 @@
   // Aircraft data: mass (kg, typical training weight), wing area (m²), engine (hp), flap notches (deg, label),
   // speeds in knots: vs (clean stall), vso (full-flap stall), vfe, vno, vne, vr, appr, cruise, vmax, wheelbase (m), gear type.
   const DATA = {
-    c152: { m: 757, S: 14.9, hp: 110, flaps: [[0, 'UP'], [10, '10°'], [20, '20°'], [30, '30°']], vso: 36, vfe: 85, vno: 111, vne: 149, wb: 1.5 },
-    c172: { m: 1043, S: 16.2, hp: 160, flaps: [[0, 'UP'], [10, '10°'], [20, '20°'], [30, '30°']], vso: 40, vfe: 85, vno: 129, vne: 163, wb: 1.65 },
-    pa28: { m: 1055, S: 15.8, hp: 160, flaps: [[0, 'UP'], [10, '10°'], [25, '25°'], [40, '40°']], vso: 44, vfe: 103, vno: 126, vne: 160, wb: 1.9 },
+    c152: { carb: 1, m: 757, S: 14.9, hp: 110, flaps: [[0, 'UP'], [10, '10°'], [20, '20°'], [30, '30°']], vso: 36, vfe: 85, vno: 111, vne: 149, wb: 1.5 },
+    c172: { carb: 1, m: 1043, S: 16.2, hp: 160, flaps: [[0, 'UP'], [10, '10°'], [20, '20°'], [30, '30°']], vso: 40, vfe: 85, vno: 129, vne: 163, wb: 1.65 },
+    pa28: { carb: 1, m: 1055, S: 15.8, hp: 160, flaps: [[0, 'UP'], [10, '10°'], [25, '25°'], [40, '40°']], vso: 44, vfe: 103, vno: 126, vne: 160, wb: 1.9 },
     da40: { m: 1150, S: 13.5, hp: 180, flaps: [[0, 'UP'], [20, 'T/O'], [42, 'LDG']], vso: 49, vfe: 91, vno: 129, vne: 178, wb: 1.7 },
     da20: { m: 720, S: 11.6, hp: 125, flaps: [[0, 'UP'], [15, 'T/O'], [40, 'LDG']], vso: 39, vfe: 100, vno: 118, vne: 164, wb: 1.6 },
-    p2008: { m: 650, S: 11.6, hp: 100, flaps: [[0, 'UP'], [15, 'T/O'], [35, 'LDG']], vso: 35, vfe: 70, vno: 108, vne: 138, wb: 1.45 },
-    dr400: { m: 900, S: 13.6, hp: 118, flaps: [[0, 'UP'], [15, 'T/O'], [60, 'LDG']], vso: 44, vfe: 92, vno: 140, vne: 166, wb: 1.6 },
+    p2008: { carb: 1, m: 650, S: 11.6, hp: 100, flaps: [[0, 'UP'], [15, 'T/O'], [35, 'LDG']], vso: 35, vfe: 70, vno: 108, vne: 138, wb: 1.45 },
+    dr400: { carb: 1, m: 900, S: 13.6, hp: 118, flaps: [[0, 'UP'], [15, 'T/O'], [60, 'LDG']], vso: 44, vfe: 92, vno: 140, vne: 166, wb: 1.6 },
     sr20: { m: 1386, S: 13.5, hp: 215, flaps: [[0, 'UP'], [16, '50%'], [32, 'FULL']], vso: 50, vfe: 104, vno: 165, vne: 200, wb: 2.1 },
-    cub: { m: 550, S: 16.6, hp: 65, flaps: [[0, '—']], vso: 33, vfe: 0, vno: 80, vne: 106, wb: 5 }
+    cub: { carb: 1, m: 550, S: 16.6, hp: 65, flaps: [[0, '—']], vso: 33, vfe: 0, vno: 80, vne: 106, wb: 5 }
   };
 
   function params(id, perf, tail) {
@@ -65,7 +65,7 @@
       const h = hdg * D2R, th = pitch * D2R;
       s.F = norm([Math.sin(h) * Math.cos(th), Math.sin(th), Math.cos(h) * Math.cos(th)]); s.R = [Math.cos(h), 0, -Math.sin(h)]; s.U = norm(cross(s.F, s.R));
       s.x = x; s.z = z; s.alt = alt; s.v = scale(s.F, airborne ? speed : 0); s.w = [0, 0, 0]; s.ground = !airborne; s.power = airborne ? .65 : 0; s.rpm = airborne ? 2300 : 0;
-      s.gearPos = 1; s.revPos = 0; s.n1 = airborne ? 70 : 0; s.spoilerPos = 0; s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.airT = airborne ? 30 : 0;
+      s.gearPos = 1; s.revPos = 0; s.n1 = airborne ? 70 : 0; s.spoilerPos = 0; s.crashed = false; s.crash = ''; s.touch = null; s.landed = false; s.t = 0; s.stallT = 0; s.buffet = 0; s.wingDrop = 0; s.g = 1; s.ice = 0; s.flapOver = 0; s.flapJam = null; s.airT = airborne ? 30 : 0;
       if (p.tail && !airborne) tilt(opts.groundAtt || 11);
       Object.assign(c, { elevator: 0, aileron: 0, rudder: 0, brake: 0, gear: 1, spoiler: 0, reverse: false, parking: !airborne && !!opts.parkingAtStart });
       c.throttle = airborne ? .65 : 0; c.flaps = 0; c.trim = airborne ? trimFor(speed) : .15;
@@ -92,6 +92,10 @@
       s.va = va;
       const u = dot(va, s.F), wu = dot(va, s.U), vr = dot(va, s.R);
       const alpha = Math.atan2(-wu, Math.max(.5, u)), beta = Math.asin(clamp(vr / V, -1, 1));
+      // flaps flown well past their limit speed (VFE) for a couple of seconds are damaged and stop moving
+      if (s.flapJam != null) c.flaps = s.flapJam;
+      else if (!p.jet && p.vfe && c.flaps > 0 && (s.ias || 0) / KT > p.vfe + 15) { s.flapOver += dt; if (s.flapOver > 2) s.flapJam = c.flaps; }
+      else s.flapOver = Math.max(0, (s.flapOver || 0) - dt);
       const n = p.notch[c.flaps] || p.notch[0], qbar = .5 * rho(s.alt) * V * V;
       const cl0 = CLof(alpha, n), stalled = cl0.stalled, aS = cl0.aS;
       // ground effect: within a wingspan of the ground the wingtip vortices are squashed, so induced drag falls and lift rises a little
@@ -107,7 +111,13 @@
       const CD = p.CD0 + n.dCD + p.k * ge * cl0.CL * cl0.CL + (stalled ? .12 : 0) + Math.abs(beta) * .25 + (p.retract ? .016 * s.gearPos : 0) + .05 * s.spoilerPos + CDc;
       // engine: power lags the throttle; carb heat costs a little power. A jet spools up slowly from idle and faster near the top,
       // and winds down quicker than it winds up
-      const pwrCmd = clamp(c.throttle, 0, 1) * (c.carbHeat ? .92 : 1);
+      // carburettor ice: builds up in moist air, fastest at low power (descents, the approach), and takes up to about a third of
+      // the power until carb heat melts it. c.icing (0 to 1) is how likely the day's temperature and dew point make it.
+      if (p.carb && !p.jet) {
+        if (c.carbHeat) s.ice = Math.max(0, s.ice - dt / 15);
+        else if (s.power > .02) s.ice = Math.min(1, s.ice + clamp(c.icing || 0, 0, 1) * dt * (c.throttle < .6 ? 1 / 120 : 1 / 600));
+      }
+      const pwrCmd = clamp(c.throttle, 0, 1) * (c.carbHeat ? .92 : 1) * (1 - .35 * (s.ice || 0));
       const tau = p.jet ? (pwrCmd > s.power ? p.spool * (1.35 - .9 * s.power) : p.spool * .45) : p.spool;
       s.power += (pwrCmd - s.power) * Math.min(1, dt / Math.max(.1, tau));
       // thrust reversers: armed with the switch, they deploy on the ground (weight on wheels) and stow in the air
@@ -133,7 +143,8 @@
       let qd = wsp * wsp * (aCmd - alpha) - 2 * .7 * wsp * s.w[1];
       // roll: aileron rate with damping, dihedral effect, stall wing drop
       let rudder = c.rudder;
-      if (c.autoRudder && !s.ground) rudder = clamp(rudder + beta * 5 + c.aileron * .25 * clamp(CL, 0, 1.6) / 1.6, -1, 1);
+      if (c.autoRudder === 'damp' && !s.ground) rudder = clamp(rudder + beta * 2.2, -1, 1);
+      else if (c.autoRudder && !s.ground) rudder = clamp(rudder + beta * 5 + c.aileron * .25 * clamp(CL, 0, 1.6) / 1.6, -1, 1);
       s.rud = rudder;
       if (stalled && !s.ground) { s.stallT += dt; if (!s.wingDrop) s.wingDrop = (Math.random() < .5 ? -1 : 1); } else { s.stallT = 0; s.wingDrop = 0; }
       let pd = 4.6 * ag * c.aileron * qprop - 4.2 * ag * s.w[0] * Math.max(.25, vn) - 2.2 * beta * qn + (s.wingDrop ? s.wingDrop * 1.4 * Math.min(1, s.stallT) * qn : 0)
@@ -197,7 +208,7 @@
       } else if (s.alt > gh2 + .15) { if (s.ground) { s.airT = 0; s.landed = false; } s.ground = false; }
       if (!s.ground) s.airT += dt;
       if (s.ground && p.tail && pitchDeg() < -3) crash('The propeller struck the ground. Keep the tail lower on a tailwheel aircraft.');
-      s.alpha = alpha; s.beta = beta; s.stalled = stalled && !s.ground; s.stallWarn = !s.ground && alpha > aS - 2.5 * D2R; s.CL = CL; s.agl = s.alt - gh2; s.surf = surf;
+      s.alpha = alpha; s.beta = beta; s.stalled = stalled && !s.ground; s.stallWarn = !s.ground && alpha > aS - 3.5 * D2R; s.CL = CL; s.agl = s.alt - gh2; s.surf = surf;
       derive();
     }
     function crash(msg) { s.crashed = true; s.crash = msg; s.v = [0, 0, 0]; s.w = [0, 0, 0]; }
