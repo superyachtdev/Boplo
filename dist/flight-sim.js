@@ -1916,7 +1916,7 @@ window.BoploSim = (() => {
     function ckRender() {
       const el = $('[data-ck]'); if (!el) return;
       el.hidden = !CK.shown; el.classList.toggle('min', CK.min && !CK.open);
-      el.innerHTML = `<div class="sim-ck-h" data-ckh role="button" tabindex="0" aria-expanded="${!(CK.min && !CK.open)}"><b>${INHG ? 'Before landing (GUMPS)' : 'Pre-landing checks (BUMFICH)'}</b><span>${CKI.filter(([k]) => CK.tick[k]).length}/${CKI.length}</span></div>` +
+      el.innerHTML = `<div class="sim-ck-h" data-ckh role="button" tabindex="0" aria-expanded="${!(CK.min && !CK.open)}"><b>${CK.min && !CK.open ? (INHG ? 'GUMPS' : 'BUMFICH') : INHG ? 'Before landing (GUMPS)' : 'Pre-landing checks (BUMFICH)'}</b><span>${CKI.filter(([k]) => CK.tick[k]).length}/${CKI.length}</span></div>` +
         CKI.map(([k, n, v, auto]) => `<button type="button" class="sim-ck-i${CK.tick[k] ? ' on' : ''}" data-cki="${k}" ${auto ? 'data-auto' : ''}><i></i><span><b>${n}</b> ${v}</span></button>`).join('');
       { const h = $('[data-ckh]'); if (h) { h.onclick = () => { if (CK.min) { CK.open = !CK.open; ckRender(); } }; h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.onclick(); } }; } }
       $$('[data-cki]').forEach(b => b.onclick = () => { const k = b.dataset.cki, it = CKI.find(x => x[0] === k); if (it?.[3]) { tipNow = it[0] === 'carb' ? 'Turn carb heat on with the Carb heat button (or H)' : it[0] === 'seat' ? 'Turn the landing light on (Lights)' : 'Release the parking brake (Park)'; tipUntil = performance.now() + 2200; return; } CK.tick[k] = !CK.tick[k]; ckRender(); });
