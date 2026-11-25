@@ -125,7 +125,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
         const res = await fetcher('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: exam ? 1500 : 900, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
+          body: JSON.stringify({ model: env.AI_MODEL || 'claude-haiku-5-5', max_tokens: exam ? 3000 : 2500, stream: true, metadata: { user_id: user.id }, system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }, ...(ctx ? [{ type: 'text', text: ctx }] : [])], messages })
         });
         if (!res.ok || !res.body) { const t = await res.text().catch(() => ''); console.error('Claude error', res.status, t.slice(0, 300));
           // Claude down or overloaded: fall back to Gemini when it's configured, before any text has gone out
@@ -141,7 +141,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
             const line = chunk.split('\n').find(l => l.startsWith('data:')); if (!line) continue;
             let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
             if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') { text += ev.delta.text; await send({ t: ev.delta.text }); }
-            else if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'max_tokens') await send({ t: '\n\n…(answer cut short. Ask me to continue.)' });
+            else if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'max_tokens') await send({ t: '\n\n…(that was a long one. Say "continue" for the rest.)' });
             else if (ev.type === 'error') throw new Error('Boplo lost the connection mid-answer. Try again.');
           }
         }
@@ -151,7 +151,7 @@ export async function ask(env, user, plan, input, fetcher = fetch) {
         const model = env.AI_MODEL && env.AI_MODEL.startsWith('gemini') ? env.AI_MODEL : 'gemini-2.5-flash-lite';
         const res = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM + ctx }] }, contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })), generationConfig: { maxOutputTokens: 900, temperature: .4 } })
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM + ctx }] }, contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })), generationConfig: { maxOutputTokens: 2500, temperature: .4 } })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { console.error('Gemini error', res.status, JSON.stringify(data).slice(0, 300)); throw new Error('Boplo couldn’t answer just now. Try again in a moment.'); }
