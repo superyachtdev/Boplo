@@ -522,3 +522,7 @@
 .sim-ck.min .sim-ck-h{padding:0;gap:10px;cursor:pointer}
 .sim-ck.min .sim-ck-h:after{content:"▸";color:rgba(158,216,255,.8)}
 .sim-ck-h:focus-visible{outline:2px solid #9ED8FF;outline-offset:2px;border-radius:8px}
+/* phones: the stick hint sits above the stick so it never runs into the rudder label; the open checklist scrolls instead of covering the screen */
+.sim-touch .sim-stick span{bottom:auto;top:-18px}
+.sim.is-touch .sim-ck:not(.min){max-height:calc(100% - 150px);overflow:auto;overscroll-behavior:contain}
+@media (max-height:560px){.sim-ck:not(.min){max-height:calc(100% - 140px);overflow:auto;width:230px}.sim-ck{top:calc(env(safe-area-inset-top) + 56px)}}

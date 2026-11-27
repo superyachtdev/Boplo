@@ -118,7 +118,7 @@ window.BoploSim = (() => {
     provider.sampleAt = sampleAt;
     return provider;
   }
-  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=27'; l.dataset.simcss = '1'; document.head.append(l); }
+  function loadCSS() { if (document.querySelector('link[data-simcss]')) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/flight-sim.css?v=28'; l.dataset.simcss = '1'; document.head.append(l); }
 
   /* ---------------- local frame (metres, x east, z north) ---------------- */
   function frame(lat0, lng0) {
@@ -1934,11 +1934,11 @@ window.BoploSim = (() => {
       if (fs.flapJam != null && !AIRM.jamWarned) { AIRM.jamWarned = true; tipNow = `Flaps damaged: flown past their limit speed (VFE ${FM.p.vfe} kt). They're stuck at ${FM.flapLabel()}.`; tipUntil = performance.now() + 6500; }
       if (!CK_ON) return;
       // show the checks on final (or once established downwind in the circuit), tick the automatic items, note when they're done
-      if (!CK.shown && !st.ground && (PR.kind !== 'circuit' || st.agl > 600 * FT)) { CK.shown = true; ckRender(); }
+      if (!CK.shown && !st.ground && (PR.kind !== 'circuit' || st.agl > 600 * FT)) { CK.shown = true; CK.min = innerHeight < 560; ckRender(); }
       if (CK.shown && (ckT += dt) > .4) {
         ckT = 0; let ch = false;
         // fold to a small tab while a radio call card is on screen, so the two never overlap on a phone
-        { const r = $('[data-radio]'), m = !!r && !r.hidden && innerWidth < 1100; if (m !== CK.min) { CK.min = m; if (!m) CK.open = false; ch = true; } }
+        { const r = $('[data-radio]'), m = innerHeight < 560 || (!!r && !r.hidden && innerWidth < 1100); if (m !== CK.min) { CK.min = m; if (!m) CK.open = false; ch = true; } }
         for (const [k, , , auto] of CKI) if (auto) { const v = !!auto(); if (!!CK.tick[k] !== v) { CK.tick[k] = v; ch = true; } }
         if (ch) ckRender();
         if (CK.doneAt == null && ckDone()) { CK.doneAt = st.agl / FT; CK.doneBeforeLanding = !st.landedOnce; setTimeout(() => { if (ckDone()) { CK.shown = false; ckRender(); } }, 1500); }
@@ -2536,7 +2536,7 @@ window.BoploSim = (() => {
       g.fillStyle = 'rgba(222,233,255,.85)'; g.textAlign = 'left'; g.fillText('N', 8, 16);
     }
     const cockpit = () => CAMS[camI][0] === 'Cockpit';
-    function applyView() { const six = (showSix || (cockpit() && !AC.cockpit)) && !AC.jet; hudLive = !six; root.classList.toggle('hud-always', hudMode === 'always'); root.classList.toggle('hud-hide', hudMode === 'off'); $$('[data-hudm]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.hudm === hudMode))); /* a 3D cockpit has its own panel; the 2D one stays on request */ root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
+    function applyView() { const six = (showSix || (cockpit() && !AC.cockpit && !coarse)) && !AC.jet; hudLive = !six; root.classList.toggle('hud-always', hudMode === 'always'); root.classList.toggle('hud-hide', hudMode === 'off'); $$('[data-hudm]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.hudm === hudMode))); /* a 3D cockpit has its own panel; the 2D one stays on request */ root.classList.toggle('six-on', six); root.classList.toggle('hud-on', !six); root.classList.toggle('is-jet', !!AC.jet); { const pc = $('[data-pfcam]'); if (pc) pc.textContent = CAMS[camI][0]; } root.classList.toggle('is-cockpit', cockpit()); $('[data-sixb]').setAttribute('aria-pressed', String(six)); $('[data-sixb]').classList.toggle('on', six); $('[data-sixb]').hidden = !!AC.jet; }
     let hudLive = false, hudMode = ['cockpit', 'always', 'off'].includes(store.get('hudmode', 'cockpit')) ? store.get('hudmode', 'cockpit') : 'cockpit';
     function cycleCam() { camI = (camI + 1) % CAMS.length; if (!replay) store.set('cam1', camI); $('[data-caml]').textContent = CAMS[camI][0]; orb.yaw = orb.pitch = 0; orb.zoom = 1; orb.px = orb.py = 0; towerAt = null; flyAt = null; applyView(); }
     // drag the view to orbit (chase cameras) or look around (cockpit and wing); wheel or pinch to zoom; double-click to reset
