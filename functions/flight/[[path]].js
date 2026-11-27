@@ -6,6 +6,7 @@ import { ask, usage as askUsage, sourceLinks } from '../lib/ask.js';
 import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
 import { recordHit, saveAttrib, ownerStats, ownerUsers, ownerUser, tiktokFeed, setTiktokFeed } from '../lib/owner.js';
+import { announce, announcementsOff } from '../lib/announce.js';
 import { coachRoutes, runDigest, digestOff } from '../lib/coach.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
@@ -20,7 +21,7 @@ function jsonText(value,max,label){if(value==null||value==='')return '';const s=
 export function validateProfile(input,prev={}) {
  const p={};
  for(const key of ['name','country','authority','licence','airport','school','aircraft','registration','frequency','topics','nextLesson','questions','notes','checklist','countryCode','regime'])p[key]=text(input[key],['notes','questions','checklist'].includes(key)?3000:200);
- p.target=date(input.target);p.lessonDate=date(input.lessonDate);p.openingMinutes=number(input.openingMinutes??0,0,600000,'opening flight time');p.goalHours=Math.round(number(input.goalHours||0,0,2000,'hours goal'));p.currency=/^[A-Z]{3}$/.test(String(input.currency||''))?String(input.currency):'';p.rateAircraft=number(input.rateAircraft||0,0,5000,'aircraft rate');p.rateInstructor=number(input.rateInstructor||0,0,2000,'instructor rate');p.lessonsPerWeek=number(input.lessonsPerWeek||0,0,14,'lessons per week');for(const [key,max] of [['syllabus',12000],['study',24000],['reqs',2000],['budget',6000],['milestones',4000],['docs',4000],['navlogs',16000],['radio',4000],['preflight',12000],['exams',2000],['scrubs',6000],['sorties',6000]])p[key]=jsonText(input[key],max,key);p.step=Math.max(0,Math.min(20,Math.round(Number(input.step)||0)));p.complete=input.complete===true;p.reminders=input.reminders===true;
+ p.target=date(input.target);p.lessonDate=date(input.lessonDate);p.openingMinutes=number(input.openingMinutes??0,0,600000,'opening flight time');p.goalHours=Math.round(number(input.goalHours||0,0,2000,'hours goal'));p.currency=/^[A-Z]{3}$/.test(String(input.currency||''))?String(input.currency):'';p.rateAircraft=number(input.rateAircraft||0,0,5000,'aircraft rate');p.rateInstructor=number(input.rateInstructor||0,0,2000,'instructor rate');p.lessonsPerWeek=number(input.lessonsPerWeek||0,0,14,'lessons per week');for(const [key,max] of [['syllabus',12000],['study',24000],['reqs',2000],['budget',6000],['milestones',4000],['docs',4000],['navlogs',16000],['radio',4000],['preflight',12000],['exams',2000],['scrubs',6000],['sorties',6000]])p[key]=jsonText(input[key],max,key);p.step=Math.max(0,Math.min(20,Math.round(Number(input.step)||0)));p.complete=input.complete===true;p.reminders=input.reminders===true;if(prev&&prev.announcements===false)p.announcements=false;
 if(prev.shareHash)p.shareHash=prev.shareHash;if(prev.calHash)p.calHash=prev.calHash;p.dirOn=input.dirOn===true;p.boardsOff=input.boardsOff===true;p.dirBio=text(input.dirBio,160);p.homeLat=Number.isFinite(+input.homeLat)&&input.homeLat!==''&&input.homeLat!=null?Math.max(-90,Math.min(90,+input.homeLat)):null;p.homeLng=Number.isFinite(+input.homeLng)&&input.homeLng!==''&&input.homeLng!=null?Math.max(-180,Math.min(180,+input.homeLng)):null;p.lessonTime=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(input.lessonTime||''))?String(input.lessonTime):'';
  if(p.complete&&(!p.name||!p.authority||!p.licence||!p.country))fail(400,'Complete your name, country, authority and training goal.');
  return p;
@@ -63,6 +64,7 @@ export async function onRequest({request,env,waitUntil}) {
  if(path==='cron/nudges'&&request.method==='POST'){if(!env.CRON_SECRET||request.headers.get('Authorization')!==`Bearer ${env.CRON_SECRET}`)fail(401,'Not allowed.');const o={origin:env.APP_ORIGIN||url.origin};const r=await runNudges(env,o);const dg=await runDigest(env,o).catch(e=>({digestError:e.message}));return json({...r,...dg});}
  if(path==='digest/off'&&request.method==='GET')return await digestOff(env,url);
  if(path==='nudges/off'&&request.method==='GET')return await nudgesOff(env,url);
+ if(path==='announcements/off'&&(request.method==='GET'||request.method==='POST'))return await announcementsOff(env,url);
  if(request.method!=='GET'&&request.headers.get('Origin')!==url.origin)fail(403,'Request origin does not match.');
 if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(path==='cal/feed.ics'&&request.method==='GET')return await calFeed(url,env);
@@ -134,6 +136,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  if(path==='owner/stats'&&request.method==='GET')return json(await ownerStats(env,user,url));
  if(path==='owner/users'&&request.method==='GET')return json(await ownerUsers(env,user,url));
  if(path==='owner/tiktok'&&request.method==='POST')return json(await setTiktokFeed(env,user,await body()));
+ if(path==='owner/announce'&&request.method==='POST')return json(await announce(env,user,await body(),url.origin));
  if(path==='owner/user'&&request.method==='GET')return json(await ownerUser(env,user,url));
  if(path.startsWith('push/')){const r=await pushRoutes(env,path,request.method,user,body);if(r)return json(r);}
  if(path.startsWith('community/'))return json(await community(env,request,url,user,!!brow?.owner,body));

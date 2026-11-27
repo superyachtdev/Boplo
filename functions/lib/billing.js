@@ -133,7 +133,7 @@ export function publicBilling(env, row, apple = null, now = Date.now()) {
 // Add metadata skip_trial=true to a promotion code to charge straight away instead of starting the trial.
 export async function findPromo(env, code, fetcher = fetch) {
   const c = String(code || '').trim(); if (!/^[A-Za-z0-9_-]{2,40}$/.test(c)) throw Object.assign(new Error('That code isn’t valid.'), { status: 400 });
-  const r = await stripe(env, 'GET', 'promotion_codes', { code: c, active: true, limit: 1, expand: ['data.coupon'] }, fetcher);
+  const r = await stripe(env, 'GET', 'promotion_codes', { code: c, active: true, limit: 1, expand: ['data.coupon.applies_to'] }, fetcher);
   const pc = r.data?.[0];
   if (!pc || !pc.coupon?.valid || (pc.expires_at && pc.expires_at * 1000 < Date.now()) || (pc.max_redemptions && pc.times_redeemed >= pc.max_redemptions)) throw Object.assign(new Error('That code isn’t valid or has expired.'), { status: 400 });
   return pc;
@@ -143,12 +143,22 @@ export function promoSummary(pc, key) {
   if (c.currency && c.amount_off && c.currency !== plan.currency) return null;
   const first = c.percent_off ? Math.round(plan.amount * (1 - c.percent_off / 100)) : Math.max(0, plan.amount - (c.amount_off || 0));
   const off = c.percent_off ? `${c.percent_off}% off` : `$${(c.amount_off / 100).toFixed(2)} off`;
-  const dur = c.duration === 'forever' ? 'every payment' : c.duration === 'repeating' ? `for ${c.duration_in_months} months` : 'your first payment';
+  // a repeating coupon that covers the first yearly charge (a few months is enough, and survives the free trial's $0 invoice)
+  const dur = c.duration === 'forever' ? 'every payment' : c.duration === 'repeating' ? (plan.interval === 'year' && c.duration_in_months <= 12 ? 'your first year' : `for ${c.duration_in_months} months`) : 'your first payment';
   return { code: pc.code, id: pc.id, label: `${off} ${dur}`, firstAmount: first, skipTrial: pc.metadata?.skip_trial === 'true' };
+}
+// a promotion code with metadata plan=yearly (or monthly) only works on that plan (both plans share one Stripe product)
+function planOnly(pc, key) {
+  const want = String(pc.metadata?.plan || '').toLowerCase();
+  if ((want === 'yearly' || want === 'monthly') && want !== key) throw Object.assign(new Error(`That code is for the ${want} plan.`), { status: 400 });
 }
 export async function checkPromo(env, input, fetcher = fetch) {
   const key = input?.interval === 'monthly' ? 'monthly' : 'yearly', pc = await findPromo(env, input?.code, fetcher), sum = promoSummary(pc, key);
   if (!sum) throw Object.assign(new Error('That code doesn’t apply to this plan.'), { status: 400 });
+  planOnly(pc, key);
+  // codes limited to some products are refused on the other plan instead of showing a discount Stripe won't give
+  const only = pc.coupon?.applies_to?.products;
+  if (only?.length) { const price = await ensurePrice(env, key, fetcher); if (!only.includes(typeof price.product === 'string' ? price.product : price.product?.id)) throw Object.assign(new Error(`That code is for the ${key === 'yearly' ? 'monthly' : 'yearly'} plan.`), { status: 400 }); }
   return sum;
 }
 
@@ -170,6 +180,7 @@ export async function subscribe(env, user, input, origin, fetcher = fetch) {
     await stripe(env, 'POST', `customers/${row.customer_id}`, { address: { country: a.country, postal_code: a.postal_code || undefined, line1: a.line1 || undefined, city: a.city || undefined, state: a.state || undefined }, expand: ['tax'] }, fetcher);
   }
   const promo = input?.promo ? await findPromo(env, input.promo, fetcher) : null;
+  if (promo) planOnly(promo, key);
   // one free trial per customer; a promotion code marked skip_trial charges straight away
   const days = TRIAL_DAYS, useTrial = !row.trial_used && !(promo && promo.metadata?.skip_trial === 'true');
   const sub = await stripe(env, 'POST', 'subscriptions', {

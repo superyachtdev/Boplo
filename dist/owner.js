@@ -122,13 +122,39 @@
       <section class="tile s12"><h2>Newest sign-ups</h2><p class="sub">The latest 25 accounts</p>${d.users.recent.length ? `<div class="tw"><table class="ot"><thead><tr><th>Joined</th><th>Name</th><th>Country</th><th>Licence</th><th>Plan</th><th>Came from</th><th class="r">Flights</th></tr></thead><tbody>${d.users.recent.map(r => `<tr data-uid="${esc(r.id)}" tabindex="0" title="Open ${esc(r.name || r.email)}"><td>${fmtTs(r.created_at)}</td><td>${esc(r.name || '—')}<small>${esc(r.email)}</small></td><td>${esc(r.country || '—')}</td><td>${esc(r.licence || '—')}${r.complete ? '' : '<small>Setup not finished</small>'}</td><td>${r.sub ? `Advanced ${r.price_key === 'monthly' ? 'monthly' : 'yearly'}${subTag(r.sub)}<small>${esc(r.store || '')}${r.ends ? ` · ${subWhen(r.sub, r.ends)}` : ''}</small>` : 'Free'}</td><td>${esc(r.src ? srcName(r.src) : '—')}</td><td class="r">${nf(r.flights)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-s">No sign-ups yet.</p>'}</section>
       <section class="tile s7"><h2>Schools</h2><p class="sub">Every school that has set up a plan</p>${d.schools.length ? `<div class="tw"><table class="ot"><thead><tr><th>School</th><th>Plan</th><th>Status</th><th class="r">Students</th><th class="r">Staff</th><th>Renews</th></tr></thead><tbody>${d.schools.map(s => `<tr><td>${esc(s.name)}<small>Since ${fmtTs(s.created)}</small></td><td>${esc(s.plan)}</td><td>${s.status === 'active' ? (s.cancelling ? 'Cancelling' : 'Active') : s.status === 'past_due' ? 'Payment failing' : s.status === 'none' ? 'Not paid yet' : esc(s.status)}</td><td class="r">${nf(s.students)}</td><td class="r">${nf(s.instructors)}</td><td>${fmtTs(s.renews ? s.renews * 1000 : 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-s">No schools yet.</p>'}</section>
       <section class="tile s5"><h2>Latest school enquiries</h2><p class="sub">From the form on the schools page</p>${d.leads.latest.length ? `<div class="tw"><table class="ot"><tbody>${d.leads.latest.map(l => `<tr><td>${esc(l.school || '—')}<small>${esc(l.name || '')}${l.email ? ' · ' + esc(l.email) : ''}</small></td><td>${esc(l.country || '')}<small>${esc(l.students || '')}${l.students ? ' students' : ''}</small></td><td class="r">${fmtTs(l.created_at)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-s">No enquiries yet.</p>'}</section>
+      <section class="tile s12" data-annbox><h2>Announcement: the free plan is ending</h2><p class="sub">An email to everyone without Advanced: the website now starts with a 3-day trial, their logbook is safe, and EARLYPILOT gives 30% off the first year. Each person gets it once, and people who opted out are skipped.</p>
+        <div data-annbody><button type="button" class="btn btn-line btn-sm" data-annp>Preview who gets it</button></div></section>
       <section class="tile s12" data-ttbox><h2>TikTok videos on the landing page</h2><p class="sub">New @boploflight posts are added automatically within the hour. You can also paste links here, one per line, newest first. They show as a row of posts on boplo.app, the first 12 in order. Leave it empty to show a card that links to the profile.</p>
         <textarea data-ttl rows="5" style="width:100%;font:inherit;font-size:14px;border-radius:12px;border:1px solid var(--hair-l);padding:12px;resize:vertical" placeholder="https://www.tiktok.com/@boploflight/video/…"></textarea>
         <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap"><button type="button" class="btn btn-blue btn-sm" data-tts>Save videos</button><span class="sub" data-ttm style="margin:0"></span><a class="text-link" href="/#tiktok" target="_blank" rel="noopener" style="margin-left:auto;font-size:13.5px">See it on the landing page</a></div></section>`;
-    wireTiktok();
+    wireTiktok(); wireAnnounce();
 
     wireChart('cv', pts, 'line', p => [{ y: p.visitors / niceOf(vMax) }, `<b>${when(p)}</b><br>${nf(p.visitors)} visitor${p.visitors === 1 ? '' : 's'}<br>${nf(p.views)} page views`]);
     wireChart('cs', pts, 'col', p => [{ y: p.signups / niceOf(sMax) }, `<b>${when(p)}</b><br>${nf(p.signups)} sign-up${p.signups === 1 ? '' : 's'}`]);
+  }
+
+  /* ---------- one-off announcement emails: preview, test to yourself, then send ---------- */
+  function wireAnnounce() {
+    const box = $('[data-annbox]'); if (!box) return; const body = box.querySelector('[data-annbody]'), ID = 'free-ending-2026-11';
+    const post = async action => { const r = await fetch('/flight/owner/announce', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ID, action, expect: box.dataset.count }) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || 'That didn’t work.'); return d; };
+    const preview = async () => {
+      body.innerHTML = '<p class="sub">Loading…</p>';
+      let d; try { d = await post('preview'); } catch (e) { body.innerHTML = `<p class="sub">${esc(e.message)}</p>`; return; }
+      box.dataset.count = d.count;
+      body.innerHTML = `<p style="margin:0 0 8px"><b>${nf(d.count)} ${d.count === 1 ? 'person' : 'people'}</b> will get “${esc(d.subject)}”.${d.appleRelay ? ` ${nf(d.appleRelay)} use Apple’s Hide My Email; those only arrive if your sending domain is registered in Apple’s Private Email Relay settings.` : ''}${d.ready ? '' : ' <b>Email isn’t set up on the server</b>, so nothing can be sent yet.'}</p>
+        <iframe title="Email preview" style="width:100%;height:520px;border:1px solid var(--hair-l);border-radius:12px;background:#fff" srcdoc="${esc('<!doctype html><body style=margin:20px>' + d.html)}"></iframe>
+        <details style="margin:10px 0"><summary>Recipients</summary><p class="sub" style="word-break:break-all">${d.recipients.map(esc).join(', ') || 'Nobody'}</p></details>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><button type="button" class="btn btn-line btn-sm" data-annt ${d.ready ? '' : 'disabled'}>Send a test to me</button><button type="button" class="btn btn-blue btn-sm" data-anns ${d.ready && d.count ? '' : 'disabled'}>Send to ${nf(d.count)} ${d.count === 1 ? 'person' : 'people'}</button><span class="sub" data-annm style="margin:0"></span></div>`;
+      const msg = body.querySelector('[data-annm]'), t = body.querySelector('[data-annt]'), go = body.querySelector('[data-anns]');
+      t.onclick = async () => { t.disabled = true; msg.textContent = 'Sending a test…'; try { const r = await post('test'); msg.textContent = `Test sent to ${r.sentTo}. Check it looks right before sending.`; } catch (e) { msg.textContent = e.message; } t.disabled = false; };
+      let armed = 0;
+      go.onclick = async () => {
+        if (!armed) { armed = setTimeout(() => { armed = 0; go.textContent = `Send to ${nf(d.count)} ${d.count === 1 ? 'person' : 'people'}`; }, 6000); go.textContent = `Tap again to send to ${nf(d.count)}`; return; }
+        clearTimeout(armed); go.disabled = true; t.disabled = true; msg.textContent = 'Sending…';
+        try { const r = await post('send'); msg.textContent = `Sent to ${nf(r.sent)} ${r.sent === 1 ? 'person' : 'people'}.`; go.textContent = 'Sent'; } catch (e) { msg.textContent = e.message; go.disabled = false; t.disabled = false; armed = 0; }
+      };
+    };
+    body.querySelector('[data-annp]').onclick = preview;
   }
 
   /* ---------- the landing page's TikTok feed ---------- */

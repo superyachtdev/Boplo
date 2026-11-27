@@ -241,3 +241,12 @@ test('training reminders pick the right email and can be switched off',async()=>
  assert.equal(JSON.parse(db.prepare("SELECT data FROM flight_profiles WHERE user_id='a'").get().data).reminders,false);
  const cron=await onRequest({env,request:new Request('https://boplo.app/flight/cron/nudges',{method:'POST',headers:{Authorization:'Bearer wrong'}})});assert.equal(cron.status,401);
 });
+
+test('a yearly-only code is refused on monthly and reads as "your first year" on yearly',async()=>{
+ const {checkPromo}=await import('../functions/lib/billing.js');
+ const pc={id:'promo_e',code:'EARLYPILOT',coupon:{valid:true,percent_off:30,duration:'repeating',duration_in_months:3},metadata:{plan:'yearly'}};
+ const fake=async url=>{const u=new URL(url);if(u.pathname==='/v1/promotion_codes')return new Response(JSON.stringify({data:[pc]}),{status:200});return new Response('{}',{status:404});};
+ const env={STRIPE_SECRET_KEY:'sk_test_x'};
+ const y=await checkPromo(env,{code:'EARLYPILOT',interval:'yearly'},fake);assert.equal(y.label,'30% off your first year');assert.equal(y.firstAmount,6999);
+ await assert.rejects(checkPromo(env,{code:'EARLYPILOT',interval:'monthly'},fake),/for the yearly plan/);
+});
