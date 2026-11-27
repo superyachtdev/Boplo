@@ -16,6 +16,9 @@ export const ANNOUNCEMENTS = {
     subject: 'Your Boplo logbook is safe, and a thank-you for being early',
     // who it's for: accounts without Advanced from any source (website, App Store, school)
     audience: 'free',
+    // Hide My Email addresses come from Sign in with Apple in the iPhone app, which never had the website's free plan
+    // (and they bounce unless the sending domain is registered with Apple's relay)
+    skipRelay: true,
     code: 'EARLYPILOT',
     body: first => [
       `Hi ${first || 'there'},`,
@@ -53,7 +56,7 @@ async function ensure(env) {
 }
 
 // Everyone the announcement would go to now: free accounts with an email, not opted out, not already sent this one.
-export async function audience(env, id, now = Date.now()) {
+export async function audience(env, id, now = Date.now(), { includeRelay = false } = {}) {
   await ensure(env);
   const rows = (await env.DB.prepare(`SELECT u.id, u.email, u.display_name name, json_extract(p.data,'$.name') pname, json_extract(p.data,'$.announcements') ann,
       b.status, (SELECT COUNT(*) FROM flight_school_members m WHERE m.user_id=u.id) school,
@@ -64,7 +67,8 @@ export async function audience(env, id, now = Date.now()) {
       (SELECT COUNT(*) FROM flight_nudges n WHERE n.user_id=u.id AND n.kind=?) sent FROM darts_users u JOIN flight_profiles p ON p.user_id=u.id LEFT JOIN flight_billing b ON b.user_id=u.id`).bind('ann:' + id).all())).results || [];
   let apple = []; try { apple = (await env.DB.prepare('SELECT user_id, status, expires_at FROM flight_apple').all()).results || []; } catch { }
   const appleOn = new Set(apple.filter(a => appleGrants(a, now)).map(a => a.user_id));
-  return rows.filter(r => r.email && /@/.test(r.email) && !r.sent && r.ann !== false && r.ann !== 0 && String(r.ann) !== 'false'
+  const a = ANNOUNCEMENTS[id] || {};
+  return rows.filter(r => r.email && /@/.test(r.email) && !(a.skipRelay && !includeRelay && /privaterelay\.appleid\.com$/i.test(r.email)) && !r.sent && r.ann !== false && r.ann !== 0 && String(r.ann) !== 'false'
     && !['active', 'trialing', 'past_due'].includes(r.status) && !r.school && !appleOn.has(r.id) && !isOwner(env, { email: r.email }))
     .map(r => ({ id: r.id, email: r.email, first: String(r.pname || r.name || '').trim().split(/\s+/)[0] || '' }));
 }
@@ -87,7 +91,8 @@ export async function announce(env, user, input, origin = 'https://boplo.app', f
   const list = await audience(env, id);
   const sample = { first: String(user.display_name || '').split(/\s+/)[0] || 'Gianni' };
   if (input.action === 'preview' || !input.action) {
-    return { id, ready, subject: a.subject, count: list.length, appleRelay: list.filter(p => /privaterelay\.appleid\.com$/i.test(p.email)).length,
+    const all = a.skipRelay ? await audience(env, id, Date.now(), { includeRelay: true }) : list;
+    return { id, ready, subject: a.subject, count: list.length, skippedRelay: a.skipRelay ? all.filter(p => /privaterelay\.appleid\.com$/i.test(p.email)).length : 0,
       html: announcementHtml(a, sample.first, origin, '#'), recipients: list.slice(0, 500).map(p => p.email) };
   }
   if (!ready) fail(400, 'Email isn’t set up: RESEND_API_KEY, EMAIL_FROM and CRON_SECRET are needed.');

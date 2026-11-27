@@ -12,7 +12,7 @@ function setup() {
     CREATE TABLE flight_apple (user_id TEXT, status TEXT, expires_at INTEGER);`);
   const u = (id, email, profile = {}) => { db.prepare('INSERT INTO darts_users VALUES (?,?,?)').run(id, email, id); db.prepare('INSERT INTO flight_profiles VALUES (?,?)').run(id, JSON.stringify({ name: id + ' Pilot', ...profile })); };
   u('free', 'free@example.com'); u('paid', 'paid@example.com'); u('apple', 'apple@example.com'); u('lapsed', 'lapsed@example.com');
-  u('school', 'school@example.com'); u('optout', 'optout@example.com', { announcements: false }); u('boss', 'boss@boplo.app'); u('noemail', '');
+  u('school', 'school@example.com'); u('relay', 'x1y2@privaterelay.appleid.com'); u('optout', 'optout@example.com', { announcements: false }); u('boss', 'boss@boplo.app'); u('noemail', '');
   db.prepare("INSERT INTO flight_billing VALUES ('paid','active'),('lapsed','canceled')").run();
   db.prepare("INSERT INTO flight_apple VALUES ('apple','active',?)").run(Date.now() + 864e5);
   db.prepare("INSERT INTO flight_school_members VALUES ('school','s1')").run();
@@ -32,7 +32,7 @@ test('owner previews, tests and sends once; each person is emailed once with an 
   const { db, env } = setup(); const boss = { id: 'boss', email: 'boss@boplo.app', display_name: 'Gianni Wood' };
   await assert.rejects(announce(env, { id: 'x', email: 'x@example.com' }, { id: 'free-ending-2026-11' }), /Not allowed/);
   const pv = await announce(env, boss, { id: 'free-ending-2026-11', action: 'preview' });
-  assert.equal(pv.count, 2); assert.match(pv.html, /EARLYPILOT/); assert.match(pv.html, /3-day free trial/);
+  assert.equal(pv.count, 2); assert.equal(pv.skippedRelay, 1); assert.match(pv.html, /EARLYPILOT/); assert.match(pv.html, /3-day free trial/);
   const calls = []; const fake = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return new Response('{"data":[]}', { status: 200 }); };
   await announce(env, boss, { id: 'free-ending-2026-11', action: 'test' }, 'https://boplo.app', fake);
   assert.deepEqual(calls[0].body.map(m => m.to[0]), ['boss@boplo.app']); assert.match(calls[0].body[0].subject, /^\[Test\]/);
