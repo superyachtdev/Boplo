@@ -506,7 +506,7 @@
       btn.disabled = true;
       try {
         await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, OB.length - 1), complete: last });
-        if (last) { await buildingScreen(); location.hash = 'overview'; render(); if (!(nativeApp() && trialGateNeeded())) toast('Your flight desk is ready.'); }
+        if (last) { await buildingScreen(); location.hash = 'overview'; render(); if (!trialGateNeeded()) toast('Your flight desk is ready.'); }
         else { ui.step = s + 1; ui.obDir = 'fwd'; onboard(); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
@@ -558,9 +558,11 @@
   }
   const introSeen = () => { try { return localStorage.getItem('boplo-intro-seen') === '1'; } catch { return true; } };
 
-  /* ---------------- iOS: the app needs Advanced (trial or subscription); the website keeps a free plan ---------------- */
-  // only builds whose plugin can read store prices and trial eligibility get the gate; older App Store builds keep the free plan
-  const trialGateNeeded = () => nativeApp() && !preview && !embedded && !!nativePlugin()?.products && B().plan !== 'advanced' && B().enforced !== false;
+  /* ---------------- Advanced is required: a 3-day free trial (card needed) or a subscription ----------------
+     Website: Stripe, card first, charged when the trial ends. Old Capacitor iOS builds: Apple. Never inside the native app's
+     embedded web views (Apple handles purchases there) or the example desk. The school page stays open for school buyers. */
+  const trialGateNeeded = () => !preview && !embedded && B().plan !== 'advanced' && B().enforced !== false && current() !== 'school'
+    && (nativeApp() ? !!nativePlugin()?.products : B().ready === true);
   async function storeProducts() {
     if (ui.storeProducts) return ui.storeProducts;
     try { const pl = nativePlugin(); if (pl?.products) ui.storeProducts = await pl.products(); } catch { }
@@ -569,32 +571,40 @@
   async function trialGate() {
     document.title = 'Start your free trial · Boplo'; document.body.classList.add('ob-mode');
     iosStatus('dark');
-    const sp = await storeProducts(), iv = ui.billInterval === 'monthly' ? 'monthly' : 'yearly', b = B();
+    const web = !nativeApp(), sp = web ? {} : await storeProducts(), iv = ui.billInterval === 'monthly' ? 'monthly' : 'yearly', b = B();
     const price = k => sp[k]?.displayPrice || money2(b.prices[k].amount, b.prices[k].currency);
-    const days = sp[iv]?.trialDays || 0, trial = days > 0 && sp[iv]?.eligibleForTrial !== false;
+    const days = web ? (b.trialAvailable ? b.trialDays : 0) : sp[iv]?.trialDays || 0, trial = days > 0 && (web || sp[iv]?.eligibleForTrial !== false);
     const perMonth = sp.yearly?.price ? (() => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: sp.yearly.currency || 'USD' }).format(sp.yearly.price / 12); } catch { return ''; } })() : money2(Math.round(b.prices.yearly.amount / 12));
     const save = sp.yearly?.price && sp.monthly?.price ? Math.round((1 - sp.yearly.price / (sp.monthly.price * 12)) * 100) : Math.floor((1 - b.prices.yearly.amount / (b.prices.monthly.amount * 12)) * 100);
     const name = (state.profile?.name || '').split(' ')[0];
     root.innerHTML = `<main class="gate">${contours('b')}
-      <div class="gate-top"><button type="button" class="gate-link" data-restore>Restore</button><button type="button" class="gate-link" data-logout>Sign out</button></div>
+      <div class="gate-top">${web ? '<button type="button" class="gate-link" data-recheck>Subscribed on iPhone?</button>' : '<button type="button" class="gate-link" data-restore>Restore</button>'}<button type="button" class="gate-link" data-logout>Sign out</button></div>
       <div class="gate-hero"><span class="gate-badge">Boplo Advanced</span>
         <h1 class="display">${trial ? `${name ? esc(name) + ', try' : 'Try'} everything free for ${days} days` : 'Unlock your full flight desk'}</h1>
         <ul class="gate-list">${[['logbook', 'Unlimited logbook, progress and cost forecast'], ['ask', 'Mock checkride and Ask Boplo study assistant'], ['sim', 'Unlimited simulator at your own airfield'], ['radio', 'Radio practice with every call checked'], ['study', 'Study by subject and timed mock exams']].map(([ic, t]) => `<li>${ico(ic)}<span>${t}</span></li>`).join('')}</ul>
       </div>
-      ${trial ? `<ol class="gate-time"><li><b>Today</b><span>Everything unlocks. No charge.</span></li><li><b>Before day ${days}</b><span>Cancel any time in Settings → Subscriptions and you pay nothing.</span></li><li><b>Day ${days}</b><span>Your plan starts at ${iv === 'yearly' ? price('yearly') + ' a year' : price('monthly') + ' a month'}.</span></li></ol>` : ''}
+      ${trial ? `<ol class="gate-time"><li><b>Today</b><span>Everything unlocks. No charge.</span></li><li><b>Before day ${days}</b><span>${web ? 'Cancel any time in Plan &amp; billing and you pay nothing.' : 'Cancel any time in Settings → Subscriptions and you pay nothing.'}</span></li><li><b>Day ${days}</b><span>Your plan starts at ${iv === 'yearly' ? price('yearly') + ' a year' : price('monthly') + ' a month'}.</span></li></ol>` : ''}
       <div class="gate-plans" role="radiogroup" aria-label="Plan">
         <button type="button" role="radio" data-iv="yearly" aria-checked="${iv === 'yearly'}"><span class="gate-save">Save ${save}%</span><b>Yearly</b><span>${price('yearly')} a year${perMonth ? ` · ${perMonth}/mo` : ''}</span></button>
         <button type="button" role="radio" data-iv="monthly" aria-checked="${iv === 'monthly'}"><b>Monthly</b><span>${price('monthly')} a month</span></button>
       </div>
       <div class="gate-foot">
         <button type="button" class="btn btn-light btn-has-spark gate-cta" data-buy>${trial ? `Start my ${days}-day free trial` : `Continue for ${price(iv)}`} ${spark}</button>
-        <p class="gate-fine">${trial ? `${days} days free, then ${price(iv)} ${iv === 'yearly' ? 'per year' : 'per month'}. ` : ''}Payment is charged to your Apple ID${trial ? ' when the trial ends' : ''}. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage it in Settings → Apple ID → Subscriptions.</p>
-        <p class="gate-legal"><a href="/terms.html">Terms of Use</a><a href="/privacy.html">Privacy policy</a></p>
+        <p class="gate-fine">${web
+          ? `${trial ? `Add a card to start. Nothing is charged today. After ${days} days your card is charged ${price(iv)}${b.tax ? ' plus any tax' : ''}, then ` : `Your card is charged ${price(iv)}${b.tax ? ' plus any tax' : ''} today, then `}${iv === 'yearly' ? 'every year' : 'every month'} until you cancel. Cancel any time in Plan &amp; billing.`
+          : `${trial ? `${days} days free, then ${price(iv)} ${iv === 'yearly' ? 'per year' : 'per month'}. ` : ''}Payment is charged to your Apple ID${trial ? ' when the trial ends' : ''}. The subscription renews automatically unless you cancel at least 24 hours before the end of the current period. Manage it in Settings → Apple ID → Subscriptions.`}</p>
+        <p class="gate-legal"><a href="/terms.html">Terms of Use</a><a href="/privacy.html">Privacy policy</a>${web ? '<a href="/refunds.html">Refunds</a>' : ''}</p>
+        ${web && state.flights?.length ? `<p class="gate-legal gate-data"><span>Your records are yours:</span><a href="/flight/account/export" download>Download everything</a><button type="button" class="gate-link" data-gcsv>Logbook CSV</button></p>` : ''}
       </div></main>`;
     root.querySelectorAll('[data-iv]').forEach(x => x.onclick = () => { ui.billInterval = x.dataset.iv; trialGate(); });
     $('[data-logout]').onclick = logout;
-    $('[data-restore]').onclick = () => iosRestore(() => render());
-    const buy = $('[data-buy]'); buy.onclick = async () => { buy.disabled = true; await iosPurchase(iv, () => { render(); toast(trial ? `Your free trial has started. Enjoy Advanced.` : 'You’re on Advanced.'); }); buy.disabled = false; };
+    const rs = $('[data-restore]'); if (rs) rs.onclick = () => iosRestore(() => render());
+    const gc = $('[data-gcsv]'); if (gc) gc.onclick = exportCSV;
+    // someone who subscribed in the iPhone app (signed in with the same account) gets in once billing is re-read
+    const rc = $('[data-recheck]'); if (rc) rc.onclick = async () => { rc.disabled = true; try { state.billing = await api('billing'); } catch { } if (B().plan === 'advanced') { render(); toast('Welcome back. You’re on Advanced.'); } else { toast('No subscription found on this account. Sign in with the account you use in the app.'); rc.disabled = false; } };
+    const buy = $('[data-buy]');
+    if (web) buy.onclick = () => { ui.fromGate = true; checkoutSheet(iv); };
+    else buy.onclick = async () => { buy.disabled = true; await iosPurchase(iv, () => { render(); toast(trial ? `Your free trial has started. Enjoy Advanced.` : 'You’re on Advanced.'); }); buy.disabled = false; };
     hideNativeSplash();
   }
 
@@ -3434,7 +3444,7 @@
       await new Promise(r => setTimeout(r, 1500));
     }
     if (sheet.open) sheet.close();
-    if (B().plan === 'advanced') { toast(B().status === 'trialing' ? 'Your free trial has started. Enjoy Advanced.' : 'Welcome to Advanced.'); location.hash = '#plan'; render(); }
+    if (B().plan === 'advanced') { toast(B().status === 'trialing' ? 'Your free trial has started. Enjoy Advanced.' : 'Welcome to Advanced.'); location.hash = ui.fromGate ? '#overview' : '#plan'; ui.fromGate = false; render(); }
     else toast('Payment received. Your plan will update in a moment.');
   }
 

@@ -2,13 +2,15 @@ import { appleGrants, storeOf, publicApple, PRODUCTS as APPLE_PRODUCTS } from '.
 // Boplo Flight billing: Stripe subscriptions through the REST API (no SDK needed on Cloudflare).
 // Secrets (Cloudflare env): STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_FLIGHT_WEBHOOK_SECRET (this endpoint's own signing secret).
 // Options (Cloudflare env, optional): STRIPE_TAX=on to calculate VAT/sales tax with Stripe Tax.
-// There are no free trials (removed 2026-10-24); subscribers pay at checkout. The 'trialing' handling stays for anyone who started one before.
+// Website: a card is required to start, then a 3-day free trial (once per customer), then Stripe charges the plan.
+// (Trials were off from 2026-10-24 to 2026-11-27, when the website dropped its free plan.)
 
 export const PLANS = {
   monthly: { lookup: 'boplo_flight_advanced_monthly', amount: 1299, currency: 'usd', interval: 'month', label: 'Advanced monthly' },
   yearly: { lookup: 'boplo_flight_advanced_yearly', amount: 9999, currency: 'usd', interval: 'year', label: 'Advanced yearly' }
 };
 export const FREE_LIMITS = { flights: 15, navPlans: 1, shortFinals: 2 };
+export const TRIAL_DAYS = 3;
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const STRIPE_VERSION = '2024-06-20'; // pinned so response shapes stay stable
 
@@ -119,8 +121,8 @@ export function publicBilling(env, row, apple = null, now = Date.now()) {
   const stripeOn = !!(row && ACTIVE.has(row.status));
   return {
     plan, owner: !!row?.owner, school: row?.school || null, enforced: billingOn(env), status: appleOn && !stripeOn && !row?.owner && !row?.school ? (apple.status === 'grace' ? 'past_due' : 'active') : (row?.status || 'none'), interval: (appleOn && !stripeOn ? (apple.interval || apple.interval_key) : row?.price_key) || null, periodEnd: (appleOn && !stripeOn ? apple.expires_at : row?.current_period_end) || null,
-    cancelAtPeriodEnd: appleOn && !stripeOn ? apple.will_renew === 0 || apple.will_renew === false : !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: false,
-    trialDays: 0, publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
+    cancelAtPeriodEnd: appleOn && !stripeOn ? apple.will_renew === 0 || apple.will_renew === false : !!row?.cancel_at_period_end, trialEnd: row?.trial_end || null, trialAvailable: billingOn(env) && !row?.trial_used && !row?.owner && !row?.school && !appleOn,
+    trialDays: TRIAL_DAYS, publishableKey: env.STRIPE_PUBLISHABLE_KEY || '', ready: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
     tax: env.STRIPE_TAX === 'on', prices: Object.fromEntries(Object.entries(PLANS).map(([k, p]) => [k, { amount: p.amount, currency: p.currency, interval: p.interval }])), limits: FREE_LIMITS,
     store: storeOf(row, apple, now), apple: publicApple(apple),
     products: { yearly: Object.keys(APPLE_PRODUCTS).find(id => APPLE_PRODUCTS[id].interval === 'yearly'), monthly: Object.keys(APPLE_PRODUCTS).find(id => APPLE_PRODUCTS[id].interval === 'monthly') }
@@ -168,7 +170,8 @@ export async function subscribe(env, user, input, origin, fetcher = fetch) {
     await stripe(env, 'POST', `customers/${row.customer_id}`, { address: { country: a.country, postal_code: a.postal_code || undefined, line1: a.line1 || undefined, city: a.city || undefined, state: a.state || undefined }, expand: ['tax'] }, fetcher);
   }
   const promo = input?.promo ? await findPromo(env, input.promo, fetcher) : null;
-  const days = 0, useTrial = false;
+  // one free trial per customer; a promotion code marked skip_trial charges straight away
+  const days = TRIAL_DAYS, useTrial = !row.trial_used && !(promo && promo.metadata?.skip_trial === 'true');
   const sub = await stripe(env, 'POST', 'subscriptions', {
     customer: row.customer_id, items: [{ price: price.id }], payment_behavior: 'default_incomplete',
     payment_settings: { save_default_payment_method: 'on_subscription' },

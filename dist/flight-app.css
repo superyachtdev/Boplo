@@ -1680,3 +1680,15 @@ body.ob-mode .bradio,body.ob-mode .dock{display:none !important}
 /* the iPhone app runs the simulator in landscape: keep the setup clear of the notch and the home bar */
 .embed-sim .page{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 @media (orientation:landscape) and (max-height:500px){.embed-sim .page{padding-top:calc(env(safe-area-inset-top,0px) + 56px)}}
+/* the trial gate on a computer: one centred column instead of a phone-width page stretched across the screen */
+@media (min-width:720px){
+  .gate{align-items:center;padding:28px 32px 32px}
+  .gate>.gate-top,.gate>.gate-hero,.gate>.gate-time,.gate>.gate-plans,.gate>.gate-foot{width:100%;max-width:520px}
+  .gate>.gate-top{max-width:none}
+  .gate-hero{margin-top:4vh}
+  .gate h1{font-size:44px}
+  .gate-foot{margin-top:8px}
+}
+.gate-data{flex-wrap:wrap;align-items:baseline;gap:6px 14px}
+.gate-data span{color:rgba(222,233,255,.6)}
+.gate-data .gate-link{height:auto;padding:0;font-size:12.5px;color:#BFD6FF;text-decoration:underline;text-underline-offset:2px}
