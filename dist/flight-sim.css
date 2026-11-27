@@ -526,3 +526,4 @@
 .sim-touch .sim-stick span{bottom:auto;top:-18px}
 .sim.is-touch .sim-ck:not(.min){max-height:calc(100% - 150px);overflow:auto;overscroll-behavior:contain}
 @media (max-height:560px){.sim-ck:not(.min){max-height:calc(100% - 140px);overflow:auto;width:230px}.sim-ck{top:calc(env(safe-area-inset-top) + 56px)}}
+.sim.is-touch .sim-ck{top:calc(env(safe-area-inset-top) + 12px);left:calc(env(safe-area-inset-left) + 14px)}
