@@ -87,15 +87,15 @@ export async function announce(env, user, input, origin = 'https://boplo.app', f
   if (!isOwner(env, user)) fail(403, 'Not allowed.');
   const id = String(input?.id || ''), a = ANNOUNCEMENTS[id];
   if (!a) fail(400, 'Unknown announcement.');
-  const ready = !!(env.RESEND_API_KEY && env.EMAIL_FROM && env.CRON_SECRET);
+  const missing = ['RESEND_API_KEY', 'EMAIL_FROM', 'CRON_SECRET'].filter(k => !env[k]), ready = !missing.length;
   const list = await audience(env, id);
   const sample = { first: String(user.display_name || '').split(/\s+/)[0] || 'Gianni' };
   if (input.action === 'preview' || !input.action) {
     const all = a.skipRelay ? await audience(env, id, Date.now(), { includeRelay: true }) : list;
-    return { id, ready, subject: a.subject, count: list.length, skippedRelay: a.skipRelay ? all.filter(p => /privaterelay\.appleid\.com$/i.test(p.email)).length : 0,
+    return { id, ready, missing, subject: a.subject, count: list.length, skippedRelay: a.skipRelay ? all.filter(p => /privaterelay\.appleid\.com$/i.test(p.email)).length : 0,
       html: announcementHtml(a, sample.first, origin, '#'), recipients: list.slice(0, 500).map(p => p.email) };
   }
-  if (!ready) fail(400, 'Email isn’t set up: RESEND_API_KEY, EMAIL_FROM and CRON_SECRET are needed.');
+  if (!ready) fail(400, `Email isn’t set up on the server. Missing: ${missing.join(', ')}.`);
   if (input.action === 'test') {
     await sendBatch(env, [{ id: user.id, email: user.email, first: sample.first }], { ...a, subject: '[Test] ' + a.subject }, origin, fetcher);
     return { ok: true, sentTo: user.email };
