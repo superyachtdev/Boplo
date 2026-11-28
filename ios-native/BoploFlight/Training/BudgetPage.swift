@@ -125,7 +125,7 @@ struct BudgetPage: View {
     // MARK: View
 
     var body: some View { screenBody.screen("budget") }
-    @ViewBuilder private var screenBody: some View {
+    private var screenBody: some View {
         let fc = forecast
         return Page(title: "Budget", subtitle: "What your licence is likely to cost, based on how students really finish, and whether your budget gets you there.") {
             DarkTile(spacing: 12) {

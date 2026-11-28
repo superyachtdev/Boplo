@@ -7,7 +7,7 @@ struct RadioPage: View {
     @Environment(AppModel.self) private var model
 
     var body: some View { screenBody.screen("radio") }
-    @ViewBuilder private var screenBody: some View {
+    private var screenBody: some View {
         let set = RadioScenarios(model)
         let best = model.json("radio")
         return Page(title: "Radio practice", subtitle: "Practise \(set.faa ? "FAA" : "UK and ICAO")-style calls out loud. Boplo listens and checks you included everything.") {
