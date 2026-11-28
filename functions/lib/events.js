@@ -322,7 +322,7 @@ export async function retention(env, user, url, now = Date.now()) {
 // Plain-language findings, worst first. Each needs enough people behind it to mean anything.
 export function insights({ totals, paths, screens, returning, features, kept, lost, trials, gone, funnels }) {
   const out = [];
-  if (totals.people < 5) return [{ tone: 'info', title: 'Not enough people yet', text: 'Findings appear once at least 5 people have used a version that sends screen data (iPhone app 1.7 or the website).' }];
+  if (totals.people < 5) return [{ tone: 'info', title: 'Not enough people yet', text: 'Findings appear once at least 5 people have used a version that sends screen data (iPhone app 1.8 or the website).' }];
   for (const [platform, path] of Object.entries(paths)) {
     const worst = path.filter(s => s.drop != null && s.n + s.drop >= 5).sort((a, b) => b.drop / (b.n + b.drop) - a.drop / (a.n + a.drop))[0];
     if (worst && worst.drop) {
