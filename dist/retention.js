@@ -98,7 +98,7 @@
       pw.sources.length ? table([['Started from'], ['Started', 'r'], ['Completed', 'r'], ['Backed out', 'r'], ['Completed %', 'r']],
         pw.sources.map(s => `<tr><td>${esc(nm(s.from))}</td><td class="r">${nf(s.start)}</td><td class="r">${nf(s.success)}</td><td class="r">${nf(s.cancel)}</td><td class="r">${s.start ? Math.round(s.success / s.start * 100) + '%' : '—'}</td></tr>`)) : empty('No purchases started yet.')));
 
-    h.push(`<p class="note">Counts people by account once they sign in, and by install before that. iPhone numbers start with version 1.7; website numbers start from ${new Date(2026, 10, 28).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Sandbox and owner purchases are included, so expect a little noise while testing.</p>`);
+    h.push(`<p class="note">Counts people by account once they sign in, and by install before that. iPhone numbers start with version 1.8; website numbers start from ${new Date(2026, 10, 28).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}. Sandbox and owner purchases are included, so expect a little noise while testing.</p>`);
     main.innerHTML = h.join('');
 
     const box = $('[data-screens]'); let sort = 'views', all = false;
