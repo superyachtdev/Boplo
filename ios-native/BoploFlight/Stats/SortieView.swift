@@ -37,7 +37,8 @@ struct SortieView: View {
     private var points: Int { (briefOK == true ? 1 : 0) + (preflightOK == true ? 1 : 0) + qAnswers.filter(\.ok).count }
     private var grade: String { points >= 5 ? "A" : points == 4 ? "B" : points == 3 ? "C" : "D" }
 
-    var body: some View {
+    var body: some View { screenBody.screen("sortie") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {

@@ -14,7 +14,8 @@ struct SimulatorView: View {
     /// True while a flight is running: the simulator draws its own close button then.
     @State private var flying = false
 
-    var body: some View {
+    var body: some View { screenBody.screen("simulator") }
+    @ViewBuilder private var screenBody: some View {
         ZStack(alignment: .topTrailing) {
             Theme.night.ignoresSafeArea()
             BoploWebView(url: url, reloadToken: token, loading: $loading, failed: $failed) { message in

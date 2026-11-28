@@ -33,7 +33,8 @@ struct CheckrideView: View {
     private var debriefed: Bool { messages.contains { $0.role == "assistant" && Self.score($0.content) != nil } }
     private var started: Bool { !messages.isEmpty }
 
-    var body: some View {
+    var body: some View { screenBody.screen("mock_checkride") }
+    @ViewBuilder private var screenBody: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {

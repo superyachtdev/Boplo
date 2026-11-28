@@ -15,7 +15,8 @@ struct WeatherPage: View {
     @State private var hideDecode = false
     @State private var searched = ""
 
-    var body: some View {
+    var body: some View { screenBody.screen("weather") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Weather", subtitle: "Look up the live METAR and TAF for any airport or airfield, with every group explained.") {
             HStack(spacing: 8) {
                 HStack(spacing: 10) {

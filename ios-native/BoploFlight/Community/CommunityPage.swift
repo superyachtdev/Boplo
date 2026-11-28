@@ -13,7 +13,8 @@ struct CommunityPage: View {
     @State private var asking = false
     @State private var searchTask: Task<Void, Never>?
 
-    var body: some View {
+    var body: some View { screenBody.screen("community") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Q&A", subtitle: "Ask other student pilots, share what worked, and help the next person.") {
             Text("Be kind and specific. Answers here are from other students, not instructors: check anything that matters with your school.")
                 .font(.archivo(13.5)).padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -120,7 +121,8 @@ struct AskQuestionSheet: View {
     @State private var busy = false
     @State private var error: String?
 
-    var body: some View {
+    var body: some View { screenBody.screen("community_ask") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -169,7 +171,8 @@ struct QuestionPage: View {
     @State private var reported: Set<String> = []
     @State private var blocking: (pid: String, name: String, isQuestion: Bool)?
 
-    var body: some View {
+    var body: some View { screenBody.screen("community_question") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Question", inline: true) {
             if let q = question {
                 post(q, isQuestion: true)

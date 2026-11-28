@@ -7,7 +7,8 @@ struct LogbookView: View {
     @Environment(AppModel.self) private var model
     @State private var section = "logbook"
 
-    var body: some View {
+    var body: some View { screenBody.screen("logbook") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             Group {
                 switch section {

@@ -282,7 +282,8 @@ struct LiveTrafficPage: View {
     @State private var camera: MapCameraPosition = .automatic
     @State private var home: Airfield?
 
-    var body: some View {
+    var body: some View { screenBody.screen("live_traffic") }
+    @ViewBuilder private var screenBody: some View {
         Map(position: $camera, selection: $traffic.selected) {
             UserAnnotation()
             if let home {

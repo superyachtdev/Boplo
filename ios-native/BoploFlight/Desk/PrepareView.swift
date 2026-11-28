@@ -18,7 +18,8 @@ struct PrepareView: View {
     @State private var saved = false
     @State private var loaded = false
 
-    var body: some View {
+    var body: some View { screenBody.screen("prepare") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Prepare", subtitle: "Your notes and questions for the next lesson, with the last debriefs beside them.") {
             Tile {
                 TileHead("Next lesson")

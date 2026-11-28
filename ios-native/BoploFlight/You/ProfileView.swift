@@ -29,7 +29,8 @@ struct ProfileView: View {
     private static let frequencies = ["Twice a week", "Weekly", "Monthly", "Intensive course", "Still deciding"]
     private static let currencies = ["USD", "GBP", "EUR", "CAD", "AUD", "NZD", "CHF", "SEK", "NOK", "DKK", "ZAR"]
 
-    var body: some View {
+    var body: some View { screenBody.screen("profile") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Profile", subtitle: model.workspace?.user.email.map { "Signed in as \($0)" }) {
             Tile {
                 TileHead("You and your training")

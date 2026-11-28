@@ -47,7 +47,8 @@ enum AIConsent {
 struct AIConsentSheet: View {
     let decide: (Bool) -> Void
 
-    var body: some View {
+    var body: some View { screenBody.screen("ai_consent") }
+    @ViewBuilder private var screenBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Image(systemName: "sparkles")
@@ -100,7 +101,8 @@ struct AIConsentSheet: View {
 /// You › AI features: the switch behind the consent.
 struct AIFeaturesPage: View {
     @State private var on = AIConsent.granted
-    var body: some View {
+    var body: some View { screenBody.screen("ai_features") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "AI features", subtitle: "Ask Boplo, the mock checkride and question explanations use an AI service run by Anthropic (and Google as a backup).") {
             Tile {
                 Toggle(isOn: $on) {

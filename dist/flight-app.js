@@ -12,6 +12,38 @@
   if (embedded) document.documentElement.classList.add('embed');
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  /* ---------------- usage events, for the owner's retention dashboard ----------------
+     Screens opened and a few named moments go to Boplo's own server (POST /flight/events), nowhere else.
+     Off in the example desk and inside the iPhone app, which sends its own. */
+  const T = (() => {
+    const off = preview || embedded || !!window.Capacitor?.isNativePlatform?.();
+    const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+    const rid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const device = ls('boplo.dev') || (ls('boplo.dev', rid()), ls('boplo.dev')) || 'web-' + rid();
+    let sid = null, seen = 0, last = '';
+    const session = () => { const now = Date.now(); if (!sid || now - seen > 30 * 60e3) sid = rid().slice(0, 13); seen = now; return sid; };
+    const q = [];
+    const flush = beacon => {
+      if (off || !q.length) return;
+      const body = JSON.stringify({ device, platform: 'web', v: 'web', events: q.splice(0, 100) });
+      try { if (beacon && navigator.sendBeacon) { navigator.sendBeacon('/flight/events', new Blob([body], { type: 'application/json' })); return; } } catch { }
+      fetch('/flight/events', { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body }).catch(() => { });
+    };
+    const add = (k, n, p) => { if (off) return; const e = { t: Date.now(), k, n, s: session() }; if (p) e.p = p; q.push(e); if (q.length >= 15) flush(); };
+    function screen(n) { if (!n || n === last) return; last = n; add('screen', n); }
+    if (!off) {
+      setInterval(() => flush(), 20000);
+      addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') { add('event', 'app_background', { screen: last }); flush(true); }
+        else if (Date.now() - seen > 30 * 60e3) { const s = last; last = ''; add('event', 'app_resume'); if (s) screen(s); }
+      });
+      addEventListener('pagehide', () => flush(true));
+      let ref = ''; try { ref = document.referrer ? new URL(document.referrer).hostname.slice(0, 60) : ''; } catch { }
+      add('event', 'app_open', ref ? { ref } : null);
+    }
+    return { screen, event: (n, p) => add('event', n, p), flush };
+  })();
+
   /* ---------------- helpers ---------------- */
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const $ = (s, r = root) => r.querySelector(s);
@@ -202,6 +234,7 @@
   /* ---------------- sign in ---------------- */
   function auth(notice = '') {
     if (embedded) bridge({ type: 'signedOut' });
+    T.screen('sign_in');
     document.title = 'Sign in · Boplo Flight';
     root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
       <div class="auth-copy">
@@ -234,6 +267,7 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note.textContent = 'Enter a valid email address.'; note.classList.add('err'); form.email.focus(); return; }
       btn.disabled = true; note.textContent = 'Sending your link…';
       try {
+        T.event('sign_in_email');
         const res = await fetch('/auth/auth/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(out.error || 'We couldn’t send that email. Try again shortly.');
@@ -471,6 +505,7 @@
     document.title = 'Set up · Boplo Flight'; document.body.classList.add('ob-mode');
     iosStatus('light');
     const p = state.profile || {}, s = Math.max(0, Math.min(OB.length - 1, ui.step || 0)), sc = OB[s], last = s === OB.length - 1;
+    T.screen('setup_' + sc.id);
     root.innerHTML = `<div class="ob">
       <header class="ob-top">
         ${s ? `<button type="button" class="ob-back" data-back aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>` : `<span class="ob-back" aria-hidden="true"></span>`}
@@ -506,12 +541,12 @@
       btn.disabled = true;
       try {
         await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, OB.length - 1), complete: last });
-        if (last) { await buildingScreen(); location.hash = 'overview'; render(); if (!trialGateNeeded()) toast('Your flight desk is ready.'); }
+        if (last) { T.event('onboarding_done', { country: state.profile?.countryCode || '', licence: state.profile?.licence || '', pace: state.profile?.frequency || '' }); await buildingScreen(); location.hash = 'overview'; render(); if (!trialGateNeeded()) toast('Your flight desk is ready.'); }
         else { ui.step = s + 1; ui.obDir = 'fwd'; onboard(); }
       } catch (x) { err.textContent = x.message; btn.disabled = false; }
     };
     form.onsubmit = e => { e.preventDefault(); go(false); };
-    const sk = $('[data-skip]'); if (sk) sk.onclick = () => go(true);
+    const sk = $('[data-skip]'); if (sk) sk.onclick = () => { T.event('setup_skip', { step: sc.id }); go(true); };
     form.querySelectorAll('.ob-choice input').forEach(r => r.addEventListener('change', () => { try { window.Capacitor?.Plugins?.Haptics?.selectionChanged?.(); } catch { } }));
     hideNativeSplash();
   }
@@ -569,6 +604,7 @@
     return ui.storeProducts || {};
   }
   async function trialGate() {
+    T.screen('trial_gate');
     document.title = 'Start your free trial · Boplo'; document.body.classList.add('ob-mode');
     iosStatus('dark');
     const web = !nativeApp(), sp = web ? {} : await storeProducts(), iv = ui.billInterval === 'monthly' ? 'monthly' : 'yearly', b = B();
@@ -3371,8 +3407,9 @@
       </div>
       <footer class="sheet-foot"><span class="hint pay-lock">${ico('lock')}Secured by Stripe</span><div class="right" style="display:flex;gap:10px;margin-left:auto"><button type="button" class="btn btn-line" data-close>Cancel</button><button class="btn btn-blue btn-has-spark" data-go disabled><span data-golabel></span> ${spark}</button></div></footer>
     </form>`;
-    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => sheet.close());
+    sheet.querySelectorAll('[data-close]').forEach(x => x.onclick = () => { T.event('checkout_cancel', { plan: interval, from: ui.fromGate ? 'trial_gate' : 'plan' }); sheet.close(); });
     sheet.showModal();
+    T.screen('checkout'); T.event('checkout_start', { plan: interval, from: ui.fromGate ? 'trial_gate' : 'plan', trial: !!b.trialAvailable });
     const form = sheet.querySelector('[data-pay]'), err = sheet.querySelector('.form-error'), go = sheet.querySelector('[data-go]'), q = s2 => sheet.querySelector(s2);
     const paint = () => {
       const t = trialNow(), f = firstAmt();
@@ -3444,6 +3481,7 @@
       await new Promise(r => setTimeout(r, 1500));
     }
     if (sheet.open) sheet.close();
+    if (B().plan === 'advanced') T.event('checkout_done', { plan: B().interval || '', trial: B().status === 'trialing', from: ui.fromGate ? 'trial_gate' : 'plan' });
     if (B().plan === 'advanced') { toast(B().status === 'trialing' ? 'Your free trial has started. Enjoy Advanced.' : 'Welcome to Advanced.'); location.hash = ui.fromGate ? '#overview' : '#plan'; ui.fromGate = false; render(); }
     else toast('Payment received. Your plan will update in a moment.');
   }
@@ -4176,6 +4214,7 @@
     if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(OB.length - 1, state.profile?.step || 0); onboard(); return; }
     if (trialGateNeeded()) { trialGate(); return; }
     const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; }
+    T.screen(k);
     if (embedded && (k === 'plan' || k === 'more')) { bridge({ type: k === 'plan' ? 'upgrade' : 'close' }); if (history.length > 1) history.back(); return; } if (k !== 'study') quiz = null;
     ({ overview, logbook, map: mapPage, analytics, prepare, profile: profilePage, progress: progressPage, budget: budgetPage, study: studyPage, weather: weatherPage, navlog: navPage, preflight: preflightPage, community: communityPage, leaderboards: boardsPage, students: studentsPage, sim: simPage, plan: planPage, school: schoolPage, ask: askPage, currency: currencyPage, radio: () => radioPage(), more: morePage })[k]();
     hideNativeSplash();

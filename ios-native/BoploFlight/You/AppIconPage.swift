@@ -14,7 +14,8 @@ struct AppIconPage: View {
         ("AppIcon-Cloud", "Above the cloud", "Light, for light Home Screens", "IconPreview-Cloud"),
     ]
 
-    var body: some View {
+    var body: some View { screenBody.screen("app_icon") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "App icon", subtitle: model.isAdvanced ? "Pick how Boplo looks on your Home Screen." : "Alternate icons come with Advanced.") {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 ForEach(icons, id: \.name) { icon in

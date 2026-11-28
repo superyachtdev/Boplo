@@ -13,7 +13,8 @@ struct FlyView: View {
     @State private var confirmDiscard = false
     @Environment(AppModel.self) private var model
 
-    var body: some View {
+    var body: some View { screenBody.screen("fly") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             Page(title: "Fly") {
                 simCard

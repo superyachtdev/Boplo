@@ -34,7 +34,7 @@ struct IntroPagesView: View {
             VStack(spacing: 0) {
                 HStack {
                     Spacer()
-                    Button("Skip") { onDone() }
+                    Button("Skip") { Track.event("intro_skip", ["page": page + 1]); onDone() }
                         .font(.archivo(15, .medium))
                         .foregroundStyle(Theme.mist)
                 }
@@ -65,6 +65,7 @@ struct IntroPagesView: View {
             }
         }
         .sensoryFeedback(.selection, trigger: page)
+        .onChange(of: page, initial: true) { _, p in Track.screen("intro_\(p + 1)") }
     }
 }
 
@@ -148,6 +149,9 @@ struct OnboardingFlow: View {
         }
         .animation(.easeInOut(duration: 0.3), value: building)
         .onAppear(perform: prefill)
+        .onChange(of: step, initial: true) { _, s in
+            Track.screen(["onb_name", "onb_country", "onb_goal", "onb_pace", "onb_hours"][min(s, 4)])
+        }
     }
 
     private var questions: some View {
@@ -334,7 +338,9 @@ struct OnboardingFlow: View {
                 "complete": true,
                 "step": 7
             ])
+            Track.event("onboarding_done", ["country": country.code, "licence": licence.id, "pace": pace, "hours": opening > 0])
         } catch {
+            Track.event("onboarding_error")
             self.error = error.localizedDescription
             building = false
         }
@@ -380,7 +386,8 @@ struct BuildingDeskView: View {
     @State private var shown = 0
     @State private var ring: CGFloat = 0
 
-    var body: some View {
+    var body: some View { screenBody.screen("building_desk") }
+    @ViewBuilder private var screenBody: some View {
         ZStack {
             NightBackdrop()
             VStack(spacing: 24) {
@@ -438,7 +445,8 @@ struct TrialGateView: View {
     private var selected: Product? { yearly ? store.yearly : store.monthly }
     private var trial: Bool { trialDays > 0 && eligible }
 
-    var body: some View {
+    var body: some View { screenBody.screen("trial_gate") }
+    @ViewBuilder private var screenBody: some View {
         ZStack {
             NightBackdrop()
             VStack(spacing: 0) {
@@ -471,7 +479,7 @@ struct TrialGateView: View {
 
                 VStack(spacing: 10) {
                     if let p = selected {
-                        Button { Task { await store.buy(p) } } label: {
+                        Button { Task { await store.buy(p, from: "trial_gate") } } label: {
                             HStack(spacing: 8) {
                                 if store.busy { ProgressView().tint(Theme.ink) }
                                 Text(trial ? "Start my \(trialDays)-day free trial" : "Continue for \(p.displayPrice)")
@@ -496,7 +504,7 @@ struct TrialGateView: View {
                         Text("Plans couldn’t load from the App Store right now.").font(.archivo(14)).foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.8))
                         Button("Try again") { Task { loading = true; await store.loadProducts(); await loadTrial(); loading = false } }
                             .font(.archivo(15, .semibold)).foregroundStyle(.white)
-                        Button { onSkip() } label: {
+                        Button { Track.event("trial_gate_skip"); onSkip() } label: {
                             Text("Continue with the free plan")
                                 .font(.archivo(17, .semibold)).foregroundStyle(Theme.ink)
                                 .frame(maxWidth: .infinity, minHeight: 52)

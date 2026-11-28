@@ -32,7 +32,8 @@ struct FlightFormView: View {
     @State private var error: String?
     @State private var loaded = false
 
-    var body: some View {
+    var body: some View { screenBody.screen("log_flight") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {

@@ -74,7 +74,8 @@ struct CurrencyPage: View {
         return (.ok, "Valid until \(Day.full(until))", Theme.ok)
     }
 
-    var body: some View {
+    var body: some View { screenBody.screen("currency") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Currency", subtitle: "The dates and recent-experience rules that decide what you can fly, worked out from your logbook.") {
             if !model.isAdvanced {
                 LockedTile(title: "Always know what you can fly.", text: "Track your medical and rating expiry, passenger and night currency, and revalidation by experience, with reminders before anything lapses.", message: "Currency is part of Advanced.")

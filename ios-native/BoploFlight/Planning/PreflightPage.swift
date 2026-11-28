@@ -60,7 +60,8 @@ struct PreflightPage: View {
         js.value("BoploPreflight.wb(BoploPreflight.aircraft(\(JSEngine.lit(ac)), \(JSEngine.lit(mineObject))), \(JSEngine.lit(loadsObject)), \(JSEngine.lit(["start": Double(fuelStart) ?? 0, "burn": fuelUsed])))") as? [String: Any] ?? [:]
     }
 
-    var body: some View {
+    var body: some View { screenBody.screen("preflight") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Preflight", subtitle: "Weight and balance, runway performance and a weather go/no-go for your next flight, on one page.") {
             Text("A training aid. Use your aircraft’s own weight and balance report and POH, check every figure, and get an official briefing before you fly.")
                 .font(.archivo(13.5)).padding(12).frame(maxWidth: .infinity, alignment: .leading)

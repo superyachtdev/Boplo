@@ -29,7 +29,8 @@ struct QuizView: View {
     private var q: QuestionBank.Question? { index < session.questions.count ? session.questions[index] : nil }
     private var right: Int { answers.filter(\.ok).count }
 
-    var body: some View {
+    var body: some View { screenBody.screen("quiz") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {

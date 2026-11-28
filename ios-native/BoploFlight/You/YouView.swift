@@ -8,7 +8,8 @@ struct YouView: View {
     @State private var confirmDelete = false
     @State private var deleteError: String?
 
-    var body: some View {
+    var body: some View { screenBody.screen("you") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             Page(title: "Account", subtitle: model.workspace?.user.email.map { "Signed in as \($0)" }) {
                 HStack(spacing: 14) {
@@ -132,7 +133,8 @@ struct PlanView: View {
     @Environment(AppModel.self) private var model
     @Environment(StoreModel.self) private var store
 
-    var body: some View {
+    var body: some View { screenBody.screen("plan_billing") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Plan", subtitle: model.isAdvanced ? "You’re on Advanced." : "You’re on the Free plan.") {
             if model.isAdvanced {
                 DarkTile {
@@ -172,7 +174,8 @@ struct PlansView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
-    var body: some View {
+    var body: some View { screenBody.screen("plans").onAppear { Track.event("paywall", ["why": String((message ?? "").prefix(80))]) } }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -243,7 +246,7 @@ struct PlansContent: View {
                 if let m = store.monthly { option(m, id: "monthly", title: "Monthly", price: "\(m.displayPrice) a month", badge: nil) }
             }
             Button {
-                if let p = interval == "yearly" ? store.yearly : store.monthly { Task { await store.buy(p) } }
+                if let p = interval == "yearly" ? store.yearly : store.monthly { Task { await store.buy(p, from: "plans") } }
             } label: {
                 HStack { if store.busy { ProgressView().tint(.white) }; Text("Continue") }
             }

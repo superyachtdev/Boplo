@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Retention · Boplo Flight</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#020611">
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,300..800;1,62..125,300..800&display=swap">
+  <link rel="stylesheet" href="/flight-app.css?v=17">
+  <link rel="stylesheet" href="/owner.css?v=1">
+  <style>
+    main.ow{z-index:4}
+    .oh .segs{display:flex;gap:10px;flex-wrap:wrap}
+    .axis{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:6px;font-variant-numeric:tabular-nums}
+    .more{margin-top:12px}
+    /* findings */
+    .ins{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+    .in{border-radius:16px;padding:16px 16px 14px;background:var(--well);border-left:4px solid var(--ink-3)}
+    .in.bad{background:#FFF3EF;border-color:#E2552B}.in.good{background:#ECF8F0;border-color:#1E9A55}.in.info{background:#EEF3FF;border-color:var(--electric)}
+    .in b{display:block;font-size:15.5px;font-weight:640;letter-spacing:-.01em;line-height:1.3}
+    .in p{margin:6px 0 0;font-size:13.5px;color:var(--ink-2);line-height:1.5}
+    .in p.do{color:var(--ink);font-weight:520}
+    .in p.do::before{content:"Try: ";font-weight:640}
+    /* columns: one bar per step, % on top, like a funnel chart */
+    .cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(64px,1fr);gap:8px;align-items:end;height:250px;overflow-x:auto;padding:28px 2px 0}
+    .col{display:flex;flex-direction:column;justify-content:flex-end;height:100%;min-width:64px;position:relative}
+    .col .c{background:var(--electric);border-radius:9px 9px 3px 3px;min-height:3px;position:relative}
+    .col .c.lo{background:#E2552B}
+    .col .c span{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);font-size:12px;font-weight:620;white-space:nowrap;background:var(--paper);border-radius:7px;padding:2px 6px;box-shadow:0 1px 3px rgba(2,6,17,.12);font-variant-numeric:tabular-nums}
+    .col .c span em{font-style:normal;font-weight:500;color:var(--ink-3);margin-left:3px}
+    .col .l{font-size:11.5px;color:var(--ink-2);text-align:center;margin-top:8px;line-height:1.25;min-height:2.5em}
+    .col .dr{font-size:11px;color:#C2410C;text-align:center;font-variant-numeric:tabular-nums;min-height:1.3em}
+    /* cohort grid */
+    .hm-t td.h{text-align:center;font-weight:600;font-variant-numeric:tabular-nums;border-radius:6px}
+    .bar .f.lo{background:#E2552B}.bar .f.ok{background:#1E9A55}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12.5px;color:var(--ink-3);margin-bottom:8px}
+    .fx{display:grid;gap:10px}
+    .fx-r{display:grid;grid-template-columns:minmax(110px,30%) 1fr;gap:10px;align-items:center;font-size:13.5px}
+    .fx-b{display:grid;gap:3px}
+    .fx-b i{display:block;height:8px;border-radius:4px;min-width:2px}
+    .fx-b i.k{background:#1E9A55}.fx-b i.x{background:#E2552B;opacity:.75}
+    .fx-r small{color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums}
+    .leg{display:flex;gap:14px;font-size:12.5px;color:var(--ink-3);margin-bottom:12px}
+    .leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+    .scr{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+    .tabs{display:flex;gap:6px;margin-bottom:12px}
+    .tabs button{border:0;background:var(--well);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink-2)}
+    .tabs button[aria-pressed=true]{background:var(--ink);color:#fff}
+    .rate.hi{color:#C2410C;font-weight:640}
+  </style>
+</head>
+<body>
+  <header class="oh night">
+    <nav><a class="brand" href="/" aria-label="Boplo home"><img src="/assets/boplo-wordmark.webp" alt="Boplo" width="520" height="163"><span>Flight</span></a><span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn btn-light btn-sm" href="/owner.html">Owner analytics</a><a class="btn btn-ghost btn-sm" href="/flight-app.html">Back to the flight desk</a></span></nav>
+    <div class="oh-row">
+      <div><h1 class="display">Retention</h1><p data-gen>Where people drop off, where they close the app, and what keeps them.</p></div>
+      <div class="segs">
+        <div class="seg" role="group" aria-label="Platform">
+          <button type="button" data-pf="all" aria-pressed="true">All</button>
+          <button type="button" data-pf="ios" aria-pressed="false">iPhone</button>
+          <button type="button" data-pf="web" aria-pressed="false">Website</button>
+        </div>
+        <div class="seg" role="group" aria-label="Period">
+          <button type="button" data-days="7" aria-pressed="false">7 days</button>
+          <button type="button" data-days="30" aria-pressed="true">30 days</button>
+          <button type="button" data-days="90" aria-pressed="false">90 days</button>
+          <button type="button" data-days="365" aria-pressed="false">12 months</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main class="ow" id="ow">
+    <section class="tile s12 sk"></section>
+    <section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section><section class="tile s3 sk"></section>
+    <section class="tile s12 sk" style="min-height:300px"></section>
+  </main>
+  <script src="/retention.js?v=1" defer></script>
+</body>
+</html>

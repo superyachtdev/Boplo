@@ -14,7 +14,8 @@ struct LeaderboardsPage: View {
     private let kinds = [("short", "Short final"), ("long", "Long final"), ("circuit", "Circuit")]
     private let wxNames = ["clear": "clear skies", "fair": "fair weather", "scattered": "scattered cloud", "broken": "broken cloud", "overcast": "low overcast", "hazy": "haze", "gusty": "a gusty crosswind"]
 
-    var body: some View {
+    var body: some View { screenBody.screen("leaderboards") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Leaderboards", subtitle: "Your best simulator landing at each airfield, against everyone else’s. A new daily challenge every day.") {
             if let error {
                 Tile { Text("Leaderboards didn’t load.").font(.archivo(17, .semibold)); Text(error).font(.archivo(14)).foregroundStyle(Theme.ink3) }

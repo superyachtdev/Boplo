@@ -14,7 +14,8 @@ struct SchoolPage: View {
 
     private var role: String { school?["role"] as? String ?? "" }
 
-    var body: some View {
+    var body: some View { screenBody.screen("school") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: school?["name"] as? String ?? "Flight school", subtitle: school == nil ? "Join your school with its code." : role == "student" ? "Your flight school on Boplo." : nil) {
             if !loaded {
                 Tile { ProgressView().frame(maxWidth: .infinity) }

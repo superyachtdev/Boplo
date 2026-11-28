@@ -125,7 +125,8 @@ struct TrainingProgressPage: View {
     @State private var error: String?
     @State private var shareItem: Milestone?
 
-    var body: some View {
+    var body: some View { screenBody.screen("progress") }
+    @ViewBuilder private var screenBody: some View {
         Page(title: "Progress", subtitle: "Track what your licence needs, the syllabus you’ve covered, and the moments worth celebrating.") {
             checklist
             wins

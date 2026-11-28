@@ -7,6 +7,7 @@ import { runNudges, nudgesOff } from '../lib/nudges.js';
 import { community } from '../lib/community.js';
 import { recordHit, saveAttrib, ownerStats, ownerUsers, ownerUser, tiktokFeed, setTiktokFeed } from '../lib/owner.js';
 import { announce, announcementsOff } from '../lib/announce.js';
+import { ingestEvents, retention } from '../lib/events.js';
 import { coachRoutes, runDigest, digestOff } from '../lib/coach.js';
 import { pushRoutes } from '../lib/push.js';
 import { schoolRoutes, schoolLead, membership as schoolMembership, publicSchool, schoolActive, syncSchool } from '../lib/schools.js';
@@ -73,6 +74,10 @@ if(path==='shared'&&request.method==='GET')return json(await shared(url,env));
  if(path==='tiktok'&&request.method==='GET')return new Response(JSON.stringify(await tiktokFeed(env)),{headers:{'Content-Type':'application/json','Cache-Control':'public, max-age=120'}});
  if(path==='simkey'&&request.method==='GET')return json({key:env.GOOGLE_MAPS_BROWSER_KEY||''});
  const token=(request.headers.get('Cookie')||'').match(/(?:^|;\s*)boplo_session=([^;]+)/)?.[1];
+ // usage events for the retention dashboard: signed in or not, and never a 401 (the app would sign out)
+ if(path==='events'&&request.method==='POST'){const raw=await request.text();if(raw.length>60000)return json({ok:false},413);let input;try{input=JSON.parse(raw);}catch{return json({ok:false},400);}
+  let uid=null;if(token){const h=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');uid=(await env.DB.prepare('SELECT s.user_id FROM darts_sessions s WHERE s.token_hash=? AND s.expires_at>?').bind(h,Date.now()).first())?.user_id||null;}
+  try{return json(await ingestEvents(env,input,uid));}catch(e){return json({ok:false,error:e.message},e.status&&e.status<500?e.status:500);}}
  if(!token)fail(401,'Sign in to open your flight desk.');
  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))].map(n=>n.toString(16).padStart(2,'0')).join('');
  const user=await env.DB.prepare('SELECT u.id,u.email,u.display_name FROM darts_sessions s JOIN darts_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(hash,Date.now()).first();
@@ -134,6 +139,7 @@ if(path==='weather'&&request.method==='GET')return json(await weather(url,env));
  }
  if(path==='attrib'&&request.method==='POST')return json(await saveAttrib(env,user,await body()));
  if(path==='owner/stats'&&request.method==='GET')return json(await ownerStats(env,user,url));
+ if(path==='owner/retention'&&request.method==='GET')return json(await retention(env,user,url));
  if(path==='owner/users'&&request.method==='GET')return json(await ownerUsers(env,user,url));
  if(path==='owner/tiktok'&&request.method==='POST')return json(await setTiktokFeed(env,user,await body()));
  if(path==='owner/announce'&&request.method==='POST')return json(await announce(env,user,await body(),url.origin));

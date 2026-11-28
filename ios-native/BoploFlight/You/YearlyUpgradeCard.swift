@@ -23,7 +23,7 @@ struct YearlyUpgradeCard: View {
                 }
                 Text("You’ve paid \(paid.formatted(m.priceFormatStyle)) over \(store.monthlyPayments) months. Yearly is \(y.displayPrice), about \((y.price / 12).formatted(y.priceFormatStyle)) a month, and it covers the rest of your training without monthly charges.")
                     .font(.archivo(14.5)).foregroundStyle(Theme.ink2).fixedSize(horizontal: false, vertical: true)
-                Button { Task { await store.buy(y); if store.monthlyPayments == 0 { dismissed = true } } } label: {
+                Button { Task { await store.buy(y, from: "yearly_upgrade"); if store.monthlyPayments == 0 { dismissed = true } } } label: {
                     Text("Switch to yearly")
                 }
                 .buttonStyle(.pill(.blue, height: 46, full: true))

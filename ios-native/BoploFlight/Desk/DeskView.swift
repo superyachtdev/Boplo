@@ -5,7 +5,8 @@ import MapKit
 struct DeskView: View {
     @Environment(AppModel.self) private var model
 
-    var body: some View {
+    var body: some View { screenBody.screen("desk") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack {
             Page(title: title) {
                 hero

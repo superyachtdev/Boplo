@@ -15,7 +15,8 @@ struct SignInView: View {
     @State private var error: String?
     @FocusState private var focused: Bool
 
-    var body: some View {
+    var body: some View { screenBody.screen("sign_in") }
+    @ViewBuilder private var screenBody: some View {
         ZStack {
             ZStack {
                 RadialGradient(colors: [Color(hex: 0x0B1E4E), Color(hex: 0x040B22), Theme.night], center: UnitPoint(x: 0.8, y: 0), startRadius: 0, endRadius: 700)
@@ -68,7 +69,7 @@ struct SignInView: View {
             .disabled(busy)
 
             Button {
-                error = nil; note = nil; step = .email; focused = true
+                Track.event("sign_in_email"); error = nil; note = nil; step = .email; focused = true
             } label: {
                 Label("Continue with email", systemImage: "envelope")
             }
@@ -139,7 +140,8 @@ struct SignInView: View {
         error = nil
         switch result {
         case .failure(let failure):
-            if (failure as? ASAuthorizationError)?.code == .canceled { return }
+            if (failure as? ASAuthorizationError)?.code == .canceled { Track.event("sign_in_apple_cancel"); return }
+            Track.event("sign_in_error", ["method": "apple"])
             error = "Apple sign-in didn’t work. Try again, or use email."
         case .success(let auth):
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential,
@@ -153,6 +155,7 @@ struct SignInView: View {
             defer { busy = false }
             do {
                 try await API.shared.send("auth/auth/apple", method: "POST", body: ["identityToken": token, "name": name])
+                Track.event("sign_in_done", ["method": "apple"])
                 await model.refresh()
             } catch {
                 self.error = error.localizedDescription
@@ -182,8 +185,10 @@ struct SignInView: View {
         defer { busy = false }
         do {
             try await API.shared.send("auth/auth/code", method: "POST", body: ["email": email, "code": code])
+            Track.event("sign_in_done", ["method": "email"])
             await model.refresh()
         } catch {
+            Track.event("sign_in_error", ["method": "email"])
             self.error = error.localizedDescription
             code = ""
         }

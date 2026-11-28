@@ -4,6 +4,7 @@
 //   APPLE_ROOT is embedded below (public). Receipt checks need the Pages compatibility flag nodejs_compat.
 //   APPLE_IAP_ALLOW_TEST_ROOT=1 and APPLE_ROOT_PEM are for tests only. Do not set them in production.
 
+import { serverEvent } from './events.js';
 export const BUNDLE_ID = 'app.boplo.flight';
 export const PRODUCTS = {
   'app.boplo.flight.advanced.yearly': { interval: 'yearly', amount: 9999, currency: 'usd' },
@@ -180,6 +181,8 @@ export async function applyNotification(env, body, now = Date.now()) {
   await ensureAppleSchema(env);
   const existing = mapRow(await env.DB.prepare('SELECT * FROM flight_apple WHERE original_transaction_id=?').bind(next.originalTransactionId).first());
   await saveApple(env, { ...next, userId: existing?.user_id || null, willRenew: next.willRenew });
+  if (existing?.user_id) await serverEvent(env, existing.user_id, 'apple_' + outer.notificationType + (outer.subtype ? '_' + outer.subtype : ''),
+    { plan: next.interval === 'year' || next.interval === 'yearly' ? 'yearly' : next.interval ? 'monthly' : undefined, trial: transaction.offerType === 1, sandbox: next.environment === 'Sandbox' }, now);
   return { ok: true, originalTransactionId: next.originalTransactionId, status: next.status, userId: existing?.user_id || null };
 }
 

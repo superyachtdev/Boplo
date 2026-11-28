@@ -19,7 +19,8 @@ struct AskView: View {
 
     private var storeKey: String { "boplo-ask-" + (model.workspace?.user.email ?? "me") }
 
-    var body: some View {
+    var body: some View { screenBody.screen("ask_boplo") }
+    @ViewBuilder private var screenBody: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {

@@ -14,7 +14,8 @@ struct MilestoneMoment: View {
     @State private var stamped = false
     @State private var sharing = false
 
-    var body: some View {
+    var body: some View { screenBody.screen("milestone") }
+    @ViewBuilder private var screenBody: some View {
         ZStack {
             RadialGradient(colors: [Color(hex: 0x0B1E4E), Color(hex: 0x040B22), Theme.night], center: UnitPoint(x: 0.8, y: 0), startRadius: 0, endRadius: 800)
                 .ignoresSafeArea()

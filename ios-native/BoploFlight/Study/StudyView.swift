@@ -9,7 +9,8 @@ struct StudyView: View {
     private var bank: QuestionBank.Pack? { QuestionBank.shared?.pack(for: model.regime) }
     private var state: StudyState { StudyState(json: model.profile?.study) }
 
-    var body: some View {
+    var body: some View { screenBody.screen("study") }
+    @ViewBuilder private var screenBody: some View {
         NavigationStack(path: $path) {
             Page(title: "Study") {
                 ChipRow(items: [

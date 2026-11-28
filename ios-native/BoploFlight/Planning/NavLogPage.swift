@@ -62,7 +62,8 @@ struct NavLogPage: View {
         return h > 0 ? "\(h):" + String(format: "%02d", Int(m.rounded()) % 60) : "\(Int(m.rounded())) min"
     }
 
-    var body: some View {
+    var body: some View { screenBody.screen("nav_log") }
+    @ViewBuilder private var screenBody: some View {
         let L = legs
         let totD = L.reduce(0) { $0 + $1.d }, totM = L.reduce(0) { $0 + ($1.mins.isFinite ? $1.mins : 0) }, totF = L.reduce(0) { $0 + ($1.fuel.isFinite ? $1.fuel : 0) }
         let resFuel = n(burn) * n(reserve) / 60, allFuel = totF + resFuel + n(taxi)

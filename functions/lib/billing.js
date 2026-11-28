@@ -1,4 +1,5 @@
 import { appleGrants, storeOf, publicApple, PRODUCTS as APPLE_PRODUCTS } from './apple.js';
+import { serverEvent } from './events.js';
 // Boplo Flight billing: Stripe subscriptions through the REST API (no SDK needed on Cloudflare).
 // Secrets (Cloudflare env): STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_FLIGHT_WEBHOOK_SECRET (this endpoint's own signing secret).
 // Options (Cloudflare env, optional): STRIPE_TAX=on to calculate VAT/sales tax with Stripe Tax.
@@ -81,6 +82,10 @@ async function saveRow(env, userId, patch) {
   const r = { customer_id: null, subscription_id: null, status: 'none', price_key: null, current_period_end: null, cancel_at_period_end: 0, trial_end: null, trial_used: 0, ...prev, ...patch };
   await env.DB.prepare('INSERT INTO flight_billing(user_id,customer_id,subscription_id,status,price_key,current_period_end,cancel_at_period_end,trial_end,trial_used,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET customer_id=excluded.customer_id,subscription_id=excluded.subscription_id,status=excluded.status,price_key=excluded.price_key,current_period_end=excluded.current_period_end,cancel_at_period_end=excluded.cancel_at_period_end,trial_end=excluded.trial_end,trial_used=excluded.trial_used,updated_at=excluded.updated_at')
     .bind(userId, r.customer_id, r.subscription_id, r.status, r.price_key, r.current_period_end, r.cancel_at_period_end ? 1 : 0, r.trial_end, r.trial_used ? 1 : 0, Date.now()).run();
+  // subscription changes feed the retention dashboard
+  const plan = r.price_key || undefined;
+  if (r.status !== (prev.status || 'none') && r.status !== 'none') await serverEvent(env, userId, 'stripe_' + r.status, { plan });
+  if (!!r.cancel_at_period_end !== !!prev.cancel_at_period_end && r.subscription_id) await serverEvent(env, userId, r.cancel_at_period_end ? 'stripe_cancel_on' : 'stripe_cancel_off', { plan });
   return { ...r, user_id: userId };
 }
 async function ensureCustomer(env, user, fetcher) {

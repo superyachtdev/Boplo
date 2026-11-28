@@ -13,7 +13,8 @@ struct FlightDetailView: View {
     /// The latest copy after an edit.
     private var f: Flight { model.flights.first { $0.id == flight.id } ?? flight }
 
-    var body: some View {
+    var body: some View { screenBody.screen("flight_detail") }
+    @ViewBuilder private var screenBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {

@@ -96,9 +96,10 @@ final class StoreModel {
         guard #available(iOS 18.0, *) else { await buy(wb.product); return }
         busy = true; message = nil
         defer { busy = false }
+        Track.event("winback_start")
         do {
             switch try await wb.product.purchase(options: [.winBackOffer(wb.offer)]) {
-            case .success(let verification): await handle(verification); winBack = nil
+            case .success(let verification): Track.event("winback_success"); await handle(verification); winBack = nil
             case .pending: message = "Your purchase is waiting for approval."
             default: break
             }
@@ -116,26 +117,34 @@ final class StoreModel {
         }
     }
 
-    func buy(_ product: Product) async {
+    func buy(_ product: Product, from: String = "") async {
         busy = true; message = nil
         defer { busy = false }
+        let plan = Self.yearlyIDs.contains(product.id) ? "yearly" : "monthly"
+        var trial = false
+        if product.subscription?.introductoryOffer?.paymentMode == .freeTrial { trial = await product.subscription?.isEligibleForIntroOffer ?? false }
+        Track.event("purchase_start", ["plan": plan, "from": from, "trial": trial])
         do {
             switch try await product.purchase() {
             case .success(let verification):
+                Track.event("purchase_success", ["plan": plan, "from": from, "trial": trial])
                 await handle(verification)
             case .pending:
+                Track.event("purchase_pending", ["plan": plan])
                 message = "Your purchase is waiting for approval."
             case .userCancelled:
-                break
+                Track.event("purchase_cancel", ["plan": plan, "from": from])
             @unknown default:
                 break
             }
         } catch {
+            Track.event("purchase_error", ["plan": plan])
             message = "The App Store couldn’t complete that purchase. Try again."
         }
     }
 
     func restore() async {
+        Track.event("restore")
         busy = true; message = nil
         defer { busy = false }
         try? await AppStore.sync()

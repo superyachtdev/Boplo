@@ -6,6 +6,7 @@ struct BoploFlightApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @State private var store = StoreModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         BoploFonts.register()
@@ -21,9 +22,14 @@ struct BoploFlightApp: App {
                 // The desk is designed light, like the web app.
                 .preferredColorScheme(.light)
                 .task {
+                    Track.start()
                     await model.start()
                     await store.start(model: model)
                 }
+        }
+        .onChange(of: scenePhase) { old, phase in
+            if phase == .background { Track.didEnterBackground() }
+            if phase == .active && old == .background { Track.willEnterForeground() }
         }
     }
 }
@@ -90,6 +96,8 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: model.phase)
         .animation(.easeInOut(duration: 0.35), value: model.isAdvanced)
+        .onChange(of: model.phase, initial: true) { _, phase in Track.event("phase", ["to": "\(phase)"]) }
+        .onChange(of: model.isAdvanced) { _, on in Track.event(on ? "advanced_on" : "advanced_off") }
     }
 }
 
@@ -210,9 +218,11 @@ struct MainTabs: View {
         // widget taps: boploflight://sortie opens today's sortie, boploflight://study the Study tab
         .onOpenURL { url in
             guard url.scheme == "boploflight", let host = url.host, ["sortie", "study"].contains(host) else { return }
+            Track.event("widget_open", ["to": host])
             router.route = host
         }
         .onChange(of: router.route, initial: true) { _, route in
+            if let route { Track.event("route_open", ["to": route]) }
             switch route {
             case "study": model.tab = .study; router.route = nil
             case "sortie": model.tab = .desk
