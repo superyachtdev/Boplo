@@ -39,24 +39,25 @@ test('report joins an install to its account, builds the funnel, exit screens, r
   const { env } = setup(); const now = Date.now(), t0 = now - 20 * DAY;
   const send = (device, user, ts, list) => ingestEvents(env, { device, platform: 'ios', events: list.map(([k, n, p], i) => ({ t: ts + i * 60e3, k, n, s: device + Math.floor(ts / DAY), p })) }, user, ts + 60 * 60e3);
   // A: goes through everything, starts a trial, keeps it, comes back on day 1 and day 8 and uses the logbook early
-  await send('dev-a-000001', null, t0, [['screen', 'intro_1'], ['screen', 'intro_2'], ['screen', 'intro_3'], ['screen', 'sign_in']]);
-  await send('dev-a-000001', 'A', t0 + 5 * 60e3, [['screen', 'onb_name'], ['screen', 'onb_country'], ['screen', 'onb_goal'], ['screen', 'onb_pace'], ['screen', 'onb_hours'], ['event', 'onboarding_done'], ['screen', 'trial_gate'], ['event', 'purchase_start', { from: 'trial_gate' }], ['event', 'purchase_success', { from: 'trial_gate', plan: 'yearly', trial: true }], ['screen', 'desk'], ['screen', 'logbook']]);
+  await send('dev-a-000001', null, t0, [['screen', 'welcome'], ['screen', 'q_country'], ['screen', 'q_goal'], ['event', 'questions_done'], ['event', 'committed'], ['screen', 'save_plan']]);
+  await send('dev-a-000001', 'A', t0 + 5 * 60e3, [['screen', 'building_desk'], ['event', 'onboarding_done'], ['screen', 'trial_gate'], ['event', 'purchase_start', { from: 'trial_gate' }], ['event', 'purchase_success', { from: 'trial_gate', plan: 'yearly', trial: true }], ['screen', 'desk'], ['screen', 'logbook']]);
   await send('dev-a-000001', 'A', t0 + DAY, [['screen', 'desk'], ['screen', 'logbook']]);
   await send('dev-a-000001', 'A', t0 + 18 * DAY, [['screen', 'desk']]);
   await serverEvent(env, 'A', 'apple_DID_RENEW', { plan: 'yearly' }, t0 + 3.2 * DAY);
   // B: signs in, sees the trial offer, starts a trial, cancels 2 hours later, never returns
-  await send('dev-b-000002', null, t0, [['screen', 'intro_1'], ['screen', 'sign_in']]);
-  await send('dev-b-000002', 'B', t0 + 2 * 60e3, [['screen', 'onb_name'], ['screen', 'onb_country'], ['screen', 'onb_goal'], ['screen', 'onb_pace'], ['screen', 'onb_hours'], ['event', 'onboarding_done'], ['screen', 'trial_gate'], ['event', 'purchase_success', { from: 'trial_gate', plan: 'monthly', trial: true }], ['screen', 'desk'], ['screen', 'study']]);
+  await send('dev-b-000002', null, t0, [['screen', 'welcome'], ['screen', 'q_country'], ['event', 'questions_done'], ['screen', 'save_plan']]);
+  await send('dev-b-000002', 'B', t0 + 2 * 60e3, [['screen', 'building_desk'], ['event', 'onboarding_done'], ['screen', 'trial_gate'], ['event', 'purchase_success', { from: 'trial_gate', plan: 'monthly', trial: true }], ['screen', 'desk'], ['screen', 'study']]);
   await serverEvent(env, 'B', 'apple_DID_CHANGE_RENEWAL_STATUS_AUTO_RENEW_DISABLED', null, t0 + 2.5 * 3600e3);
   // C: never gets past sign-in
-  await send('dev-c-000003', null, t0, [['screen', 'intro_1'], ['screen', 'intro_2'], ['screen', 'sign_in']]);
+  await send('dev-c-000003', null, t0, [['screen', 'welcome'], ['screen', 'q_country'], ['screen', 'save_plan']]);
 
   const r = await retention(env, boss, url('days=30&platform=ios'), now);
   const f = Object.fromEntries(r.funnels.ios.map(s => [s.label, s.n]));
   assert.equal(f['Opened the app'], 3); assert.equal(f['Signed in'], 2); assert.equal(f['Started a trial or plan'], 2); assert.equal(f['Paid after the trial'], 1);
-  assert.equal(r.paths.ios.find(s => s.screen === 'sign_in').n, 3);
-  assert.equal(r.paths.ios.find(s => s.screen === 'onb_name').drop, 1);
-  assert.equal(r.closed.find(c => c.screen === 'sign_in').n, 1);
+  assert.equal(r.paths.ios.find(s => s.screen === 'save_plan').n, 3);
+  assert.equal(r.paths.ios.find(s => s.screen === 'building_desk').drop, 1);
+  assert.equal(Object.fromEntries(r.funnels.ios.map(s => [s.label, s.n]))['Answered the questions'], 2);
+  assert.equal(r.closed.find(c => c.screen === 'save_plan').n, 1);
   assert.equal(r.gone.people, 2);
   assert.equal(r.returning.find(x => x.day === 1).back, 1);
   assert.equal(r.returning.find(x => x.day === 7).rate, 33.3);

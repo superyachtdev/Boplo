@@ -54,6 +54,8 @@ struct Profile: Decodable {
     @Lenient var openingMinutes: Double?
     @Lenient var goalHours: Double?
     @Lenient var complete: Bool?
+    @Lenient var stage: String?
+    @Lenient var struggles: String?
 
     var isComplete: Bool { complete == true }
 

@@ -75,16 +75,18 @@ export async function serverEvent(env, userId, name, props = null, now = Date.no
 
 // The iPhone app's first-run screens, in order.
 export const IOS_PATH = [
-  ['intro_1', 'Intro 1'], ['intro_2', 'Intro 2'], ['intro_3', 'Intro 3'], ['sign_in', 'Sign in'],
-  ['onb_name', 'Your name'], ['onb_country', 'Country'], ['onb_goal', 'Licence goal'], ['onb_pace', 'How often'], ['onb_hours', 'Hours so far'],
-  ['building_desk', 'Building your desk'], ['trial_gate', 'Trial offer'], ['desk', 'Desk']
+  ['welcome', 'Welcome'], ['q_country', 'Country'], ['q_goal', 'Licence goal'], ['q_stage', 'Where they are'], ['q_struggles', 'What’s hardest'],
+  ['q_pace', 'How often'], ['q_lesson', 'Next lesson'], ['q_heard', 'Heard about Boplo'], ['plan', 'Their plan'], ['commit', 'Commitment'],
+  ['reminders', 'Reminders'], ['save_plan', 'Save your plan (sign in)'], ['building_desk', 'Building the desk'], ['trial_gate', 'Trial offer'], ['desk', 'Desk']
 ];
 export const WEB_PATH = [
-  ['sign_in', 'Sign in'], ['setup_name', 'Your name'], ['setup_where', 'Country'], ['setup_goal', 'Licence goal'], ['setup_pace', 'How often'],
-  ['setup_fly', 'Aircraft'], ['setup_cost', 'Hourly cost'], ['setup_hours', 'Hours so far'], ['setup_review', 'Review'],
-  ['trial_gate', 'Trial offer'], ['checkout', 'Card details'], ['overview', 'Desk']
+  ['welcome', 'Welcome'], ['q_where', 'Country'], ['q_goal', 'Licence goal'], ['q_stage', 'Where they are'], ['q_struggles', 'What’s hardest'],
+  ['q_pace', 'How often'], ['q_lesson', 'Next lesson'], ['q_heard', 'Heard about Boplo'], ['q_plan', 'Their plan'], ['q_commit', 'Commitment'],
+  ['save_plan', 'Save your plan (sign in)'], ['trial_gate', 'Trial offer'], ['checkout', 'Card details'], ['overview', 'Desk']
 ];
 export const LABELS = {
+  welcome: 'Welcome', q_country: 'Q: country', q_where: 'Q: country', q_goal: 'Q: licence goal', q_stage: 'Q: where they are', q_struggles: 'Q: what’s hardest', q_pace: 'Q: how often',
+  q_lesson: 'Q: next lesson', q_heard: 'Q: heard about Boplo', plan: 'Their plan', q_plan: 'Their plan', commit: 'Commitment', q_commit: 'Commitment', reminders: 'Reminders', save_plan: 'Save your plan', q_name: 'Q: name',
   intro_1: 'Intro 1', intro_2: 'Intro 2', intro_3: 'Intro 3', sign_in: 'Sign in', onb_name: 'Onboarding: name', onb_country: 'Onboarding: country',
   onb_goal: 'Onboarding: licence goal', onb_pace: 'Onboarding: how often', onb_hours: 'Onboarding: hours so far', building_desk: 'Building your desk',
   trial_gate: 'Trial offer', checkout: 'Card details', desk: 'Desk', overview: 'Desk', logbook: 'Logbook', log_flight: 'Log a flight', flight_detail: 'A flight',
@@ -198,11 +200,11 @@ export async function retention(env, user, url, now = Date.now()) {
   const started = p => !!p.trialAt || ev(p, 'purchase_success') || ev(p, 'checkout_done');
   const funnels = {};
   if (want !== 'web') funnels.ios = funnelOf({ platform: 'ios', list: [
-    ['Opened the app', () => true], ['Saw the intro', p => has(p, 'intro_1')], ['Reached sign-in', p => has(p, 'sign_in')], ['Signed in', p => p.signedIn],
+    ['Opened the app', () => true], ['Answered the questions', p => ev(p, 'questions_done')], ['Committed to the plan', p => ev(p, 'committed')], ['Reached sign-in', p => has(p, 'save_plan') || has(p, 'sign_in')], ['Signed in', p => p.signedIn],
     ['Finished onboarding', p => ev(p, 'onboarding_done')], ['Saw the trial offer', p => has(p, 'trial_gate')], ['Started a trial or plan', started],
     ['Paid after the trial', p => !!p.paidAt]] });
   if (want !== 'ios') funnels.web = funnelOf({ platform: 'web', list: [
-    ['Opened the web app', () => true], ['Signed in', p => p.signedIn], ['Finished setup', p => ev(p, 'onboarding_done') || has(p, 'overview')],
+    ['Opened the web app', () => true], ['Answered the questions', p => ev(p, 'questions_done')], ['Reached sign-in', p => has(p, 'save_plan') || has(p, 'sign_in')], ['Signed in', p => p.signedIn], ['Finished setup', p => ev(p, 'onboarding_done') || has(p, 'overview')],
     ['Saw the trial offer', p => has(p, 'trial_gate')], ['Started checkout', p => ev(p, 'checkout_start')], ['Started a trial or plan', started],
     ['Paid after the trial', p => !!p.paidAt]] });
 
@@ -363,7 +365,16 @@ function actionFor(screen) {
     logbook: 'An empty logbook is a dead end: offer to log the last lesson or import from a photo.',
     simulator: 'If people leave from the sim, check load time and the first 10 seconds of the experience.',
     study: 'Start a 5-question round automatically instead of showing a menu.',
-    plans: 'The paywall sheet is a common exit: make sure it says what they lose and offers the trial.'
+    plans: 'The paywall sheet is a common exit: make sure it says what they lose and offers the trial.',
+    welcome: 'The first screen loses people: test a different headline, or a picture of the plan they’ll get.',
+    q_struggles: 'Fewer, bigger choices on “What’s hardest”, or let people skip it.',
+    q_lesson: 'Make “I don’t have one booked” more obvious.',
+    q_heard: 'Move “Where did you hear about Boplo” after sign-in, or drop it.',
+    plan: 'The plan screen should feel exciting: lead with their finish date and keep the text short.',
+    q_plan: 'The plan screen should feel exciting: lead with their finish date and keep the text short.',
+    commit: 'If people stall on hold-to-commit, make the hold shorter or add a plain “I’m in” button.',
+    q_commit: 'If people stall on hold-to-commit, make the hold shorter or add a plain “I’m in” button.',
+    save_plan: 'Saving the plan is the account step: make Sign in with Apple or Google the first, biggest button.'
   };
   return map[screen] || (screen?.startsWith('intro_') ? 'Shorten the intro or let people skip straight to sign-in.' : null);
 }

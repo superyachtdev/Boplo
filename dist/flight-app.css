@@ -1597,6 +1597,47 @@ button.ob-back{background:#fff;box-shadow:0 1px 0 rgba(5,11,31,.06),0 0 0 1px rg
 .ob-next{width:100%;height:56px;font-size:17px}
 .ob-skip{height:40px;font-size:15px;color:var(--ink-3)}
 .ob .review{grid-template-columns:1fr}
+/* first run: struggles grid, plan, commitment, welcome */
+.ob-grid .ob-choices{grid-template-columns:1fr 1fr}
+.ob-grid .ob-choice span{min-height:64px;align-content:center}
+.ob-night{background:radial-gradient(90% 50% at 50% 0%,rgba(10,98,255,.42),transparent 60%),linear-gradient(180deg,#071433,var(--night) 70%);color:#F2F6FF}
+.ob-night .ob-top{background:none}
+.ob-night button.ob-back{background:rgba(255,255,255,.1);box-shadow:none;color:#fff}
+.ob-night .ob-bar{background:rgba(255,255,255,.12)}
+.ob-night .ob-body h1{color:#fff}
+.ob-night .ob-body .lead{color:rgba(222,233,255,.78)}
+.ob-night .ob-foot{background:none}
+.ob-plan{display:grid;gap:14px}
+.ob-plan h2{font-size:clamp(32px,8vw,42px);line-height:1.05;margin:0;color:#fff}
+.ob-plan>p{margin:0;color:rgba(222,233,255,.8);font-size:15.5px;line-height:1.5}
+.ob-plan-k{display:flex;align-items:center;gap:8px;margin:0!important;font-size:13.5px!important;font-weight:600;color:#BFD6FF!important}
+.ob-plan-k .ico{width:16px;height:16px}
+.ob-chart{padding:16px;border-radius:18px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(158,216,255,.14)}
+.ob-chart svg{display:block;width:100%;height:140px;overflow:visible}
+.ob-chart .ob-dash{stroke:rgba(158,216,255,.25);stroke-dasharray:4 5}
+.ob-chart .ob-line{fill:none;stroke:#4D8DFF;stroke-width:4;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:obDraw 1.2s .2s ease-in-out forwards;filter:drop-shadow(0 0 6px rgba(77,141,255,.6))}
+.ob-chart circle{fill:#fff}
+@keyframes obDraw{to{stroke-dashoffset:0}}
+.ob-axis{display:flex;justify-content:space-between;margin-top:8px;font-size:12.5px;color:rgba(222,233,255,.7)}
+.ob-faster{margin:0;color:#FFD27A!important;font-weight:520;font-size:14.5px!important}
+.ob-help,.ob-commit{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.ob-help li{display:flex;gap:12px;align-items:flex-start;font-size:15px;color:#fff;line-height:1.45}
+.ob-help .ico{width:20px;height:20px;flex:none;color:#7FB0FF;margin-top:1px}
+.ob-commit li{display:flex;gap:14px;align-items:center;padding:14px;border-radius:16px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(158,216,255,.15)}
+.ob-commit .ico{width:42px;height:42px;flex:none;padding:11px;border-radius:50%;background:var(--electric);color:#fff}
+.ob-commit span{display:grid;gap:2px}.ob-commit b{font-size:16.5px;color:#fff;font-weight:600}.ob-commit small{font-size:13.5px;color:rgba(222,233,255,.75)}
+.ob-hold{position:relative;height:56px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.12);color:#fff;font-size:17px;font-weight:600;touch-action:none;user-select:none;-webkit-user-select:none}
+.ob-hold i{position:absolute;inset:0 auto 0 0;width:56px;border-radius:99px;background:var(--electric);transition:width .25s ease-out}
+.ob-hold.on i{width:100%;transition:width 1.4s linear}
+.ob-hold.done i{width:100%;transition:none;background:#1E9A55}
+.ob-hold span{position:relative}
+.ob-hold:focus-visible{outline:3px solid rgba(158,216,255,.6);outline-offset:3px}
+.ob-welcome .night{grid-template-columns:1fr}
+.ob-welcome .auth-copy h1{max-width:12ch}
+.ob-welcome-cta{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:30px}
+.ob-welcome-cta .btn{height:56px;padding:0 28px;font-size:17px}
+.ob-welcome-cta .link{color:rgba(222,233,255,.85);font-size:15.5px}
+@media (prefers-reduced-motion:reduce){.ob-chart .ob-line{animation:none;stroke-dashoffset:0}.ob-hold.on i{transition:width .2s}}
 
 /* building moment */
 .ob-build{min-height:100svh;display:grid;place-items:center;padding:24px;color:#F2F6FF;position:relative;overflow:hidden;background:radial-gradient(80% 50% at 50% 0%,rgba(10,98,255,.4),transparent 60%),linear-gradient(180deg,#071433,var(--night) 70%)}

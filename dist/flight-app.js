@@ -232,22 +232,23 @@
   }
 
   /* ---------------- sign in ---------------- */
-  function auth(notice = '') {
+  function auth(notice = '', mode = '') {
     if (embedded) bridge({ type: 'signedOut' });
-    T.screen('sign_in');
+    const saving = mode === 'save';
+    T.screen(saving ? 'save_plan' : 'sign_in'); document.body.classList.remove('ob-mode');
     document.title = 'Sign in · Boplo Flight';
     root.innerHTML = `<main class="auth"><div class="night">${contours('a')}
       <div class="auth-copy">
         ${brand()}
         <div>
-          <h1 class="display">Your flight desk is waiting.</h1>
-          <p>Sign in to keep your next lesson, your flights and your hours in one place.</p>
+          <h1 class="display">${saving ? 'Save your plan.' : 'Your flight desk is waiting.'}</h1>
+          <p>${saving ? 'Create your free account so your plan, logbook and progress are kept safe on every device.' : 'Sign in to keep your next lesson, your flights and your hours in one place.'}</p>
         </div>
         <small>Boplo supports preparation and record keeping. It is not flight instruction or operational approval.</small>
       </div>
       <section class="auth-card" aria-labelledby="auth-title">
-        <h2 id="auth-title">Sign in or create your desk</h2>
-        <p>New here? Signing in creates your account. It’s free to start.</p>
+        <h2 id="auth-title">${saving ? 'Create your account' : 'Sign in or create your desk'}</h2>
+        <p>${saving ? 'Your answers are saved the moment you sign in.' : 'New here? Signing in creates your account.'}</p>
         <a class="btn btn-google" href="/auth/auth/google">${ico('google')}Continue with Google</a>
         <div class="or">or use your email</div>
         <form data-email novalidate>
@@ -256,9 +257,11 @@
           <button class="btn btn-blue btn-has-spark" type="submit">Email me a sign-in link ${spark}</button>
         </form>
         <p class="auth-legal">By continuing you agree to the <a href="/terms.html">Terms</a> and confirm you’ve read the <a href="/privacy.html">Privacy policy</a>.</p>
-        <div class="auth-links"><a href="/flight-app.html?preview=1">Try the example desk</a><a href="/">Back to boplo.app</a></div>
+        <div class="auth-links">${saving ? '<button type="button" class="link" data-edit>Change my answers</button>' : '<button type="button" class="link" data-plan>New here? Build your plan first</button>'}<a href="/">Back to boplo.app</a></div>
       </section>
     </div></main>`;
+    const ed = $('[data-edit]'); if (ed) ed.onclick = () => { const d = draft.get(); d.at = 'q'; draft.set(d); ui.qstep = QS.length - 1; qflow('out'); };
+    const np = $('[data-plan]'); if (np) np.onclick = () => { const d = draft.get(); d.at = 'q'; draft.set(d); ui.qstep = d.q || 0; qflow('out'); };
     const form = $('[data-email]'), note = $('[data-note]');
     form.onsubmit = async e => {
       e.preventDefault();
@@ -473,81 +476,196 @@
   }
 
 
-  /* ---------------- onboarding: one question per screen ---------------- */
-  const OB = [
-    { id: 'name', t: 'What should we call you?', l: 'This is how Boplo greets you. Nobody else sees it unless you share.',
-      f: p => input('Your name', 'name', p.name || state.user?.display_name || '', 'text', 'required maxlength="100" autocomplete="name" autofocus') },
+  /* ---------------- first run: questions → your plan → commitment → save (sign in) → trial ----------------
+     Built around the student, not the features. Answers are kept in this browser (boplo-draft) until there
+     is an account to save them to; someone who signs in first answers the same questions afterwards. */
+  const draft = {
+    get() { try { return JSON.parse(localStorage.getItem('boplo-draft') || 'null') || {}; } catch { return {}; } },
+    set(d) { try { localStorage.setItem('boplo-draft', JSON.stringify(d)); } catch { } },
+    clear() { try { localStorage.removeItem('boplo-draft'); } catch { } }
+  };
+  const STAGES = [['new', 'Haven’t started yet', 'Looking into it, or booked a first lesson'], ['early', 'A few lessons in', 'Under 10 hours'], ['presolo', 'Working towards solo', 'About 10 to 25 hours'], ['solo', 'Flown solo', 'Building hours and cross-countries'], ['checkride', 'Checkride coming up', 'Final hours, exams and the test']];
+  const STRUGGLES = [['landings', 'Landings', 'sim'], ['radio', 'Radio calls', 'radio'], ['theory', 'Theory exams', 'study'], ['cost', 'The cost', 'budget'], ['time', 'Finding time to study', 'clock'], ['checkride', 'Checkride nerves', 'ask'], ['planning', 'Weather and planning', 'weather'], ['current', 'Staying current between lessons', 'calendar']];
+  // labels match the profile's frequency values
+  const PACES = [['twice', 'Twice a week', 'Two or more lessons a week', 2], ['weekly', 'Weekly', 'About once a week', 1], ['monthly', 'Monthly', 'A couple of times a month or less', 0.5], ['intensive', 'Intensive course', 'Full-time, most days', 5], ['deciding', 'Still deciding', 'Not sure yet', 1]];
+  const SOURCES = [['tiktok', 'TikTok'], ['instagram', 'Instagram'], ['youtube', 'YouTube'], ['appstore', 'Searching the App Store'], ['google', 'Google'], ['friend', 'A friend or instructor'], ['school', 'My flight school'], ['other', 'Somewhere else']];
+  const HELP = {
+    landings: 'Practise approaches and landings at your own airfield in the simulator, with each landing scored',
+    radio: 'Rehearse your radio calls out loud, with every call checked',
+    theory: 'Mock exams by subject, with the questions you miss coming back until you know them',
+    cost: 'See what your licence will really cost, and how flying more often brings it down',
+    time: 'A 10-minute daily sortie and a question of the day',
+    checkride: 'A mock checkride that questions you like a real examiner',
+    planning: 'Live weather decoded in plain English, nav logs and preflight checks',
+    current: 'Currency and expiry dates worked out from your logbook, with reminders'
+  };
+  const draftLicence = d => { const reg = R.regimeFor(d.countryCode || 'US'); return R.licence(reg, d.licence) || R.licencesFor(reg)[0]; };
+  // plans for more than the legal minimum, because most students need more: about 1.5× in the US, 1.3× elsewhere
+  function planOf(d) {
+    const reg = R.regimeFor(d.countryCode || 'US'), goal = draftLicence(d)?.minHours || 45;
+    const typical = Math.round(goal * (reg === 'faa' ? 1.5 : 1.3));
+    const guess = { new: 0, early: 5, presolo: 17, solo: 28, checkride: Math.max(0, typical - 6) }[d.stage] ?? 0;
+    const current = Math.min(typical, Number(d.hours) > 0 ? Number(d.hours) : guess);
+    const per = (PACES.find(p => p[0] === d.pace) || PACES[1])[3], toGo = Math.max(0, typical - current);
+    const weeks = Math.max(1, Math.ceil(toGo / (per * 1.2))), faster = per < 2 ? weeks - Math.max(1, Math.ceil(toGo / 2.4)) : 0;
+    return { goal, typical, current, toGo, per, weeks, finish: new Date(Date.now() + weeks * 7 * 864e5), faster: faster >= 2 ? faster : 0 };
+  }
+  const obMonth = (d, m = 'long') => d.toLocaleDateString('en-GB', { month: m, year: 'numeric' });
+  const pick = (name, opts, value, multi = false) => `<div class="field full ob-choices" role="${multi ? 'group' : 'radiogroup'}">${opts.map(([v, t, s]) => `<label class="ob-choice"><input type="${multi ? 'checkbox' : 'radio'}" name="${name}" value="${esc(v)}" ${(multi ? (value || []).includes(v) : v === value) ? 'checked' : ''}><span><b>${esc(t)}</b>${s ? `<small>${esc(s)}</small>` : ''}</span></label>`).join('')}</div>`;
+  const shortLicence = l => String(l?.label || 'Your licence').split('·')[0].trim();
+  function planHtml(d) {
+    const p = planOf(d), l = draftLicence(d), pace = (PACES.find(x => x[0] === d.pace) || PACES[1])[1];
+    const picked = (d.struggles || []).filter(k => HELP[k]), rows = [...picked, ...['checkride', 'theory', 'landings'].filter(k => !picked.includes(k))].slice(0, 3);
+    const y0 = 132 - 112 * (p.current / p.typical);
+    return `<div class="ob-plan full">
+      <p class="ob-plan-k">${ico('check')}Your plan is ready</p>
+      <h2 class="display">${esc(shortLicence(l))} by ${esc(obMonth(p.finish))}</h2>
+      <p>Flying ${esc(pace.toLowerCase())}, with about ${Math.round(p.toGo)} hours to go. Boplo plans for ${p.typical} hours, because most students need more than the ${p.goal}-hour minimum.</p>
+      <div class="ob-chart"><svg viewBox="0 0 320 140" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="320" y1="20" y2="20" class="ob-dash"/><path class="ob-line" pathLength="1" d="M8 ${y0.toFixed(1)} C 150 ${y0.toFixed(1)}, 190 20, 310 20"/><circle cx="8" cy="${y0.toFixed(1)}" r="5"/></svg>
+        <div class="ob-axis"><span>Today · ${Math.round(p.current)} h</span><span>${esc(obMonth(p.finish, 'short'))} · ${p.typical} h</span></div></div>
+      ${p.faster ? `<p class="ob-faster">Flying twice a week would get you there about ${p.faster} weeks sooner.</p>` : ''}
+      <p class="ob-plan-k">Starting with what you find hardest</p>
+      <ul class="ob-help">${rows.map(k => `<li>${ico((STRUGGLES.find(s => s[0] === k) || [])[2] || 'check')}<span>${esc(HELP[k])}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+  const commitHtml = d => {
+    const pace = (PACES.find(x => x[0] === d.pace) || PACES[1])[1].toLowerCase();
+    return `<ul class="ob-commit full">${[['study', 'Study 10 minutes a day', 'The daily sortie, a few questions, or a radio call'], ['sim', `Fly ${pace}`, 'And prepare for each lesson the evening before'], ['logbook', 'Log every lesson the same day', 'With what went well and what to work on']].map(([i, t, s]) => `<li>${ico(i)}<span><b>${esc(t)}</b><small>${esc(s)}</small></span></li>`).join('')}</ul>`;
+  };
+  const QS = [
     { id: 'where', t: 'Where are you learning to fly?', l: 'Rules, minimum hours and weather all depend on where you train.',
-      f: p => countrySelect(countryCodeOf(p)) + regimeSelect(regimeOf(p)) +
-        input('Licensing authority', 'authority', p.authority && !R.legacyRegime(p.authority) ? p.authority : (R.authorityFor(countryCodeOf(p)) || ''), 'text', 'required maxlength="100" placeholder="e.g. your national aviation authority"', false, 'Filled in from your country. Change it if yours is different.') +
-        input('Home airfield', 'airport', p.airport, 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true) + '<datalist id="home-af"></datalist>' },
-    { id: 'goal', t: 'What are you working toward?', l: 'We track your hours against this goal. Your school decides when you’re ready.',
-      f: p => licenceSelect(regimeOf(p), licenceOf(p)) + `<div class="full" style="grid-column:1/-1">${minNote(regimeOf(p), licenceOf(p))}</div>` +
-        input('Hours goal', 'goalHours', p.goalHours || R.licence(regimeOf(p), licenceOf(p))?.minHours || '', 'number', 'min="0" max="2000" step="1" inputmode="numeric" placeholder="e.g. 45"', true, 'Starts at the published minimum. Most students fly more.') },
+      f: d => countrySelect(d.countryCode || '') + input('Home airfield', 'airport', d.airport || '', 'text', 'maxlength="100" placeholder="ICAO code or name" list="home-af" autocomplete="off"', true) + '<datalist id="home-af"></datalist>',
+      read: (fd, d) => { d.countryCode = fd.get('countryCode') || ''; d.airport = fd.get('airport') || ''; if (!d.countryCode) return 'Choose the country you train in.'; } },
+    { id: 'goal', t: 'What are you working toward?', l: 'Boplo tracks your hours against it. Your school decides when you’re ready.',
+      f: d => licenceSelect(R.regimeFor(d.countryCode || 'US'), draftLicence(d)?.id) + `<div class="full" style="grid-column:1/-1">${minNote(R.regimeFor(d.countryCode || 'US'), draftLicence(d)?.id)}</div>`,
+      read: (fd, d) => { d.licence = fd.get('licence') || ''; } },
+    { id: 'stage', t: 'Where are you in your training?', l: 'Rough is fine.',
+      f: d => pick('stage', STAGES, d.stage) + input('Exact hours, if you know them', 'hours', d.hours || '', 'number', 'min="0" max="3000" step="0.1" inputmode="decimal"', true, 'Goes into your logbook as hours carried over.'),
+      read: (fd, d) => { d.stage = fd.get('stage') || ''; d.hours = fd.get('hours') || ''; if (!d.stage) return 'Pick the closest one.'; } },
+    { id: 'struggles', t: 'What do you find hardest right now?', l: 'Pick as many as you like. Your plan starts with these.',
+      f: d => `<div class="ob-grid full">${pick('struggles', STRUGGLES.map(([v, t]) => [v, t]), d.struggles, true)}</div>`,
+      read: (fd, d) => { d.struggles = fd.getAll('struggles'); if (!d.struggles.length) return 'Pick at least one.'; } },
     { id: 'pace', t: 'How often will you fly?', l: 'Flying often is the biggest thing that keeps the total cost down.',
-      f: p => choice('frequency', FREQ.map(v => [v, { 'Still deciding': 'I’m still working it out', Weekly: 'About once a week', 'Twice a week': 'Two or more lessons a week', Monthly: 'A couple of times a month or less', 'Intensive course': 'Full-time, every day I can' }[v]]), p.frequency || 'Still deciding') +
-        input('Target date', 'target', p.target, 'date', '', true, 'When you’d like to have your licence. Your own planning date.') },
-    { id: 'fly', t: 'What do you fly?', l: 'Boplo fills these into every new flight so logging takes seconds.', opt: true,
-      f: p => input('Aircraft type', 'aircraft', p.aircraft, 'text', 'maxlength="200" placeholder="e.g. Cessna 172"', true) +
-        input('Registration', 'registration', p.registration, 'text', 'maxlength="200" placeholder="e.g. N12345"', true) +
-        input('School or club', 'school', p.school, 'text', 'maxlength="200"', true) },
-    { id: 'cost', t: 'What does an hour cost you?', l: 'From your school’s price list. Boplo uses it to forecast what your licence will really cost.', opt: true,
-      f: p => input('Aircraft per hour', 'rateAircraft', p.rateAircraft || '', 'number', 'min="0" max="5000" step="0.01" inputmode="decimal"', true) +
-        input('Instructor per hour', 'rateInstructor', p.rateInstructor || '', 'number', 'min="0" max="2000" step="0.01" inputmode="decimal"', true, 'Leave blank if it’s included.') },
-    { id: 'hours', t: 'How many hours have you flown?', l: 'Add the total from your logbook, or leave it at zero if you’re just starting.',
-      f: p => duration('Flight time so far', 'openingMinutes', p.openingMinutes || 0, false) },
-    { id: 'review', t: 'Looks good?', l: 'Everything can be changed later in your profile.',
-      f: p => `<dl class="review full" style="grid-column:1/-1">${[['Pilot', p.name], ['Training in', [p.country, p.authority].filter(Boolean).join(' · ')], ['Goal', R.licence(regimeOf(p), p.licence)?.label || p.licence], ['Hours goal', p.goalHours ? p.goalHours + ' h' : 'Not set'], ['Flying', p.frequency || 'Not set'], ['Home airfield', p.airport || 'Not set'], ['Hours so far', hrs(p.openingMinutes) + ' h']].map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v || '—')}</dd></div>`).join('')}</dl>
-         <p class="callout" style="grid-column:1/-1">Everything you enter is self-reported. Boplo organises your records and preparation; it doesn’t assess your eligibility or readiness.</p>` }
+      f: d => pick('pace', PACES, d.pace || 'weekly'), read: (fd, d) => { d.pace = fd.get('pace') || 'weekly'; } },
+    { id: 'lesson', t: 'When’s your next lesson?', l: 'Boplo gets you ready the evening before.', skip: 'I don’t have one booked',
+      f: d => input('Next lesson', 'lessonDate', d.lessonDate || '', 'date', `min="${new Date().toISOString().slice(0, 10)}"`),
+      read: (fd, d, skip) => { d.lessonDate = skip ? '' : (fd.get('lessonDate') || ''); if (!skip && !d.lessonDate) return 'Pick a date, or tap “I don’t have one booked”.'; } },
+    { id: 'heard', t: 'Where did you hear about Boplo?', l: '', f: d => pick('heard', SOURCES, d.heard), read: (fd, d) => { d.heard = fd.get('heard') || ''; if (!d.heard) return 'Pick one.'; } },
+    { id: 'plan', t: '', l: '', next: 'Let’s do it', f: planHtml, read: () => { } },
+    { id: 'commit', t: 'Make it official', l: 'Small, steady habits are what get students to their checkride. Here’s yours.', hold: true, f: commitHtml, read: () => { } }
   ];
-  const choice = (name, opts, value) => `<div class="field full ob-choices" role="radiogroup">${opts.map(([v, l]) => `<label class="ob-choice"><input type="radio" name="${name}" value="${esc(v)}" ${v === value ? 'checked' : ''}><span><b>${esc(v)}</b><small>${esc(l)}</small></span></label>`).join('')}</div>`;
-  function onboard() {
-    document.title = 'Set up · Boplo Flight'; document.body.classList.add('ob-mode');
-    iosStatus('light');
-    const p = state.profile || {}, s = Math.max(0, Math.min(OB.length - 1, ui.step || 0)), sc = OB[s], last = s === OB.length - 1;
-    T.screen('setup_' + sc.id);
-    root.innerHTML = `<div class="ob">
+  // signed out: a welcome screen, then the questions, then "save your plan" (sign in)
+  function entry(notice = '') {
+    const d = draft.get();
+    if (notice || d.at === 'signin') return auth(notice);
+    if (d.at === 'save') return auth('', 'save');
+    if (d.at === 'q') return qflow('out');
+    welcome();
+  }
+  function welcome() {
+    T.screen('welcome'); document.title = 'Boplo Flight · Your training plan'; document.body.classList.add('ob-mode');
+    root.innerHTML = `<main class="auth ob-welcome"><div class="night">${contours('a')}
+      <div class="auth-copy">${brand()}
+        <div><h1 class="display">Get your licence faster, and for less.</h1>
+        <p>Answer a few quick questions and Boplo builds a training plan around you: your licence, your pace, the things you find hardest.</p>
+        <div class="ob-welcome-cta"><button type="button" class="btn btn-light btn-has-spark" data-start>Build my plan ${spark}</button><button type="button" class="link" data-have>I already have an account</button></div></div>
+        <small>Boplo supports preparation and record keeping. It is not flight instruction or operational approval.</small>
+      </div></div></main>`;
+    $('[data-start]').onclick = () => { const d = draft.get(); d.at = 'q'; draft.set(d); ui.qstep = 0; qflow('out'); };
+    $('[data-have]').onclick = () => { const d = draft.get(); d.at = 'signin'; draft.set(d); auth(); };
+  }
+  function qflow(mode) {
+    document.body.classList.add('ob-mode'); iosStatus('light');
+    const d = draft.get();
+    if (!d.countryCode) { try { const reg = (navigator.language || '').split('-')[1]; if (reg && R.countries.some(c => c.code === reg)) d.countryCode = reg; } catch { } }
+    if (!d.pace) d.pace = 'weekly';
+    const total = QS.length + (mode === 'out' ? 1 : 0);
+    let s = Math.max(0, Math.min(QS.length - 1, ui.qstep ?? d.q ?? 0)); const q = QS[s];
+    document.title = 'Your training plan · Boplo';
+    T.screen('q_' + q.id);
+    root.innerHTML = `<div class="ob ${q.id === 'plan' || q.id === 'commit' ? 'ob-night' : ''}">
       <header class="ob-top">
-        ${s ? `<button type="button" class="ob-back" data-back aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>` : `<span class="ob-back" aria-hidden="true"></span>`}
-        <div class="ob-bar" role="progressbar" aria-valuemin="1" aria-valuemax="${OB.length}" aria-valuenow="${s + 1}" aria-label="Setup progress"><i style="width:${Math.round((s + 1) / OB.length * 100)}%"></i></div>
-        <button type="button" class="ob-out" data-logout>${preview ? 'Leave' : 'Sign out'}</button>
+        <button type="button" class="ob-back" data-back aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg></button>
+        <div class="ob-bar" role="progressbar" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${s + 1}" aria-label="Progress"><i style="width:${Math.round((s + 1) / total * 100)}%"></i></div>
+        ${mode === 'in' ? `<button type="button" class="ob-out" data-logout>Sign out</button>` : '<span></span>'}
       </header>
       <form class="ob-form" novalidate>
         <div class="ob-body ${ui.obDir === 'back' ? 'from-left' : 'from-right'}">
-          <p class="ob-kicker">${s + 1} of ${OB.length}</p>
-          <h1 class="display" tabindex="-1">${sc.t}</h1>
-          <p class="lead">${sc.l}</p>
-          <div class="fields ob-fields">${sc.f(p)}</div>
+          ${q.t ? `<h1 class="display" tabindex="-1">${q.t}</h1>` : ''}${q.l ? `<p class="lead">${q.l}</p>` : ''}
+          <div class="fields ob-fields">${q.f(d)}</div>
           <p class="form-error" role="alert"></p>
         </div>
         <footer class="ob-foot">
-          <button class="btn btn-blue btn-has-spark ob-next" type="submit">${last ? 'Build my flight desk' : 'Continue'} ${spark}</button>
-          ${sc.opt ? '<button type="button" class="ob-skip" data-skip>Skip for now</button>' : ''}
+          ${q.hold ? `<button type="button" class="ob-hold" data-hold><i></i><span>Hold to commit</span></button>` : `<button class="btn btn-blue btn-has-spark ob-next" type="submit">${q.next || 'Continue'} ${spark}</button>`}
+          ${q.skip ? `<button type="button" class="ob-skip" data-skip>${q.skip}</button>` : ''}
         </footer>
       </form></div>`;
-    $('[data-logout]').onclick = logout;
-    const back = $('[data-back]'); if (back) back.onclick = () => { ui.step = s - 1; ui.obDir = 'back'; onboard(); };
+    const lo = $('[data-logout]'); if (lo) lo.onclick = logout;
     const form = $('form');
-    bindTraining(form, p);
-    const go = async (skip) => {
-      const err = $('.form-error', form), btn = form.querySelector('[type=submit]'); err.textContent = '';
-      if (!skip) { const bad = [...form.querySelectorAll('input[required], select[required]')].find(i => !String(i.value).trim()); if (bad) { err.textContent = 'Fill this in to continue.'; bad.focus(); return; } }
-      const v = skip ? {} : Object.fromEntries(new FormData(form));
-      if (v.countryCode) v.country = R.nameFor(v.countryCode);
-      if (!skip && form.querySelector('[data-duration="openingMinutes"]')) v.openingMinutes = readDuration(form, 'openingMinutes');
-      if ('goalHours' in v) v.goalHours = Number(v.goalHours || 0);
-      ['rateAircraft', 'rateInstructor'].forEach(k => { if (k in v) v[k] = Number(v[k] || 0); });
-      if (v.countryCode && !p.currency) v.currency = CURRENCY_BY[v.countryCode] || (EURO.includes(v.countryCode) ? 'EUR' : 'USD');
-      btn.disabled = true;
-      try {
-        await saveProfile({ ...v, openingMinutes: Number(v.openingMinutes ?? p.openingMinutes ?? 0), step: Math.min(s + 1, OB.length - 1), complete: last });
-        if (last) { T.event('onboarding_done', { country: state.profile?.countryCode || '', licence: state.profile?.licence || '', pace: state.profile?.frequency || '' }); await buildingScreen(); location.hash = 'overview'; render(); if (!trialGateNeeded()) toast('Your flight desk is ready.'); }
-        else { ui.step = s + 1; ui.obDir = 'fwd'; onboard(); }
-      } catch (x) { err.textContent = x.message; btn.disabled = false; }
+    if (q.id === 'where') { const c = form.querySelector('[data-country]'); const fill = cc => { const dl = form.querySelector('#home-af'); if (!dl || !window.BoploMap || !cc) return; BoploMap.airfields(cc).then(list => { dl.innerHTML = list.slice(0, 6000).map(x => `<option value="${esc(x.code)} · ${esc(x.name)}"></option>`).join(''); }); }; fill(c?.value); if (c) c.onchange = () => fill(c.value); }
+    if (q.id === 'goal') { const l = form.querySelector('[data-licence]'); if (l) l.onchange = () => { const n = form.querySelector('[data-minnote]'); if (n) n.outerHTML = minNote(R.regimeFor(d.countryCode || 'US'), l.value); }; }
+    const save = () => { d.q = s; draft.set(d); };
+    const move = to => { ui.qstep = to; ui.obDir = to < s ? 'back' : 'fwd'; d.q = to; draft.set(d); qflow(mode); scrollTo({ top: 0 }); };
+    $('[data-back]').onclick = () => { if (s > 0) return move(s - 1); if (mode === 'out') { d.at = ''; draft.set(d); ui.qstep = 0; welcome(); } };
+    const done = () => {
+      d.done = true; save();
+      T.event('questions_done', { stage: d.stage || '', pace: d.pace || '', heard: d.heard || '', struggles: (d.struggles || []).join(',') });
+      if (mode === 'out') { d.at = 'save'; draft.set(d); auth('', 'save'); } else finishDraft();
+    };
+    const go = skip => {
+      const err = $('.form-error', form); err.textContent = '';
+      const bad = q.read(new FormData(form), d, skip);
+      if (bad) { err.textContent = bad; return; }
+      save();
+      if (s === QS.length - 1) return done();
+      move(s + 1);
     };
     form.onsubmit = e => { e.preventDefault(); go(false); };
-    const sk = $('[data-skip]'); if (sk) sk.onclick = () => { T.event('setup_skip', { step: sc.id }); go(true); };
+    const sk = $('[data-skip]'); if (sk) sk.onclick = () => go(true);
+    const hold = $('[data-hold]');
+    if (hold) {
+      let t = null;
+      const commit = () => { clearTimeout(t); hold.classList.add('done'); hold.querySelector('span').textContent = 'Committed'; d.committed = true; T.event('committed'); try { navigator.vibrate?.(30); } catch { } setTimeout(() => go(false), 450); };
+      const start = e => { if (hold.classList.contains('done')) return; e.preventDefault(); hold.classList.add('on'); hold.querySelector('span').textContent = 'Keep holding…'; t = setTimeout(commit, 1400); };
+      const stop = () => { if (hold.classList.contains('done')) return; clearTimeout(t); hold.classList.remove('on'); hold.querySelector('span').textContent = 'Hold to commit'; };
+      hold.addEventListener('pointerdown', start); ['pointerup', 'pointerleave', 'pointercancel'].forEach(n => hold.addEventListener(n, stop));
+      hold.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commit(); } });
+    }
     form.querySelectorAll('.ob-choice input').forEach(r => r.addEventListener('change', () => { try { window.Capacitor?.Plugins?.Haptics?.selectionChanged?.(); } catch { } }));
+    hideNativeSplash();
+  }
+  // signed in, profile not finished: save the answers (asking the questions first if they haven't been answered here)
+  function onboard() {
+    const d = draft.get();
+    if (!d.done || !d.countryCode) { ui.qstep = ui.qstep ?? d.q ?? 0; return qflow('in'); }
+    finishDraft();
+  }
+  async function finishDraft(askedName) {
+    const d = draft.get(), name = (askedName || state.profile?.name || state.user?.display_name || '').trim();
+    if (!name) return nameScreen();
+    const c = d.countryCode || 'US', reg = R.regimeFor(c), lic = draftLicence(d), pace = PACES.find(p => p[0] === d.pace) || PACES[1];
+    const prof = {
+      name, countryCode: c, country: R.nameFor(c), regime: reg, authority: R.authorityFor(c) || (reg === 'faa' ? 'FAA' : `${R.nameFor(c)} civil aviation authority`),
+      licence: lic.id, goalHours: lic.minHours || 45, airport: String(d.airport || '').trim(), frequency: pace[1], lessonsPerWeek: pace[3],
+      stage: d.stage || '', struggles: (d.struggles || []).join(','), heardFrom: d.heard || '', studyMinutes: 10, committedAt: Date.now(),
+      lessonDate: d.lessonDate || state.profile?.lessonDate || '', currency: state.profile?.currency || CURRENCY_BY[c] || (EURO.includes(c) ? 'EUR' : 'USD'),
+      openingMinutes: Number(d.hours) > 0 ? Math.round(Number(d.hours) * 60) : Number(state.profile?.openingMinutes || 0), complete: true, step: 7
+    };
+    try {
+      await saveProfile(prof);
+      T.event('onboarding_done', { country: c, licence: lic.id, pace: d.pace || '', stage: d.stage || '', heard: d.heard || '' });
+      draft.clear(); ui.qstep = 0;
+      await buildingScreen(); location.hash = 'overview'; render(); if (!trialGateNeeded()) toast('Your flight desk is ready.');
+    } catch (x) { nameScreen(x.message, name); }
+  }
+  function nameScreen(error = '', value = '') {
+    T.screen('q_name'); document.body.classList.add('ob-mode');
+    root.innerHTML = `<div class="ob"><header class="ob-top"><span></span><div></div><button type="button" class="ob-out" data-logout>Sign out</button></header>
+      <form class="ob-form" novalidate><div class="ob-body from-right"><h1 class="display" tabindex="-1">Last thing: what should we call you?</h1><p class="lead">This is how Boplo greets you. Nobody else sees it unless you share.</p>
+      <div class="fields ob-fields">${input('Your name', 'name', value, 'text', 'required maxlength="100" autocomplete="name" autofocus')}</div><p class="form-error" role="alert">${esc(error)}</p></div>
+      <footer class="ob-foot"><button class="btn btn-blue btn-has-spark ob-next" type="submit">Build my flight desk ${spark}</button></footer></form></div>`;
+    $('[data-logout]').onclick = logout;
+    $('form').onsubmit = e => { e.preventDefault(); const v = e.target.name.value.trim(); if (!v) { $('.form-error').textContent = 'Fill this in to continue.'; return; } e.target.querySelector('button').disabled = true; finishDraft(v); };
     hideNativeSplash();
   }
   // a short "building" moment between the last question and the desk: it shows what the answers turned into
@@ -4211,7 +4329,7 @@
     function render() {
     iosSignedOut(false); document.body.classList.remove('ob-mode');
     if (nativeApp() && current() === 'students') { location.replace(location.pathname + location.search + '#community'); return; }
-    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } ui.step = Math.min(OB.length - 1, state.profile?.step || 0); onboard(); return; }
+    if (!state.profile?.complete) { if (current() === 'school') { schoolPage(); hideNativeSplash(); return; } onboard(); return; }
     if (trialGateNeeded()) { trialGate(); return; }
     const k = current(); if (k === 'students' && nativeApp()) { location.hash = '#community'; return; }
     T.screen(k);
@@ -4329,6 +4447,7 @@
     try {
       const ws = await api('workspace'); if (!ws.user) throw new Error('Your desk couldn’t load your account.');
       if (!ws.profile?.complete) { try { const plan = JSON.parse(localStorage.getItem('boplo-plan') || 'null'); if (plan && plan.countryCode) { const pr = ws.profile || {}; const r = R.regimeFor(plan.countryCode); ws.profile = { countryCode: plan.countryCode, country: R.nameFor(plan.countryCode), regime: r, authority: R.authorityFor(plan.countryCode) || '', licence: plan.licence, goalHours: plan.goalHours, rateAircraft: plan.rateAircraft, rateInstructor: plan.rateInstructor, currency: plan.currency, lessonsPerWeek: plan.lessonsPerWeek, ...Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== '' && v != null && v !== 0)) }; } } catch { } }
+      if (ws.profile?.complete) draft.clear();
       state = ws; state.billing = ws.billing || null; state.school = ws.school || null; addSchoolNav(); saveSnapshot(ws); setTimeout(flushOutbox, 1500);
       loadCoach().then(() => { if (state.coach && current() === 'overview' && state.profile?.complete && !sheet.open) render(); });
       try { const f = localStorage.getItem('boplo-first'); if (f && !localStorage.getItem('boplo-first-sent')) api('attrib', 'POST', JSON.parse(f)).then(() => localStorage.setItem('boplo-first-sent', '1')).catch(() => { }); } catch { }
@@ -4345,7 +4464,7 @@
     catch (e) {
       const snap = isOffline(e) ? loadSnapshot() : null;
       if (snap?.user) { state = snap; state.billing = snap.billing || null; state.offline = true; const q = outbox(); if (q.length) state.flights = [...q.map(x => ({ ...x.data, id: x.id, pending: true })), ...state.flights.filter(f => !q.some(x => x.id === f.id))]; render(); return; }
-      if (e.status === 401) { if (nativeApp()) { if (introSeen()) iosAuth(); else iosIntro(() => iosAuth()); } else auth(); } else failure(e);
+      if (e.status === 401) { if (nativeApp()) { if (introSeen()) iosAuth(); else iosIntro(() => iosAuth()); } else entry(); } else failure(e);
     }
   }
   start();

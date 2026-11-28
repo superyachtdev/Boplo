@@ -52,7 +52,6 @@ struct RootView: View {
     @State private var coldLaunch = true
     /// The take-off has reached white-out, so the app can mount underneath.
     @State private var aboveCloud = false
-    @AppStorage("boplo.introSeen") private var introSeen = false
     /// Set only when the App Store couldn't send any plans, so nobody is locked out. Resets on the next launch.
     @State private var skipGate = false
 
@@ -86,9 +85,9 @@ struct RootView: View {
             case .loading:
                 LaunchView()
             case .signedOut:
-                if introSeen { SignInView() } else { IntroPagesView { withAnimation(.easeInOut(duration: 0.35)) { introSeen = true } } }
+                FirstRunView()
             case .setup:
-                OnboardingFlow()
+                FinishSetupView()
             case .ready:
                 // The iPhone app needs Advanced: a free trial or a subscription. Owners, school members and web subscribers are already Advanced.
                 if model.billing != nil && !model.isAdvanced && !skipGate { TrialGateView(onSkip: { skipGate = true }) } else { MainTabs() }

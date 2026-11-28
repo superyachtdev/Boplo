@@ -1,9 +1,8 @@
 import SwiftUI
 import StoreKit
 
-// The first-run path, one screen at a time:
-//  intro pages (signed out) → sign in → one question per screen → "building your desk" → 3-day trial → desk.
-// The iPhone app needs Advanced (free trial or subscription). The website keeps its free plan.
+// Shared first-run pieces: the night backdrop, choice cards, "building your desk" and the 3-day trial.
+// The questions themselves are in FirstRun.swift. The iPhone app needs Advanced (free trial or subscription).
 
 /// The dark sky every first-run screen sits on.
 struct NightBackdrop: View {
@@ -17,337 +16,7 @@ struct NightBackdrop: View {
     }
 }
 
-// MARK: - Intro pages before sign-in
-
-struct IntroPagesView: View {
-    var onDone: () -> Void
-    @State private var page = 0
-    private let pages: [(symbol: String, title: String, text: String)] = [
-        ("book.closed.fill", "Your whole licence in one place", "Logbook, hours, progress and costs, set up for the rules where you train."),
-        ("airplane", "Practise before you pay for the hour", "Fly circuits and approaches at your own airfield, and rehearse your radio calls out loud."),
-        ("checkmark.seal.fill", "Walk into your checkride ready", "A mock checkride that questions you like a real examiner, friendly or strict.")
-    ]
-
-    var body: some View {
-        ZStack {
-            NightBackdrop()
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button("Skip") { Track.event("intro_skip", ["page": page + 1]); onDone() }
-                        .font(.archivo(15, .medium))
-                        .foregroundStyle(Theme.mist)
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 8)
-                TabView(selection: $page) {
-                    ForEach(pages.indices, id: \.self) { i in
-                        IntroPage(symbol: pages[i].symbol, title: pages[i].title, text: pages[i].text).tag(i)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                HStack(spacing: 7) {
-                    ForEach(pages.indices, id: \.self) { i in
-                        Capsule().fill(i == page ? Color.white : Theme.ice.opacity(0.3))
-                            .frame(width: i == page ? 24 : 8, height: 8)
-                    }
-                }
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: page)
-                .padding(.bottom, 22)
-                Button {
-                    if page < pages.count - 1 { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { page += 1 } } else { onDone() }
-                } label: {
-                    Text(page < pages.count - 1 ? "Continue" : "Get started")
-                }
-                .primaryStyle()
-                .padding(.horizontal, 24)
-                .padding(.bottom, 12)
-            }
-        }
-        .sensoryFeedback(.selection, trigger: page)
-        .onChange(of: page, initial: true) { _, p in Track.screen("intro_\(p + 1)") }
-    }
-}
-
-private struct IntroPage: View {
-    let symbol: String, title: String, text: String
-    @State private var glow = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Spacer()
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [Theme.electricHi.opacity(0.55), .clear], center: .center, startRadius: 0, endRadius: 140))
-                    .frame(width: 280, height: 280)
-                    .scaleEffect(glow ? 1.12 : 0.94)
-                    .opacity(glow ? 0.75 : 1)
-                RoundedRectangle(cornerRadius: 44, style: .continuous)
-                    .fill(LinearGradient(colors: [Theme.electricHi, Color(hex: 0x0A3FB8)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 150, height: 150)
-                    .shadow(color: Theme.electric.opacity(0.5), radius: 35, y: 20)
-                Image(systemName: symbol)
-                    .font(.system(size: 64, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .symbolEffect(.bounce, value: glow)
-            }
-            .frame(maxWidth: .infinity)
-            Spacer()
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title)
-                    .font(Theme.display(38))
-                    .tracking(-1.2)
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(text)
-                    .font(.archivo(17))
-                    .foregroundStyle(Color(hex: 0xDEE9FF).opacity(0.82))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.bottom, 28)
-        }
-        .padding(.horizontal, 24)
-        .onAppear { withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) { glow = true } }
-    }
-}
-
-// MARK: - Setup, one question per screen
-
-struct OnboardingFlow: View {
-    @Environment(AppModel.self) private var model
-
-    private static let paces: [(String, String)] = [
-        ("Still deciding", "I’m still working it out"),
-        ("Weekly", "About once a week"),
-        ("Twice a week", "Two or more lessons a week"),
-        ("Monthly", "A couple of times a month or less"),
-        ("Intensive course", "Full-time, every day I can")
-    ]
-    private let total = 5
-
-    @State private var step = 0
-    @State private var forward = true
-    @State private var name = ""
-    @State private var countryList: [SetupView.Country] = []
-    @State private var country = SetupView.Country(code: "US", name: "United States", regime: "faa", authority: "FAA")
-    @State private var licence = SetupView.Licence(id: "Private Pilot", label: "Private Pilot certificate", hours: 40)
-    @State private var airport = ""
-    @State private var pace = "Still deciding"
-    @State private var hoursSoFar = ""
-    @State private var building = false
-    @State private var error: String?
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        ZStack {
-            if building {
-                BuildingDeskView(rows: buildRows)
-                    .transition(.opacity)
-            } else {
-                questions
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: building)
-        .onAppear(perform: prefill)
-        .onChange(of: step, initial: true) { _, s in
-            Track.screen(["onb_name", "onb_country", "onb_goal", "onb_pace", "onb_hours"][min(s, 4)])
-        }
-    }
-
-    private var questions: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Button { go(-1) } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.ink)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(.white).shadow(color: Theme.ink.opacity(0.08), radius: 1, y: 1))
-                }
-                .opacity(step == 0 ? 0 : 1)
-                .disabled(step == 0)
-                .accessibilityLabel("Back")
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.ink.opacity(0.08))
-                        Capsule().fill(LinearGradient(colors: [Theme.electric, Theme.electricHi], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: g.size.width * CGFloat(step + 1) / CGFloat(total))
-                    }
-                }
-                .frame(height: 6)
-                .animation(.spring(response: 0.45, dampingFraction: 0.85), value: step)
-                .accessibilityLabel("Step \(step + 1) of \(total)")
-                Button("Sign out") { Task { await model.signOut() } }
-                    .font(.archivo(14)).foregroundStyle(Theme.ink3)
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 8)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("\(step + 1) of \(total)").font(.archivo(13, .semibold)).foregroundStyle(Theme.electric)
-                    Text(titles.0).font(Theme.display(36)).tracking(-1.2).foregroundStyle(Theme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(titles.1).font(.archivo(16.5)).foregroundStyle(Theme.ink2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    stepFields.padding(.top, 10)
-                    if let error { Text(error).font(.archivo(14)).foregroundStyle(Theme.danger) }
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 36)
-                .padding(.bottom, 24)
-                .id(step)
-                .transition(.asymmetric(insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
-                                        removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)))
-            }
-            .scrollDismissesKeyboard(.interactively)
-
-            VStack(spacing: 6) {
-                Button { go(1) } label: { Text(step == total - 1 ? "Build my flight desk" : "Continue") }
-                    .primaryStyle()
-                    .disabled(!canContinue)
-                if step == 4 {
-                    Button("I’m just starting") { hoursSoFar = ""; go(1) }
-                        .font(.archivo(15)).foregroundStyle(Theme.ink3)
-                        .frame(height: 40)
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.bottom, 12)
-        }
-        .background(Theme.cloud.ignoresSafeArea())
-        .sensoryFeedback(.selection, trigger: pace)
-        .sensoryFeedback(.selection, trigger: licence)
-    }
-
-    private var titles: (String, String) {
-        switch step {
-        case 0: return ("What should we call you?", "This is how Boplo greets you. Nobody else sees it unless you share.")
-        case 1: return ("Where are you learning to fly?", "Rules, minimum hours and weather all depend on where you train.")
-        case 2: return ("What are you working toward?", "Boplo tracks your hours against this. Your school decides when you’re ready.")
-        case 3: return ("How often will you fly?", "Flying often is the biggest thing that keeps the total cost down.")
-        default: return ("How many hours have you flown?", "Add the total from your logbook, or leave it empty if you’re just starting.")
-        }
-    }
-
-    @ViewBuilder
-    private var stepFields: some View {
-        switch step {
-        case 0:
-            TextField("Your name", text: $name)
-                .textContentType(.name)
-                .font(.archivo(18))
-                .boploField()
-                .focused($focused)
-                .submitLabel(.continue)
-                .onSubmit { if canContinue { go(1) } }
-                .onAppear { focused = true }
-        case 1:
-            VStack(alignment: .leading, spacing: 12) {
-                Menu {
-                    Picker("Country", selection: $country) {
-                        ForEach(countryList) { Text($0.name).tag($0) }
-                    }
-                } label: {
-                    HStack {
-                        Text(country.name).font(.archivo(17)).foregroundStyle(Theme.ink).lineLimit(1)
-                        Spacer()
-                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.ink3)
-                    }
-                    .boploField()
-                }
-                .onChange(of: country) { _, value in licence = SetupView.licences(for: value.regime)[0] }
-                Text("Licensing authority: \(country.authority)").font(.archivo(13.5)).foregroundStyle(Theme.ink3)
-                TextField("Home airfield, e.g. KSEE (optional)", text: $airport)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .font(.archivo(17))
-                    .boploField()
-            }
-        case 2:
-            VStack(spacing: 10) {
-                ForEach(SetupView.licences(for: country.regime), id: \.self) { l in
-                    ChoiceCard(title: l.label, detail: l.hours > 0 ? "Published minimum: \(l.hours) hours" : nil, selected: l == licence) { licence = l }
-                }
-            }
-        case 3:
-            VStack(spacing: 10) {
-                ForEach(Self.paces, id: \.0) { p in
-                    ChoiceCard(title: p.0, detail: p.1, selected: pace == p.0) { pace = p.0 }
-                }
-            }
-        default:
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField("0", text: $hoursSoFar)
-                    .keyboardType(.decimalPad)
-                    .font(Theme.display(44))
-                    .focused($focused)
-                Text("hours").font(.archivo(18, .medium)).foregroundStyle(Theme.ink3)
-            }
-            .boploField()
-        }
-    }
-
-    private var canContinue: Bool {
-        step != 0 || !name.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    private var buildRows: [String] {
-        let opening = Double(hoursSoFar.replacingOccurrences(of: ",", with: ".")) ?? 0
-        let field = airport.trimmingCharacters(in: .whitespaces).uppercased()
-        return [
-            "Your \(licence.label) route",
-            "\(licence.hours > 0 ? licence.hours : 45) h goal and progress",
-            field.isEmpty ? "Live weather at any airport" : "Live weather for \(field)",
-            opening > 0 ? "Logbook with \(opening.formatted(.number.precision(.fractionLength(0...1)))) h carried over" : "Your logbook",
-            "Lesson prep and mock checkride"
-        ]
-    }
-
-    private func go(_ delta: Int) {
-        focused = false
-        error = nil
-        if delta > 0 && step == total - 1 { Task { await finish() }; return }
-        forward = delta > 0
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) { step = max(0, min(total - 1, step + delta)) }
-    }
-
-    private func prefill() {
-        if name.isEmpty { name = model.profile?.name ?? model.workspace?.user.display_name ?? "" }
-        guard countryList.isEmpty else { return }
-        countryList = SetupView.countries
-        let region = Locale.current.region?.identifier ?? "US"
-        if let c = countryList.first(where: { $0.code == region }) { country = c; licence = SetupView.licences(for: c.regime)[0] }
-    }
-
-    private func finish() async {
-        building = true
-        // The building moment plays fully, then the profile is saved and the app moves on to the trial.
-        try? await Task.sleep(for: .seconds(UIAccessibility.isReduceMotionEnabled ? 0.6 : 2.9))
-        let opening = Int(((Double(hoursSoFar.replacingOccurrences(of: ",", with: ".")) ?? 0) * 60).rounded())
-        do {
-            try await model.saveProfile([
-                "name": name.trimmingCharacters(in: .whitespaces),
-                "country": country.name,
-                "countryCode": country.code,
-                "regime": country.regime,
-                "authority": country.authority,
-                "licence": licence.id,
-                "goalHours": licence.hours > 0 ? licence.hours : 45,
-                "airport": airport.trimmingCharacters(in: .whitespaces).uppercased(),
-                "frequency": pace,
-                "openingMinutes": max(0, opening),
-                "complete": true,
-                "step": 7
-            ])
-            Track.event("onboarding_done", ["country": country.code, "licence": licence.id, "pace": pace, "hours": opening > 0])
-        } catch {
-            Track.event("onboarding_error")
-            self.error = error.localizedDescription
-            building = false
-        }
-    }
-}
-
-private struct ChoiceCard: View {
+struct ChoiceCard: View {
     let title: String
     let detail: String?
     let selected: Bool
@@ -533,38 +202,37 @@ struct TrialGateView: View {
 
     private var headline: String {
         let first = (model.profile?.name ?? "").split(separator: " ").first.map(String.init) ?? ""
-        if trial { return first.isEmpty ? "Try everything free for \(trialDays) days" : "\(first), try everything free for \(trialDays) days" }
-        return first.isEmpty ? "Unlock your full flight desk" : "\(first), unlock your full flight desk"
+        let who = first.isEmpty ? "" : "\(first), "
+        if trial { return "\(who)your plan is ready. Try it free for \(trialDays) days." }
+        return "\(who)your plan is ready. Unlock your full flight desk."
     }
 
-    /// What setup produced, so the paywall feels like the next step of their plan rather than a toll.
+    /// The plan from setup, so the trial reads as the next step of their plan rather than a toll.
     private var planReady: some View {
-        let p = model.profile
-        let licence = SetupView.licences(for: p?.regime ?? "faa").first(where: { $0.id == p?.licence })?.label ?? p?.licence ?? "Licence"
+        let a = FirstRun.answers(from: model.profile)
+        let p = FirstRun.plan(a)
+        let licence = String(a.licence.label.split(separator: "·").first ?? "Licence").trimmingCharacters(in: .whitespaces)
         let chips: [(String, String)] = [
-            ("scope", licence),
-            ("clock", (p?.goalHours ?? 0) > 0 ? "\(Int(p?.goalHours ?? 0)) h goal" : "Hours goal"),
-            ("location.fill", (p?.airport ?? "").isEmpty ? "Your airfield" : String((p?.airport ?? "").prefix(12)))
+            ("flag.checkered", "\(licence) by \(p.finish.formatted(.dateTime.month(.abbreviated).year()))"),
+            ("clock", "\(Int(p.toGo.rounded())) h to go"),
+            ("calendar", FirstRun.paces.first { $0.id == a.pace }?.label ?? "Weekly")
         ]
         return VStack(alignment: .leading, spacing: 10) {
-            Label("Your flight desk is ready", systemImage: "sparkles")
+            Label("Built from your answers", systemImage: "sparkles")
                 .font(.archivo(13.5, .semibold)).foregroundStyle(Color(hex: 0xBFD6FF))
-            HStack(spacing: 8) {
-                ForEach(chips, id: \.1) { c in
-                    Label(c.1, systemImage: c.0)
-                        .font(.archivo(13, .medium)).foregroundStyle(.white).lineLimit(1)
-                        .padding(.horizontal, 10).padding(.vertical, 7)
-                        .background(Capsule().fill(.white.opacity(0.08)).overlay(Capsule().strokeBorder(Theme.ice.opacity(0.18))))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(chips, id: \.1) { c in
+                        Label(c.1, systemImage: c.0)
+                            .font(.archivo(13, .medium)).foregroundStyle(.white).lineLimit(1)
+                            .padding(.horizontal, 10).padding(.vertical, 7)
+                            .background(Capsule().fill(.white.opacity(0.08)).overlay(Capsule().strokeBorder(Theme.ice.opacity(0.18))))
+                    }
                 }
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.electricHi.opacity(0.12))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.ice.opacity(0.2))))
     }
 
-    /// Someone whose Advanced lapsed: Apple's win-back offer, shown above the normal plans.
     private func winBackCard(_ wb: StoreModel.WinBack) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Welcome back").font(.archivo(13, .semibold)).foregroundStyle(Color(hex: 0x4DD49A))

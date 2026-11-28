@@ -5,6 +5,11 @@ import AuthenticationServices
 /// it refuses sign-in from inside apps, and an email that matches a Google account opens that same account.
 struct SignInView: View {
     @Environment(AppModel.self) private var model
+    /// The same screen doubles as "Save your plan" at the end of the first-run questions.
+    var screenName = "sign_in"
+    var title: String? = nil
+    var subtitle: String? = nil
+    var onBack: (() -> Void)? = nil
 
     private enum Step { case choose, email, code }
     @State private var step: Step = .choose
@@ -15,7 +20,7 @@ struct SignInView: View {
     @State private var error: String?
     @FocusState private var focused: Bool
 
-    var body: some View { screenBody.screen("sign_in") }
+    var body: some View { screenBody.screen(screenName) }
     @ViewBuilder private var screenBody: some View {
         ZStack {
             ZStack {
@@ -24,16 +29,26 @@ struct SignInView: View {
             }
             .ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                BoploWordmark(height: 30)
-                    .padding(.top, 12)
+                HStack {
+                    if let onBack {
+                        Button(action: onBack) {
+                            Image(systemName: "chevron.left").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                                .frame(width: 44, height: 44).background(Circle().fill(.white.opacity(0.1)))
+                        }
+                        .accessibilityLabel("Back")
+                    }
+                    BoploWordmark(height: 30)
+                    Spacer()
+                }
+                .padding(.top, 12)
                 Spacer()
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Your flying, in one place.")
+                    Text(title ?? "Your flying, in one place.")
                         .font(Theme.display(44))
                         .tracking(-1.5)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("Prep every lesson, log every flight and see exactly what’s left before your licence.")
+                    Text(subtitle ?? "Prep every lesson, log every flight and see exactly what’s left before your licence.")
                         .font(.archivo(16))
                         .foregroundStyle(Theme.mist)
                 }
